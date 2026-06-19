@@ -1,0 +1,435 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CDR/IPDR Investigation Visualizer</title>
+<link rel="stylesheet" href="/static/styles.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+</head>
+<body>
+<div id="authOverlay" class="auth-overlay">
+  <div class="auth-panel">
+    <h2>Sign in</h2>
+    <p>Session-based investigation workspace.</p>
+    <form id="loginForm">
+      <input id="loginUsername" type="text" placeholder="Username" value="admin"/>
+      <input id="loginPassword" type="password" placeholder="Password"/>
+      <button type="submit">Sign in</button>
+    </form>
+    <div id="loginStatus">Waiting for sign-in.</div>
+  </div>
+</div>
+
+<div id="shell" style="display:none">
+  <header id="topbar">
+    <div class="topbar-left">
+      <h1>CDR / IPDR Visualizer</h1>
+      <span class="topbar-sub">Investigation Workspace</span>
+    </div>
+    <div class="topbar-center">
+      <select id="caseSelector" style="padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);font-size:0.78rem;margin-right:12px;max-width:180px"><option value="">No case</option></select>
+      <button class="topbar-tab active" data-tab="dashboard">Dashboard</button>
+      <button class="topbar-tab" data-tab="graph">Network Graph</button>
+      <button class="topbar-tab" data-tab="map">Tower Map</button>
+      <button class="topbar-tab" data-tab="timeline">Timeline</button>
+      <button class="topbar-tab" data-tab="charts">Charts</button>
+      <button class="topbar-tab" data-tab="services">Services</button>
+      <button class="topbar-tab" data-tab="correlation">Correlation</button>
+      <button class="topbar-tab" data-tab="records">Records</button>
+      <button class="topbar-tab" data-tab="ai">AI Insights</button>
+      <button class="topbar-tab" data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
+    </div>
+    <div class="topbar-right">
+      <button id="exportBtn" class="btn-sm" title="Export investigation report" style="border-color:var(--accent);color:var(--accent)">Export</button>
+      <button id="darkModeBtn" style="background:none;border:none;cursor:pointer;font-size:1rem;padding:0 4px;color:var(--muted)" title="Toggle dark mode">&#9790;</button>
+      <span id="sessionStatus" class="sess-active" title="Session active">Active</span>
+      <span id="sessionUser">Signed out</span>
+      <button id="logoutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <!-- DASHBOARD TAB -->
+  <section id="tab-dashboard" class="tab-content active">
+    <div class="import-grid">
+      <label class="import-card"><span>CDR CSV</span><input type="file" id="cdrFile" accept=".csv"/><em>Upload call records</em></label>
+      <label class="import-card"><span>IPDR CSV</span><input type="file" id="ipdrFile" accept=".csv"/><em>Upload IP sessions</em></label>
+      <label class="import-card"><span>Tower CSV</span><input type="file" id="towerFile" accept=".csv"/><em>Upload tower registry</em></label>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:200px;justify-content:flex-end">
+        <div id="importStatus" style="font-size:0.82rem;color:var(--muted);">Upload CSV files to begin.</div>
+        <button id="resetCaseBtn" class="btn btn-sm" style="border-color:var(--danger);color:var(--danger);background:none;white-space:nowrap">Reset Case</button>
+      </div>
+    </div>
+    <!-- Case Summary -->
+    <div class="case-summary" id="caseSummary" style="margin-bottom:0;border-bottom:1px solid var(--line)">
+      <div class="cs-head" onclick="const b=this.nextElementSibling;const a=this.querySelector('.cs-arrow');const o=b.style.display!=='none';b.style.display=o?'none':'block';a.textContent=o?'&#9654;':'&#9660;';this.classList.toggle('open',!o)">
+        <span class="cs-arrow">&#9660;</span>
+        <span style="font-weight:700;font-size:0.85rem">Case Investigation Summary</span>
+        <span id="csMeta" style="font-size:0.72rem;color:var(--muted);margin-left:8px"></span>
+      </div>
+      <div class="cs-body" id="csBody" style="display:block;padding:10px 16px 14px">
+        <div class="cs-grid" id="csGrid"></div>
+      </div>
+    </div>
+    <!-- Compare Periods -->
+    <div class="compare-bar" id="compareBar" style="display:none;padding:8px 16px;border-bottom:1px solid var(--line);align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-weight:600;font-size:0.78rem;color:var(--muted)">Compare Periods:</span>
+      <label style="font-size:0.72rem">From <input type="date" id="cpStartA" style="font-size:0.72rem;padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--text)"/></label>
+      <label style="font-size:0.72rem">To <input type="date" id="cpEndA" style="font-size:0.72rem;padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--text)"/></label>
+      <span style="font-size:0.72rem;color:var(--muted)">vs</span>
+      <label style="font-size:0.72rem">From <input type="date" id="cpStartB" style="font-size:0.72rem;padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--text)"/></label>
+      <label style="font-size:0.72rem">To <input type="date" id="cpEndB" style="font-size:0.72rem;padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--text)"/></label>
+      <button id="cpGoBtn" class="btn btn-sm" style="font-size:0.72rem">Compare</button>
+      <button id="cpCloseBtn" class="btn-sm" style="font-size:0.72rem;border-color:var(--line)">&#10005;</button>
+      <span id="cpStatus" style="font-size:0.72rem;color:var(--muted);margin-left:4px"></span>
+    </div>
+    <div class="compare-results" id="cpResults" style="display:none;padding:10px 16px;border-bottom:1px solid var(--line);font-size:0.78rem"></div>
+    <div class="dash-cards" id="dashCards"></div>
+    <div class="dash-grid">
+      <div class="card"><h3>Network Overview</h3><div id="dashGraph" class="dash-graph-container"></div></div>
+      <div class="card"><h3>Service Distribution</h3><canvas id="dashPieChart"></canvas></div>
+      <div class="card" style="grid-column:span 2"><h3>Activity Heatmap</h3><canvas id="dashHeatmap"></canvas></div>
+      <div class="card"><h3>Top Contacts</h3><canvas id="dashBarChart"></canvas></div>
+    </div>
+  </section>
+
+  <!-- GRAPH TAB -->
+  <section id="tab-graph" class="tab-content">
+    <div class="graph-toolbar">
+      <select id="graphSubject"><option value="">All subjects</option></select>
+      <input id="graphSearchInput" type="search" placeholder="Search node..."/>
+      <button id="graphResetZoom" class="btn">Reset</button>
+      <button id="graphCenterBtn" class="btn">Center</button>
+      <span class="graph-stats" id="graphStats">0 nodes</span>
+    </div>
+    <div class="graph-main">
+      <div id="graphSvgContainer" class="graph-svg-wrap"></div>
+      <aside class="graph-sidebar" id="graphSidebar">
+        <h3>Node Details</h3>
+        <div id="graphNodeDetails">Click a node to inspect.</div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- MAP TAB -->
+  <section id="tab-map" class="tab-content">
+    <div class="map-toolbar">
+      <select id="mapSubject"><option value="">All subjects</option></select>
+      <select id="mapMode">
+        <option value="path">Movement Path</option>
+        <option value="heat">Activity Heatmap</option>
+        <option value="zones">Operational Zones</option>
+        <option value="colocation">Co-location</option>
+        <option value="triangulation">Triangulation</option>
+        <option value="meetings">Meetings</option>
+      </select>
+      <button id="mapGoBtn" class="btn">Go</button>
+      <button id="mapFitBtn" class="btn">Fit</button>
+      <button id="geoFenceBtn" class="btn-sm" style="border-color:var(--danger);color:var(--danger)">Geofence</button>
+      <div id="mapTimelineBar" style="display:none;flex:1;display:flex;align-items:center;gap:8px;">
+        <span id="mapTimeLabel" style="font-size:0.75rem;color:var(--muted)">--:--</span>
+        <input type="range" id="mapTimeSlider" style="flex:1;max-width:200px" min="0" max="100" value="0"/>
+        <button id="mapTimePlay" class="btn-sm">Play</button>
+      </div>
+    </div>
+    <div class="map-main">
+      <div id="mapStage" class="map-stage"></div>
+      <aside class="map-sidebar" id="mapSidebar"><h3>Analysis</h3><div id="mapAnalysis">Select a subject and mode.</div></aside>
+    </div>
+  </section>
+
+  <!-- TIMELINE TAB -->
+  <section id="tab-timeline" class="tab-content">
+    <div class="tl-toolbar">
+      <input id="tlSearch" type="search" placeholder="Search entity..."/>
+      <select id="tlCompare"><option value="">Compare with...</option></select>
+      <select id="tlType"><option value="">All types</option><option value="CDR">CDR</option><option value="IPDR">IPDR</option></select>
+      <span class="tl-count" id="tlCount">0 entities</span>
+    </div>
+    <div id="tlContainer" class="tl-container"></div>
+  </section>
+
+  <!-- CHARTS TAB -->
+  <section id="tab-charts" class="tab-content">
+    <div class="charts-grid">
+      <div class="card"><h3>Service Usage</h3><div class="chart-info" id="ciServicePie"></div><canvas id="chartServicePie"></canvas></div>
+      <div class="card"><h3>Activity by Hour</h3><div class="chart-info" id="ciHourly"></div><canvas id="chartHourlyBar"></canvas></div>
+      <div class="card"><h3>Top 10 Contacts</h3><div class="chart-info" id="ciTopContacts"></div><canvas id="chartTopContacts"></canvas></div>
+      <div class="card"><h3>Service Timeline</h3><div class="chart-info" id="ciServiceTimeline"></div><canvas id="chartServiceTimeline"></canvas></div>
+      <div class="card"><h3>Contact Direction</h3><div class="chart-info" id="ciContactDir"></div><canvas id="chartContactDir"></canvas></div>
+      <div class="card"><h3>Contact Duration</h3><div class="chart-info" id="ciContactDur"></div><canvas id="chartContactDur"></canvas></div>
+      <div class="card"><h3>Day of Week</h3><div class="chart-info" id="ciDayOfWeek"></div><canvas id="chartDayOfWeek"></canvas></div>
+      <div class="card"><h3>Duration Distribution</h3><div class="chart-info" id="ciDurDist"></div><canvas id="chartDurDist"></canvas></div>
+      <div class="card"><h3>Protocol Distribution</h3><div class="chart-info" id="ciProtDist"></div><canvas id="chartProtDist"></canvas></div>
+      <div class="card"><h3>Top Ports</h3><div class="chart-info" id="ciTopPorts"></div><canvas id="chartTopPorts"></canvas></div>
+      <div class="card"><h3>Data Volume</h3><div class="chart-info" id="ciDataVol"></div><canvas id="chartDataVol"></canvas></div>
+      <div class="card"><h3>Tower Activity</h3><div class="chart-info" id="ciTowerAct"></div><canvas id="chartTowerAct"></canvas></div>
+    </div>
+  </section>
+
+  <!-- SERVICES TAB -->
+  <section id="tab-services" class="tab-content">
+    <div class="svc-toolbar">
+      <h3 style="margin:0;flex:1">Service Attribution Analysis</h3>
+      <input id="svcSearchInput" type="search" placeholder="Filter services..." style="max-width:200px"/>
+      <select id="svcMinConf"><option value="0">All confidences</option><option value="80">â‰¥80%</option><option value="60">â‰¥60%</option><option value="40">â‰¥40%</option><option value="20">â‰¥20%</option></select>
+      <span id="svcCount" class="svc-count" style="font-size:0.75rem;color:var(--muted)">0 services</span>
+    </div>
+    <!-- Burst Detection -->
+    <div id="svcBursts" class="svc-bursts" style="margin-bottom:12px"></div>
+    <!-- Service Cards -->
+    <div id="svcCardGrid" class="svc-card-grid"></div>
+  </section>
+
+  <!-- CORRELATION TAB -->
+  <section id="tab-correlation" class="tab-content">
+    <div class="corr-toolbar">
+      <h3 style="margin:0;flex:1">Cross-Subject Correlation</h3>
+      <select id="corrSubA" style="max-width:180px"><option value="">Select subject A...</option></select>
+      <select id="corrSubB" style="max-width:180px"><option value="">Select subject B...</option></select>
+      <button id="corrGoBtn" class="btn" disabled>Compare</button>
+      <button id="corrSwapBtn" class="btn-sm" title="Swap subjects">&#8646;</button>
+    </div>
+    <div id="corrResults" class="corr-results" style="flex:1;overflow:auto">
+      <div style="padding:40px;text-align:center;color:var(--muted)">Select two subjects and click Compare.</div>
+    </div>
+  </section>
+
+  <!-- RECORDS TAB -->
+  <section id="tab-records" class="tab-content">
+    <div class="rec-toolbar">
+      <input id="recSearch" type="search" placeholder="Search..."/>
+      <select id="recType"><option value="all">All types</option><option value="CDR">CDR</option><option value="IPDR">IPDR</option></select>
+      <select id="recService"><option value="all">All services</option></select>
+      <span class="rec-count" id="recCount">0</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th></th><th>Time</th><th>Type</th><th>Subject</th><th>Counterpart</th><th>Dur(s)</th><th>Detail</th><th>Dir/APN</th><th>Service</th><th>SrcPort</th><th>DstPort</th><th>Port Svc</th><th>App Attr</th><th>Tower</th><th>Cell</th><th>LAC</th><th>IMSI</th><th>IMEI</th><th>MSISDN</th><th>Tec/RAT</th><th>Up(B)</th><th>Dn(B)</th><th>Lat</th><th>Lng</th><th>Case</th>
+        </tr></thead>
+        <tbody id="recBody"></tbody>
+      </table>
+    </div>
+    <button id="recLoadMore" class="btn" style="width:100%;margin-top:8px;">Load more</button>
+  </section>
+
+  <!-- AI INSIGHTS TAB -->
+  <section id="tab-ai" class="tab-content">
+    <div class="ai-toolbar">
+      <div class="ai-config">
+        <select id="aiMode" style="font-size:0.75rem;padding:2px 4px;margin-right:6px">
+          <option value="ollama">Local Ollama</option>
+          <option value="tifm" selected>TIFM Backend</option>
+          <option value="finetuned">FINE-TUNED TIFM</option>
+        </select>
+        <input id="aiEndpoint" type="text" placeholder="LLM endpoint" value="http://localhost:11434/api/generate" style="display:none"/>
+        <input id="aiModel" type="text" placeholder="Model" value="gemma4" style="display:none"/>
+        <button id="aiConfigSave" class="btn btn-sm">Save</button>
+        <span id="aiStatus" style="font-size:0.75rem;color:var(--muted);margin-left:8px;"></span>
+        <span style="flex:1"></span>
+        <button id="aiSeedBtn" class="btn btn-sm" title="Seed synthetic case data" style="margin-left:auto">Seed Case</button>
+      </div>
+    </div>
+    <div class="ai-subtabs">
+      <button class="ai-subtab active" data-ai-tab="overview">Overview</button>
+      <button class="ai-subtab" data-ai-tab="findings">Findings & Leads</button>
+      <button class="ai-subtab" data-ai-tab="investigate">Deep Investigate</button>
+      <button class="ai-subtab" data-ai-tab="chat">AI Chat</button>
+    </div>
+    <div class="ai-body" id="aiBody">
+      <!-- TAB PANEL: Overview -->
+      <div class="ai-tab-panel active" data-ai-panel="overview">
+        <div class="ai-section" id="aiCaseOverview"></div>
+        <div class="ai-section" id="aiSubjectSummaries">
+          <h3 class="ai-section-title">Subject Summaries</h3>
+          <div class="ai-subj-grid" id="aiSubjGrid"></div>
+        </div>
+      </div>
+      <!-- TAB PANEL: Findings & Leads -->
+      <div class="ai-tab-panel" data-ai-panel="findings">
+        <div class="ai-section" id="aiFindings">
+          <h3 class="ai-section-title">AI Findings</h3>
+          <div id="aiFindingsBody"></div>
+        </div>
+        <div class="ai-section" id="aiLeads">
+          <h3 class="ai-section-title">Investigation Leads</h3>
+          <div class="ai-leads-grid" id="aiLeadsGrid"></div>
+        </div>
+        <div class="ai-section" id="aiQuestions">
+          <h3 class="ai-section-title">Questions Worth Investigating</h3>
+          <div id="aiQuestionsBody"></div>
+        </div>
+      </div>
+      <!-- TAB PANEL: Deep Investigate -->
+      <div class="ai-tab-panel" data-ai-panel="investigate">
+        <div class="ai-section" id="aiNarrative">
+          <h3 class="ai-section-title">Timeline Narrative</h3>
+          <div id="aiNarrativeBody"></div>
+        </div>
+        <div class="ai-section" id="aiReportSection">
+          <h3 class="ai-section-title">Investigation Report Generator</h3>
+          <div class="ai-report-actions">
+            <button class="btn" onclick="generateAiReport('executive')">Executive Summary</button>
+            <button class="btn" onclick="generateAiReport('subject')">Subject Report</button>
+            <button class="btn" onclick="generateAiReport('communication')">Communication Analysis</button>
+            <button class="btn" onclick="generateAiReport('location')">Location Analysis</button>
+            <button class="btn" onclick="generateAiReport('full')">Full Investigation Report</button>
+            <button id="aiCopyReportBtn" class="btn btn-sm">Copy Report</button>
+            <button id="aiCopyPackageBtn" class="btn btn-sm">Copy Data Package</button>
+          </div>
+          <div id="aiReportContent" class="ai-report-content"></div>
+        </div>
+        <div class="ai-section" id="aiInvestigationSection">
+          <h3 class="ai-section-title">Full Investigation Command Center</h3>
+          <div class="invest-toolbar">
+            <button class="btn" id="investRunBtn" onclick="runFullInvestigation()">Run Full Investigation</button>
+            <span id="investStatus" style="font-size:0.85rem;color:var(--muted)"></span>
+          </div>
+          <div id="investSummary" class="invest-summary" style="display:none"></div>
+          <div id="investModules" class="invest-modules" style="display:none">
+            <div class="invest-module" data-module="findings">
+              <div class="invest-module-header" onclick="toggleInvestModule(this)">
+                
+                <span class="invest-module-title">Findings &amp; Leads</span>
+                <span class="invest-module-count" id="investFindingsCount">0</span>
+                <span class="invest-module-toggle">&#x25BC;</span>
+              </div>
+              <div class="invest-module-body" id="investFindingsBody"></div>
+            </div>
+            <div class="invest-module" data-module="identity">
+              <div class="invest-module-header" onclick="toggleInvestModule(this)">
+                
+                <span class="invest-module-title">Identity &amp; SIM Analysis</span>
+                <span class="invest-module-count" id="investIdentityCount">0</span>
+                <span class="invest-module-toggle">&#x25BC;</span>
+              </div>
+              <div class="invest-module-body" id="investIdentityBody"></div>
+            </div>
+            <div class="invest-module" data-module="anomalies">
+              <div class="invest-module-header" onclick="toggleInvestModule(this)">
+                
+                <span class="invest-module-title">Anomalies &amp; Behavioral Shifts</span>
+                <span class="invest-module-count" id="investAnomalyCount">0</span>
+                <span class="invest-module-toggle">&#x25BC;</span>
+              </div>
+              <div class="invest-module-body" id="investAnomalyBody"></div>
+            </div>
+            <div class="invest-module" data-module="sessions">
+              <div class="invest-module-header" onclick="toggleInvestModule(this)">
+                
+                <span class="invest-module-title">Sessions &amp; Communication Gaps</span>
+                <span class="invest-module-count" id="investSessionsCount">0</span>
+                <span class="invest-module-toggle">&#x25BC;</span>
+              </div>
+              <div class="invest-module-body" id="investSessionsBody"></div>
+            </div>
+            <div class="invest-module" data-module="network">
+              <div class="invest-module-header" onclick="toggleInvestModule(this)">
+                
+                <span class="invest-module-title">Social Network &amp; Hierarchy</span>
+                <span class="invest-module-count" id="investNetworkCount">0</span>
+                <span class="invest-module-toggle">&#x25BC;</span>
+              </div>
+              <div class="invest-module-body" id="investNetworkBody"></div>
+            </div>
+            <div class="invest-module" data-module="location">
+              <div class="invest-module-header" onclick="toggleInvestModule(this)">
+                
+                <span class="invest-module-title">Location Intelligence</span>
+                <span class="invest-module-count" id="investLocationCount">0</span>
+                <span class="invest-module-toggle">&#x25BC;</span>
+              </div>
+              <div class="invest-module-body" id="investLocationBody"></div>
+            </div>
+            <div class="invest-module" data-module="calls">
+              <div class="invest-module-header" onclick="toggleInvestModule(this)">
+                
+                <span class="invest-module-title">Call Detail &amp; Pattern Analysis</span>
+                <span class="invest-module-count" id="investCallCount">0</span>
+                <span class="invest-module-toggle">&#x25BC;</span>
+              </div>
+              <div class="invest-module-body" id="investCallBody"></div>
+            </div>
+            <div class="invest-module" data-module="temporal">
+              <div class="invest-module-header" onclick="toggleInvestModule(this)">
+                
+                <span class="invest-module-title">Temporal &amp; Activity Analysis</span>
+                <span class="invest-module-count" id="investTemporalCount">0</span>
+                <span class="invest-module-toggle">&#x25BC;</span>
+              </div>
+              <div class="invest-module-body" id="investTemporalBody"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- TAB PANEL: AI Chat -->
+      <div class="ai-tab-panel" data-ai-panel="chat">
+        <div class="ai-section" id="aiChatSection">
+          <div class="ai-chips" id="aiContextChips">
+            <span class="ai-chip active" data-ctx="subject">Selected Subject</span>
+            <span class="ai-chip active" data-ctx="timeline">Timeline</span>
+            <span class="ai-chip active" data-ctx="meetings">Meetings</span>
+            <span class="ai-chip active" data-ctx="services">Service Attribution</span>
+            <span class="ai-chip active" data-ctx="graph">Graph Analysis</span>
+            <span class="ai-chip active" data-ctx="towers">Tower Data</span>
+            <span class="ai-chip" data-ctx="raw">Raw Records</span>
+          </div>
+          <div class="ai-context-btns">
+            <button class="btn btn-sm" onclick="chatWithContext('explain-subject')">Explain this subject</button>
+            <button class="btn btn-sm" onclick="chatWithContext('explain-meeting')">Explain this meeting</button>
+            <button class="btn btn-sm" onclick="chatWithContext('explain-tower')">Explain this tower movement</button>
+            <button class="btn btn-sm" onclick="chatWithContext('explain-cluster')">Explain this graph cluster</button>
+            <button class="btn btn-sm" onclick="chatWithContext('explain-session')">Explain this session</button>
+          </div>
+          <div class="ai-chat-area">
+            <div class="ai-chat-input-row">
+              <textarea id="aiInvestigatorInput" placeholder="Ask a question about this case..." rows="2"></textarea>
+              <button id="aiAnalyzeBtn" class="btn" onclick="analyzeWithAI()">Ask AI</button>
+              <button id="aiClearBtn" class="btn btn-sm" onclick="clearAiConversation()">Clear</button>
+            </div>
+            <div id="aiResponse" class="ai-response">Click a context button above or type a question.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ADMIN TAB -->
+  <section id="tab-admin" class="tab-content">
+    <div class="admin-toolbar">
+      <h3 style="margin:0;flex:1">User Management</h3>
+      <button id="adminCreateBtn" class="btn btn-sm">+ Create User</button>
+    </div>
+    <div class="admin-wrap">
+      <table class="data-table" id="adminTable">
+        <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Active</th><th>Created</th><th>Last Login</th><th>Actions</th></tr></thead>
+        <tbody id="adminBody"></tbody>
+      </table>
+    </div>
+    <div id="adminEmpty" style="display:none;padding:40px;text-align:center;color:var(--muted)">No users found.</div>
+  </section>
+
+  <!-- SUBJECT PROFILE MODAL -->
+  <div id="profileModal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-head"><h2 id="profileTitle">Subject Profile</h2><button id="profileClose" class="btn-sm">&times;</button></div>
+      <div id="profileBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- HOVER TOOLTIP -->
+  <div id="ganttTooltip" class="gantt-tooltip"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+<script src="/static/attribution_data.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

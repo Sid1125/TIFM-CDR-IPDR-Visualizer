@@ -1,0 +1,962 @@
+# Features List
+
+Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualizer, organized by functional area. Each feature includes a description and the technology used.
+
+---
+
+## 1. Authentication & Security
+
+### Session-based Authentication
+- **Description:** Users log in with username/password and receive an HttpOnly session cookie. All subsequent API calls are authenticated via the cookie. Session tokens are 48-byte cryptographically random URL-safe strings.
+- **Tech:** FastAPI dependency injection, HttpOnly cookies, `secrets.token_urlsafe(48)`
+
+### PBKDF2-SHA256 Password Hashing
+- **Description:** Passwords are hashed using PBKDF2-HMAC-SHA256 with 210,000 iterations and a random 16-byte salt. The hash is stored in the format `pbkdf2_sha256$210000$salt$digest`.
+- **Tech:** `hashlib.pbkdf2_hmac`, `secrets.token_bytes`, `base64` encoding
+
+### Session Sliding Window
+- **Description:** Each authenticated API request extends the session expiry by the configured TTL (default 168 hours). Ensures active sessions don't expire mid-use.
+- **Tech:** `last_seen_at` and `expires_at` timestamps updated on every request via `get_session_from_request()`
+
+### Multi-Session Tracking
+- **Description:** Users can view all active sessions (via `GET /auth/sessions`), revoke individual sessions, or revoke all sessions (logout everywhere).
+- **Tech:** `AuthSession` model with `user_id` foreign key, `revoked_at` soft-delete
+
+### Password Change
+- **Description:** Authenticated users can change their password by providing the current and new password.
+- **Tech:** `POST /auth/password` endpoint, `verify_password` + `hash_password`
+
+### Default Admin Bootstrapping
+- **Description:** On first startup, if no admin user exists, one is created automatically from environment variables (`AUTH_BOOTSTRAP_USERNAME`, `AUTH_BOOTSTRAP_PASSWORD`, `AUTH_BOOTSTRAP_ROLE`).
+- **Tech:** `bootstrap_default_user()` called in FastAPI `on_startup` event
+
+### AFK Auto-Logout (Frontend)
+- **Description:** After 10 minutes of inactivity (no mouse/keyboard/scroll/touch events), the frontend automatically logs the user out and revokes the session. The status transitions through 3 stages: Active (green, 0-2 min) → Idle (yellow, 2-9 min) → Expiring soon (red pulse, 9-10 min) → Expired (red, logged out).
+- **Tech:** Vanilla JS `setTimeout`/`clearTimeout`, 3-stage timeout chain (`IDLE_MS=2min`, `WARN_MS=1min`, `AFK_MS=10min`), event listeners on `mousemove`, `mousedown`, `click`, `keydown`, `scroll`, `touchstart`, `touchmove`, `wheel`
+
+### Health Check Ping
+- **Description:** Every 5 minutes, the frontend pings `GET /auth/me`. If the response is 401 (cookie expired or session revoked elsewhere), auto-logout is triggered immediately.
+- **Tech:** `setInterval`, `fetch` with credentials, `doLogout()`
+
+### Session Status Indicator
+- **Description:** A colored dot with text in the top bar shows the current session status through 4 states: green dot "Active", yellow dot "Idle", pulsing red dot "Expiring soon", red dot "Expired". Automatically transitions based on user activity.
+- **Tech:** CSS classes `.sess-active` (green), `.sess-idle` (yellow), `.sess-warn` (red pulse with `@keyframes pulse` animation), `.sess-expired` (red), toggled by `resetIdle()` / `doLogout()`
+
+### Data Persistence Across Sessions
+- **Description:** Case data (CDR, IPDR, Tower records) persists in the database between sessions. Returning users see their previous investigation data.
+- **Tech:** Removed `API.del('/records/reset')` from `bootstrap()`, data persists in database across sessions
+
+### Reset Case Button
+- **Description:** A prominent "Reset Case" button in the import toolbar allows manually clearing all case data. Supports optional `case_id` query param to reset only a specific case. Shows a confirmation dialog before deleting.
+- **Tech:** `resetCase()` function, `confirm()` dialog, `API.del('/records/reset?case_id=...')`, client-side state reset (`allRows=[]; state.cdr=[]; state.ipdr=[]; state.towers=[]; state.subjects=[]`), `renderDashboard()`
+
+### Auto-Create Default Case
+- **Description:** When no cases exist, a "Default Case" is auto-created and set as active. Prevents data from being stored without a case association. Auto-selects the first existing case on login if none is active.
+- **Tech:** `loadCases()` checks `cases.length === 0`, creates via `API.post('/cases/', {name:'Default Case'})`, sets `activeCaseId`
+
+### Client IP & User-Agent Capture
+- **Description:** Each session records the IP address (from `X-Forwarded-For` or direct client) and user-agent string.
+- **Tech:** `request.headers.get("x-forwarded-for")`, `request.client.host`, `request.headers.get("user-agent")`
+
+---
+
+## 2. Data Ingestion
+
+### CDR CSV Upload
+- **Description:** Upload a CDR CSV file containing call detail records (voice calls, SMS, etc.). Replaces all existing CDR data before inserting.
+- **Tech:** `POST /upload/cdr`, Pandas CSV parsing, SQLAlchemy bulk insert, transaction with delete-then-insert
+
+### IPDR CSV Upload
+- **Description:** Upload an IPDR CSV file containing IP data session records. Replaces all existing IPDR data before inserting.
+- **Tech:** `POST /upload/ipdr`, Pandas CSV parsing, SQLAlchemy bulk insert
+
+### Tower CSV Upload
+- **Description:** Upload a tower location CSV file. Merges with existing towers using upsert semantics (by `tower_id`).
+- **Tech:** `POST /upload/towers`, Pandas CSV parsing, `db.merge()` for upsert
+
+### Replace-on-Upload Strategy
+- **Description:** CDR and IPDR uploads use a strict replace strategy: old records are deleted before new ones are inserted. Tower uploads use merge/upsert.
+- **Tech:** `DELETE FROM cdr_records` / `DELETE FROM ipdr_records` then `add_all()`
+
+### CSV File Parser
+- **Description:** Centralized CSV loading utility using Pandas with flexible column handling.
+- **Tech:** `pandas.read_csv()`, `app/services/csv_parser.py`
+
+### Column Validation
+- **Description:** Validates and normalizes CSV column names against expected schema, with configurable strictness.
+- **Tech:** `app/utils/validators.py`, case-insensitive column matching
+
+### Sample Data Generator
+- **Description:** A script that generates deterministic (seeded) sample data: 60 towers, 1200 CDR records, 1800 IPDR records across 10 Indian cities. Data includes realistic phone numbers, IMSI/IMEI, towers, call types, IP addresses, ports, protocols, and APNs.
+- **Tech:** `backend/scripts/generate_sample_data.py`, `random.seed(42)`, output to `sample_data/*.csv`
+
+### Triangulation Seed Data
+- **Description:** A script that creates 4 towers (TRI_TWR_A–D) in the Mumbai corridor with different tech (LTE/NR/UMTS) and 21 IPDR records for subject 10.1.0.1 across 3 time clusters, for testing triangulation features.
+- **Tech:** `backend/scripts/seed_triangulation.py`, SQLAlchemy bulk insert, tower + IPDR record seeding
+
+### Upload Data Preview
+- **Description:** Before uploading a CSV file, a preview modal shows the first 20 rows with detected column names and total row count. The user can confirm or cancel the upload. Parsed client-side using a custom CSV parser that handles quoted fields.
+- **Tech:** `FileReader.readAsText()`, `file.slice(0, 1024*512)` for initial portion, custom `parseCsvPreview()` function, modal overlay with confirm/cancel buttons
+
+### Case-Aware Upload
+- **Description:** CDR and IPDR upload endpoints accept an optional `case_id` form field. When provided, records are inserted with that case_id and only that case's records are replaced. When omitted, all records are replaced as before.
+- **Tech:** `case_id: str = Form("")` in upload endpoints, `CDRRecord.case_id == case_id` filter for selective delete
+
+---
+
+## 3. Dashboard
+
+### KPI Summary Cards
+- **Description:** Eight to ten cards showing: Total Records (CDR/IPDR breakdown), Reconstructed Sessions, Call/Service Events, Top Contact, Top Service, Most Active Tower, Unique Contacts, Unique Subjects, Geo-fenced Records (when geofence is active), Activity Spikes (when detected).
+- **Tech:** Vanilla JS DOM manipulation, client-side aggregation from `allRows` array, `getAiCache()` for pre-computed metrics, `qualityCard` and `caseSummaryCard` dynamically appended
+
+### Case Summary (11 Metrics)
+- **Description:** A collapsible section in the dashboard showing: total subjects, total records, CDR count, IPDR count, time span, unique contacts, unique towers, total sessions, total meetings, total SIM swaps, total device changes. Each metric displayed as a labeled value in a grid.
+- **Tech:** `renderCaseSummary()`, `.case-summary-grid` CSS grid, row counting from cached analytics
+
+### Data Quality Score Card
+- **Description:** Scores the loaded dataset 0-100% based on data completeness penalties: missing tower (-5 each), missing coordinates (-8 each), missing duration (-10 each), invalid timestamps (-15 each), unknown protocols (-3 each). Displays score, classification (Excellent/Good/Fair/Poor), and per-category penalty breakdown.
+- **Tech:** `computeQualityMetrics()`, `renderQualityCard()`, penalty accumulator with category tracking
+
+### Compare Periods
+- **Description:** Two date-range selectors (Period A and Period B) with a Compare button. Analyzes differences: volume change %, new/lost/shared contacts, new subjects, new towers, service usage changes (top 8 deltas). Results displayed as a delta grid with positive/negative coloring.
+- **Tech:** `runComparePeriods()`, date inputs, per-period data filtering, `Set` operations for new/lost/shared entity detection, delta percentage calculation
+
+### Mini D3 Force-Directed Graph
+- **Description:** A compact network graph (200 records sampled) showing entity relationships. Nodes sized by connection weight, edges weighted by interaction count. Clicking a node opens the subject profile. Clicking "Network Overview" switches to the full Graph tab. Node labels use theme-aware colors in dark mode.
+- **Tech:** D3.js v7, `forceSimulation`, `forceLink`, `forceManyBody`, `forceCenter`, `forceCollide`, `.graph-label` CSS class with `.dark .graph-label{fill:#e0ddd8}`, onclick navigates to graph tab
+
+### Geofence Count Card
+- **Description:** When a geofence polygon is drawn on the map, a "Geo-fenced Records" card appears in the dashboard showing the count and percentage of records whose coordinates fall within the polygon area. Updates live as data changes.
+- **Tech:** `geoFenceDrawn` flag, `geoRecords` array, Turf.js `booleanPointInPolygon()`, `D.dashCards` append
+
+### Service Distribution Doughnut Chart
+- **Description:** Doughnut chart showing the top 8 services by record count, with color-coded segments and a legend positioned on the right.
+- **Tech:** Chart.js 4.4.7, `type: 'doughnut'`, responsive with `maintainAspectRatio: false`
+
+### Daily Activity Bar Chart
+- **Description:** Bar chart showing activity distribution across days of the week (Sun-Sat). Bars are colored dynamically based on activity intensity relative to the peak day.
+- **Tech:** Chart.js 4.4.7, dynamic `backgroundColor` using thresholds (`>70%` = red, `>40%` = yellow, else green)
+
+### Top Contacts Bar Chart
+- **Description:** Horizontal bar chart of the top 10 most frequent contacts. Clicking a bar navigates to the subject profile.
+- **Tech:** Chart.js 4.4.7, `onClick` callback, `showProfile()` integration
+
+### Error-Isolated Sub-Renders
+- **Description:** Each dashboard component (graph, pie, heatmap, bar chart) renders inside its own `try/catch` block. If one component fails, it shows an inline error message without breaking the rest of the dashboard.
+- **Tech:** JavaScript `try/catch`, `D.dashGraph.innerHTML = '<p style="color:var(--danger)">...'`
+
+---
+
+## 4. Network Graph
+
+### D3.js Force-Directed Graph
+- **Description:** Full-page interactive network graph showing entity relationships. Nodes represent entities (phone numbers or IPs), edges represent connections with weight.
+- **Tech:** D3.js v7, `forceSimulation` with `forceLink`, `forceManyBody` (-150 strength), `forceCenter`, `forceCollide`
+
+### Subject Filtering
+- **Description:** A dropdown to filter the graph to show only one subject and its direct connections. Also limits the link count (500 for specific subject, 150 for all subjects) to prevent visual clutter.
+- **Tech:** `<select>` with `change` event, `rowsFor()`, capped slices
+
+### Search/Highlight
+- **Description:** Real-time search input that dims non-matching nodes and edges (opacity 0.1/0.05) while highlighting matches (opacity 1/0.4).
+- **Tech:** Named event handler pattern (`.removeEventListener` + `.addEventListener`), D3 `.attr('opacity', ...)`
+
+### Zoom & Pan
+- **Description:** Mouse wheel zoom and click-drag pan with scale limits (0.2x to 8x). "Center Graph" button resets the view.
+- **Tech:** `d3.zoom()`, `d3.zoomIdentity`, `.scaleExtent([0.2, 8])`
+
+### Node Dragging
+- **Description:** Nodes can be clicked and dragged to rearrange the layout. Simulation re-heats temporarily during drag.
+- **Tech:** `d3.drag()`, `sim.alphaTarget(0.3).restart()`, fixed position (`fx`/`fy`)
+
+### Node Details Sidebar
+- **Description:** Hovering over a node shows its ID, weight, and connection count in the sidebar. Clicking opens the subject profile modal.
+- **Tech:** `onmouseover`/`onclick` events, `D.graphDetails.innerHTML`
+
+### Node Labels
+- **Description:** Text labels displayed next to each node (truncated to 12 characters with ellipsis).
+- **Tech:** D3 `text` elements, positioned relative to node coordinates
+
+### Graph Stats
+- **Description:** Footer text showing "N nodes, M links (top X)" to quantify the current view.
+- **Tech:** `D.graphStats.textContent`
+
+### Link Deduplication
+- **Description:** Multiple connections between the same pair of entities are merged into a single weighted edge.
+- **Tech:** `Map` with sorted key `[r.sub, r.cnt].sort().join('|')`
+
+### NetworkX Backend Metrics
+- **Description:** Backend computes degree centrality, betweenness centrality, communities (greedy modularity), and bridge edges from CDR records.
+- **Tech:** NetworkX, `nx.degree_centrality()`, `nx.betweenness_centrality()`, `greedy_modularity_communities()`, `nx.bridges()`
+
+---
+
+## 5. Tower Map
+
+### Leaflet Map with OpenStreetMap Tiles
+- **Description:** Full-screen interactive map centered on India (20.59, 78.96) with zoom controls and OSM tile layer.
+- **Tech:** Leaflet 1.9.4, `L.tileLayer('https://{s}.tile.openstreetmap.org/...')`, `L.map()`
+
+### 6 Map Modes
+
+#### Movement Path
+- **Description:** Draws a polyline connecting all towers visited by a subject in chronological order. Markers show each location. Distance calculation in km. Timeline sidebar lists recent locations. Playback slider animates through the path.
+- **Tech:** `L.polyline`, `L.circleMarker`, `mapInstance.distance()`, `D.mapTimeSlider` + `D.mapTimePlay`
+
+#### Activity Heatmap
+- **Description:** Renders a gradient heatmap overlay showing where activity is concentrated. Tower hotspots with visit counts in sidebar.
+- **Tech:** `leaflet.heat` plugin, `L.heatLayer()` with custom gradient (green → yellow → red), bubble count aggregation
+
+#### Operational Zones
+- **Description:** Draws radius circles around towers, sized proportionally to activity count. Tower markers with popups showing visit counts. Percentage breakdown in sidebar.
+- **Tech:** `L.circle()` with dynamic radius (`10 + sqrt(count) * 4`), opacity based on normalized activity, `L.marker()` with `bindPopup()`
+
+#### Co-location
+- **Description:** Identifies towers where multiple subjects appear together. Highlights towers shared by the selected subject. Shows co-located subjects in sidebar.
+- **Tech:** Client-side tower aggregation, `Set` for unique subjects per tower, filter by shared subjects
+
+#### Meeting Detection
+- **Description:** Detects potential in-person meetings when two subjects appear at the same tower within 1 hour of each other. Color-coded by gap time: red (<5 min), yellow (<15 min), green. Shows confidence level (High/Medium/Low) in sidebar. Meeting detection uses a unified scoring engine that combines temporal proximity, encounter frequency, and LCS-based movement similarity (tower sequence overlap between subjects). Movement similarity uses the Longest Common Subsequence ratio of time-ordered tower visits, scored 0-1.
+- **Tech:** `detectMeetings()` engine, double-loop comparison of subject records, `Math.abs(time gap) < 3600000`, gap-based coloring, `towerSequenceSimilarity()` with space-optimized LCS DP (two-row Uint16Array, O(n) memory), `movSimCache`, score fusion combining gap + encounters + movement similarity, configurable pair limit (default 30)
+
+#### Triangulation
+- **Description:** Time-based tower clustering (30-minute windows) to estimate subject location. Renders tech-aware coverage circles (5G/NR = 1km, 4G/LTE = 3km, 3G/UMTS = 5km, 2G/GPRS/EDGE = 15km). Computes Turf.js polygon intersections for overlap zones. Colors circles green→red based on tower usage density.
+- **Tech:** `showMapTriangulation()`, `L.circle()` with tech-based radii, `turf.intersect()` for overlap polygons, `turf.polygon()` geometry, color scale from green (low usage) to red (high usage)
+
+### Geofencing
+- **Description:** "Geofence" button in the map toolbar toggles Leaflet.draw polygon drawing mode. Once a polygon is drawn, the dashboard shows a geo-fenced record count. "Clear Fence" button removes the polygon. Drawn polygon persists independently across map mode switches.
+- **Tech:** `L.Draw.Polygon` with `showArea: true`, `mapInstance.on(L.Draw.Event.CREATED)`, `geoFenceLayer` saved separately from `clearMap()`, Turf.js `booleanPointInPolygon()` for record filtering
+
+### Map Sidebar
+- **Description:** Contextual sidebar that updates based on the active map mode showing statistics, tower lists, and event timelines.
+- **Tech:** `D.mapAnalysis.innerHTML`, `.stat-row` and `.evt` CSS classes
+
+### Fit All / Fit Bounds
+- **Description:** "Fit All" button calculates the bounding box of all geo records and zooms to fit.
+- **Tech:** `mapInstance.fitBounds(pts, {padding: [30, 30]})`
+
+### Subject Filter
+- **Description:** Dropdown to select a specific subject for the map, populated from geo endpoint data.
+- **Tech:** `<select>` with `change` event, `geoSub(sub)` filter function
+
+### Marker Popups
+- **Description:** Clicking any map marker shows a detailed popup with: type, subject, counterpart, time, duration, call type, direction, protocol, MSISDN, tower, location, upload/download bytes.
+- **Tech:** `L.marker.bindPopup(popupHtml(r))` with HTML string construction
+
+### Time Playback Slider
+- **Description:** For Movement Path mode, a time slider allows stepping through events in order. "Play" button auto-advances every second.
+- **Tech:** `<input type="range">`, `setTimeout` loop, marker highlight (radius 10, red)
+
+---
+
+## 6. Entity Timeline
+
+### Entity-Grouped Cards
+- **Description:** Timeline events are grouped by entity (phone number or IP) into collapsible cards. Each card shows the entity name, event count, session count, and contact count.
+- **Tech:** `entityMap` object grouped by entity ID, `D.tlContainer.innerHTML` with card HTML
+
+### Collapsible Toggle (Heading/Arrow Only)
+- **Description:** Cards expand/collapse only when clicking the heading area or arrow — clicking the body has no effect. Arrow rotates 90° when open.
+- **Tech:** `toggleEntity()` with `el.closest('.tl-entity')`, `.open` CSS class, arrow text from ▶ to ▼
+
+### Activity Density Strip
+- **Description:** A thin colored bar strip showing 50 time buckets, each bucket's height proportional to event density at that point. Gives a bird's-eye view of when the entity was active.
+- **Tech:** 50-section `<div>` with inline heights, `density[idx]++`, `Math.floor((time - first) / span * 49)`
+
+### Gantt-Style Session Bars
+- **Description:** Reconstructed sessions displayed as horizontal Gantt bars within each entity card. Bar position and width correspond to the session's time range relative to the entity's overall activity span. Colored by service type (100+ service color definitions). Hovering shows a detailed tooltip with service, times, duration, confidence, and evidence tree categorized into Infrastructure/Ports/Behavior/Signals. Tooltip stays fixed to the element (top-left corner touches top-right of bar) and does not follow the cursor. Tooltip can be hovered directly without disappearing (200ms grace period on bar leave, pointer-events enabled on tooltip itself). "View Records" button in the tooltip opens a session evidence overlay with full record listing and evidence integrity hash.
+- **Tech:** Absolute positioning with `margin-left` and `width` percentages, `SVC_COLORS` map (100+ service definitions), `background: ${c}18` (12% opacity) + `border-left: 2px solid ${c}`, `showGanttTip()` / `positionGanttTip(el)` using `getBoundingClientRect()` with viewport edge detection and flip-to-left logic, `onmouseenter`/`onmouseleave` on tooltip, 200ms `setTimeout` hide delay, `pointer-events: auto` on tooltip, `evidenceHash()` for session integrity, `showSessionRecords()` overlay
+
+### Gantt Tooltip Auto-Width
+- **Description:** The Gantt hover tooltip uses `width: max-content` instead of a fixed `max-width`, so it expands horizontally to fit the full title text in a single line. Evidence/service lists still wrap normally via `ul{white-space:normal}`.
+- **Tech:** `.gantt-tooltip{width:max-content;white-space:nowrap}`, `.gantt-tooltip ul{white-space:normal}`
+
+### Event List (per entity)
+- **Description:** Within each expanded entity card, the 50 most recent events are listed chronologically (newest first) showing: time, type dot (color-coded red for IPDR, teal for CDR), type badge, counterpart, duration, service attribution.
+- **Tech:** `.tl-ev` CSS, `slice(-50).reverse()`, event type dot with inline background
+
+### Search Filter
+- **Description:** Filter entities by name using a search input. Non-matching entities are hidden.
+- **Tech:** `.filter(e => e.entity.toLowerCase().includes(q))`
+
+### Type Filter
+- **Description:** Dropdown to show all records, only CDR, or only IPDR records in the timeline.
+- **Tech:** `<select>` with `change` event, `rows.filter(r => r.type === type)`
+
+### Side-by-Side Comparison
+- **Description:** "Compare with..." dropdown selects a second entity. The timeline switches to a two-column grid layout showing both entities' timelines side by side, with their respective Gantt bars and event lists.
+- **Tech:** `D.tlCompare` dropdown, `display:grid;grid-template-columns:1fr 1fr`, `renderEntityTimeline()` called independently for each entity
+
+### Session Count Display
+- **Description:** Each entity card shows the number of reconstructed sessions (e.g., "3 sessions") in the meta line.
+- **Tech:** `reconstructSessions(e.entity).length`
+
+---
+
+## 7. Charts (12 Chart Types)
+
+### Service Usage Doughnut Chart
+- **Description:** Pie/doughnut chart showing the top 10 services by record count with a legend on the right.
+- **Tech:** Chart.js 4.4.7, `type: 'doughnut'`, 10-color palette
+
+### Hourly Activity Bar Chart
+- **Description:** Bar chart showing activity across 24 hours (00:00 - 23:00). Bars colored dynamically based on activity intensity relative to peak hour.
+- **Tech:** Chart.js 4.4.7, `type: 'bar'`, dynamic `backgroundColor` array
+
+### Top Contacts Horizontal Bar Chart
+- **Description:** Horizontal bar chart of the top 10 most frequent contacts, with custom tooltips showing the full contact identifier.
+- **Tech:** Chart.js 4.4.7, `indexAxis: 'y'`, custom tooltip callback
+
+### Service Timeline Line Chart
+- **Description:** Multi-line chart showing the top 6 services' activity over the last 14 days. Each service is a separate colored line with fill area.
+- **Tech:** Chart.js 4.4.7, `type: 'line'`, `fill: true`, `tension: 0.3`, multi-dataset
+
+### Contact Direction Stacked Bar Chart
+- **Description:** Stacked bar chart showing MO (outgoing) vs MT (incoming) calls per contact, with hover tooltips showing exact counts.
+- **Tech:** Chart.js 4.4.7, `type: 'bar'`, stacked datasets for MO/MT
+
+### Contact Duration Horizontal Bar Chart
+- **Description:** Horizontal bar chart of average call duration per contact, sorted descending.
+- **Tech:** Chart.js 4.4.7, `indexAxis: 'y'`, dynamic bar coloring
+
+### Day of Week Bar Chart
+- **Description:** Bar chart showing activity volume by day of week, with the peak day colored red and slowest day colored green.
+- **Tech:** Chart.js 4.4.7, dynamic per-bar coloring based on relative intensity
+
+### Duration Distribution Bar Chart
+- **Description:** Histogram of call durations across 7 bins: <10s, 10-30s, 30-60s, 1-5m, 5-15m, 15-60m, >60m.
+- **Tech:** Chart.js 4.4.7, binned duration aggregation
+
+### Protocol Distribution Doughnut Chart
+- **Description:** Doughnut chart showing IPDR protocol breakdown (TCP, UDP, ICMP, etc.) with percentage labels.
+- **Tech:** Chart.js 4.4.7, protocol counting from IPDR records
+
+### Top Ports Horizontal Bar Chart
+- **Description:** Horizontal bar chart of the most used ports, with port service name labels.
+- **Tech:** Chart.js 4.4.7, `portSvc()` lookup for labels
+
+### Data Volume Horizontal Bar Chart
+- **Description:** Horizontal bar chart showing total data volume (upload + download) per contact, formatted in human-readable units (KB, MB, GB).
+- **Tech:** Chart.js 4.4.7, `fmtBytes()` for readable labels, sorted descending by volume
+
+### Tower Activity Horizontal Bar Chart
+- **Description:** Horizontal bar chart of the most active towers by record count, with tower ID labels.
+- **Tech:** Chart.js 4.4.7, tower count aggregation
+
+### Safe Chart Destruction
+- **Description:** All chart instances are destroyed and nullified before re-creation, wrapped in try/catch to prevent errors from stale references.
+- **Tech:** `window.chartSvcPie` / `window.dashPieChart` etc. global references, `try{ chart.destroy() }catch(e){}`, null assignment
+
+### Theme-Aware Chart Colors
+- **Description:** Chart.js default text color and grid line colors are updated when dark mode is toggled. Text switches between `#2c2418` (light) and `#e0ddd8` (dark). Grid colors use the theme's line color. Applied at startup and on theme change.
+- **Tech:** `updateChartTheme()`, `Chart.defaults.color = textColor`, called from dark mode toggle and initial IIFE
+
+---
+
+## 8. Records Table
+
+### 24-Column Data Table
+- **Description:** Full table displaying: Time, Type, Subject, Counterpart, Dur(s), Detail, Dir/APN, Service, SrcPort, DstPort, Port Svc, App Attr, Tower, Cell, LAC, IMSI, IMEI, MSISDN, Tec/RAT, Up(B), Dn(B), Lat, Lng, Case. All CDR and IPDR fields are visible. Column widths are dynamically sized: time = 280px, IPv4/phone = 150px, other = 200px, empty = 120px.
+- **Tech:** `<table>` with horizontal scroll, `renderRecTable()` builds HTML string, `colWidth(v)` helper for dynamic column sizing
+
+### Record Annotations
+- **Description:** A star/flag icon in the first column of each row. Clicking toggles an annotation on the record. Annotations are stored server-side linked by `record_type` + `record_id`, and persisted per user. Starred records persist across sessions.
+- **Tech:** `POST /annotations` to create, `DELETE /annotations/{id}` to remove, `GET /annotations` to load on tab render, `data-annotation-id` attribute on toggled rows, star (★) and empty star (☆) rendering
+
+### Record Type Filter
+- **Description:** Dropdown to show All, CDR only, or IPDR only records.
+- **Tech:** `<select>` with `change` event, `.filter(r => r.type === value)`
+
+### Service Filter
+- **Description:** Dropdown populated dynamically from all unique service names in the loaded data. Filters records by service.
+- **Tech:** `<select>` dynamically populated from `new Set(allRows.map(r => r.svc))`
+
+### Text Search
+- **Description:** Real-time search across subject, counterpart, tower, cell, protocol, IMSI, and IMEI fields. Pagination resets on search.
+- **Tech:** `.filter(r => `${r.sub} ${r.cnt} ...`.includes(q))`, `recPage = 0` on input
+
+### Infinite Scroll Pagination
+- **Description:** "Load More" button loads 60 additional records per click. Shows current count (e.g., "1245 records").
+- **Tech:** `recPage` counter, `rows.slice(0, recPage + 60)`, button visibility toggle
+
+### Row Click → Subject Profile
+- **Description:** Clicking any row in the table opens the subject profile modal for the record's subject.
+- **Tech:** `<tr onclick="showProfile(...)">`, `cursor: pointer` style
+
+### Port Service Lookup
+- **Description:** The Port Svc column looks up well-known port numbers (30+ ports mapped) to show the service name (e.g., port 443 → "HTTPS", port 53 → "DNS").
+- **Tech:** `PORT_SVC` map object, `portSvc()` function
+
+### App Attr Column (Service Signatures)
+- **Description:** Shows all matching service signatures for IPDR records based on port/protocol/IP-range matching against the multi-level service attribution engine (40+ providers, IP range analysis, behavioral traffic patterns, distinctive indicators).
+- **Tech:** `recordSvcAttr()` function, `matchService()` pipeline: Phase 1 (IP infrastructure → provider-level via `scoreProvider()` + `pickBest()`), Phase 2 (port-only fallback), `SERVICE_DB` with 40+ providers and AS/domain/IP range metadata
+
+### Record Type Badges
+- **Description:** Color-coded badges: teal for CDR, red/coral for IPDR.
+- **Tech:** `.tag` / `.tag-alt` CSS classes
+
+### Horizontal Scroll
+- **Description:** The table container has a horizontal scrollbar to accommodate all 24 columns without wrapping.
+- **Tech:** `.data-table-wrapper { overflow-x: auto }`
+
+---
+
+## 9. Subject Profile
+
+### Modal Overlay
+- **Description:** A modal dialog that appears when clicking any subject name in the application. Dismissible via close button or clicking outside the modal.
+- **Tech:** `display: flex` overlay, `onclick` on background to close, close button, close-on-Escape
+
+### Profile Summary Cards (15 Metrics)
+- **Description:** Fifteen metric cards showing: Contacts count, Total records, Sessions count, Towers count, Top Service, Avg records/day, Peak hour (busiest hour), Day/Night classification (>50% night = night-dominant), Detected meetings, First seen timestamp, Last seen timestamp, Dormant periods count, Activity spike count, Longest dormant gap (days), Observation period (days).
+- **Tech:** `showProfile()` computes metrics from `allRows`, `.prof-grid` with `.prof-card` items, client-side aggregation
+
+### Identity Profile
+- **Description:** Subject identity linking showing MSISDN, IMEI, IMSI associated with the subject. Includes an identity timeline showing chronological (IMEI, IMSI) state transitions and detected changes (SIM swaps, device changes) with dates.
+- **Tech:** `buildIdentityProfile(sub)` returns identity timeline + changes, `ShowLess`/`ShowMore` toggle for long lists
+
+### Top Contacts (Clickable)
+- **Description:** Up to 10 clickable contact chips. Clicking a chip opens that contact's profile, enabling recursive entity navigation.
+- **Tech:** `showProfile('${esc(c)}')` onclick, `.prof-contact` CSS
+
+### Tower Analytics
+- **Description:** Total towers visited, top 5 towers by activity count, night tower (most used 23:00-05:00), weekend tower (most used Sat/Sun), and clickable tower list that switches to the Map tab.
+- **Tech:** `towerAnalytics(sub)`, `showProfileTowers(towers, sub)`, `switchTab('map')` on tower click
+
+### Attributed Services
+- **Description:** Top session services with color indicators from the service classification engine. Shows service name, confidence %, and session count.
+- **Tech:** Service color lookup, session classification from `classifySession()`
+
+### Detected Co-locations
+- **Description:** Meeting events where this subject participated, showing counterpart, tower, time gap, score, and a "View" button opening a meeting detail overlay.
+- **Tech:** `detectMeetings()` filtered to subject, `showMeetingOverlay()` for detail
+
+### Hourly Activity Bars
+- **Description:** A 24-bar chart showing the subject's activity by hour. Bar height is proportional to activity, colored by intensity relative to the subject's peak hour.
+- **Tech:** 24 `<div>` elements with inline `height: Math.max(4, (h/maxH)*40)`, dynamic colors
+
+### Timeline Narrative
+- **Description:** Chronological text narrative of the subject's activity, with day headers and event descriptions.
+- **Tech:** Day-grouped event text generation
+
+### Recent Activity List
+- **Description:** Last 10 events for the subject, showing time, type, counterpart, and call type. Clicking an event navigates to that location on the map (if map is initialized).
+- **Tech:** `rows.slice(-10).reverse()`, `mapInstance.setView([lat, lng], 13)`
+
+### Overlay Helpers
+- **Description:** Three overlay types for detailed drill-down: Session Records (full evidence chain with record table and evidence hash), Meeting Detail (time, tower, gap, score, evidence, events), Subject Records (last 50 records for a subject with pagination).
+- **Tech:** `showSessionRecords()` builds session evidence overlay, `showMeetingOverlay()` builds meeting detail overlay, `showSubjectRecords()` builds subject records overlay, all use modal overlay pattern with close-on-background-click
+
+---
+
+## 10. AI Insights
+
+### Proactive Findings-First Architecture
+- **Description:** The AI Insights tab is an investigator-oriented intelligence workspace with 4 subtabs. Findings are generated automatically on load (analytics-first, LLM-last).
+- **Tech:** `renderAiInsights()`, `invalidateAiCache()`, section builders called in fixed order, LLM consumes pre-computed analytics instead of inventing conclusions
+
+### 4 Subtabs
+- **Description:** Overview (case summary + subject summaries), Findings & Leads (AI findings, investigation leads, investigation questions), Deep Investigate (timeline narrative, report generator, full investigation command center), AI Chat (context chips, analysis modes, Q&A).
+- **Tech:** `.ai-subtab` buttons with active underline, subtab content panels
+
+### Analytics Cache
+- **Description:** All pre-computed analytics (pair counts, daily activity per subject, service counts, all meetings, change profiles) are computed once per dataset and cached in `window._aiCache`. Cache is invalidated on data load (`loadCaseData()` calls `invalidateAiCache()`) and on each AI tab render. Prevents repeated O(n) dataset scans across 4 subtab sections.
+- **Tech:** `getAiCache()` with lazy initialization, `window._aiCache` singleton, `invalidateAiCache()`, `changeCache` for pre-computed identity profiles
+
+### Overview Section: Case Summary
+- **Description:** Top-level text summarizing the entire case: scope (subjects × records), key communication link (highest-volume pair), meeting count, central communication hub (highest-degree subject), and a natural-language most-significant-finding statement.
+- **Tech:** `buildCaseSummary()`, degree centrality computed from pair counts, auto-generated finding text
+
+### Overview Section: Case Overview Cards
+- **Description:** Eight stat cards showing: subjects, total records, sessions, meetings, SIM swaps, device changes, observation period (days), high-risk findings count.
+- **Tech:** `buildCaseOverview()`, `getAiCache()` for pre-computed metrics
+
+### Overview Section: Subject Summaries
+- **Description:** Per-subject cards showing: contacts count, top service, night activity %, meetings count, SIM swaps, device changes, and a descriptive assessment using observed characteristics (e.g., "Night-dominant activity (74%) • SIM change detected") instead of risk labels.
+- **Tech:** `buildSubjectSummaries()`, sorted by meeting count + night activity, `c.changeCache` for identity changes, `detectMeetings()` for co-location
+
+### Findings & Leads: AI Findings with Confidence Breakdown
+- **Description:** Auto-generated findings from communication volume, meeting detection, activity patterns, night activity, and tower movement. Each finding has a title, description, evidence list, and confidence breakdown showing base score plus individual components (same tower, time window, repeated encounters, movement similarity). Findings are displayed as expandable cards with useful/false-positive feedback buttons. Findings are categorized into severity tiers: HIGH (most contacted pair, probable meetings, activity spikes), MEDIUM (night-dominant subjects, heavy service usage), LOW (frequent tower transitions, dormant subjects).
+- **Tech:** `buildAIFindings()`, `confidenceBreakdown()` with component scoring, `confidenceBreakdownRules` for explainable confidence, `markFinding()` for feedback tracking, severity-colored left borders
+
+### Z-Score Activity Spike Detection
+- **Description:** Replaces simplistic `count >= avg * 3` with statistical z-score analysis: minimum baseline of 5 days, minimum volume of 20 records, z-score threshold > 2.5. Reduces false positives from normal daily variation.
+- **Tech:** `findSpikes()`, per-subject daily counts, z-score calculation against baseline mean/stddev
+
+### Findings & Leads: Investigation Leads with Ranking
+- **Description:** Generates prioritized investigation leads scored 0-100: most contacted subject (volume-based), meeting clusters (confidence-weighted), SIM swaps (70-85), device changes (60-78), night activity (40+%). Leads are sorted by score and color-coded (red ≥80, yellow ≥60, gray).
+- **Tech:** `buildInvestigationLeads()`, `c.changeCache` for pre-computed identity changes, `c.allMeetings` for meeting data, score formula per lead type, score badges with action buttons
+
+### Findings & Leads: Investigation Questions Engine
+- **Description:** Generates investigative hypotheses from real data: activity spikes (z-score), identity changes (SIM/device), shared contacts without direct communication, new service adoption, and night activity patterns. Each question has an "Ask AI" button that sends the question as context.
+- **Tech:** `buildInvestigationQuestions()`, `c.subDays` for spike data, `c.changeCache` for identity changes, shared-contact overlap detection, `chatWithContext()` integration
+
+### Deep Investigate: Timeline Narrative with Event Compression
+- **Description:** Day-grouped narrative for a selected subject. Consecutive same-type events (e.g., repeated WhatsApp sessions) are merged into blocks with `×N` count. Tower changes, sessions, and meetings are interleaved. Shows up to 7 days with the most detail. Subject selector dropdown to switch between subjects.
+- **Tech:** `buildTimelineNarrative()`, `switchNarrativeSubject()`, `reconstructSessions()`, `detectMeetings()`, block-flush pattern for event compression
+
+### Deep Investigate: Report Generator (5 Report Types)
+- **Description:** Generates full digital forensics investigation reports. Selectable report types: Executive Summary, Subject Report, Communication Analysis, Location Analysis, Full Investigation Report. Supports three modes: TIFM Backend (server-side `/ai/generate-report`), Fine-tuned TIFM (via `/ai/chat`), and Legacy Ollama (local LLM via configured endpoint). Report is rendered as formatted markdown with Copy Report and Copy Data Package buttons.
+- **Tech:** `generateAiReport(type)`, `fetch()` to Ollama API or backend endpoints, `renderMd()` markdown-to-HTML converter, `buildDataPackage()` for context
+
+### Deep Investigate: Full Investigation Command Center (8 Modules)
+- **Description:** Calls backend `POST /ai/investigate` and renders 8 investigation modules in a collapsible accordion layout:
+  1. **Findings** — Severity-badged findings with category summary, top high-severity with show-more
+  2. **Identity** — Burner detection, SIM/device swap tracking, burner scores, burner tags
+  3. **Anomalies** — Anomalies grouped by type with severity badges, show-more expansion
+  4. **Sessions** — Session counts, gaps >24h table, affected subjects with row warnings
+  5. **Network** — Role distribution (Kingpin/Lieutenant/Member/Broker), centrality table, critical bridges, hierarchy visualization
+  6. **Location** — Hotspots table, subjects by range radius, location entropy
+  7. **Calls** — Signal calls, odd-hour calls, call bursts, calling circles (3-way mutual), suspicious calling patterns
+  8. **Temporal** — Day-of-week breakdown, night-dominant subjects, activity trends
+- **Tech:** `runFullInvestigation()`, `renderFindings()`/`renderIdentity()`/etc., `toggleInvestModule()` for collapsible headers, `_showMoreBtn` / `investToggleMore` for lazy rendering
+
+### False-Positive Tracking
+- **Description:** Every AI finding has "Useful" and "False Positive" buttons in its detail panel. Feedback is persisted to localStorage (survives page refresh) and keyed by a content hash of the finding's title+evidence, so finding reordering doesn't break alignment. Exportable as JSON via the "Export Feedback" button that appears in the Case Summary section once feedback is recorded.
+- **Tech:** `findingHash()` uses djb2 hash of `title|evidence` to generate `'F' + Math.abs(hash).toString(36)` stable key (encodes Unicode safely, no btoa), `localStorage.setItem('fp_'+hash)`, `markFinding()` updates button states and persists, `exportFeedback()` collects all localStorage `fp_*` entries into downloadable JSON, restored on findings render via `localStorage.getItem`
+
+### Data Package Builder (`buildDataPackage`)
+- **Description:** Produces a compact text summary (~20 lines) containing: total records with CDR/IPDR breakdown, time period, entity count, top 8 services with counts, top 8 contacts, top 6 towers, top 6 links, direction percentages (in/out), average and max duration, peak hour, night activity percentage, top 5 protocols, and reconstructed session summaries (up to 20 entities).
+- **Tech:** Client-side aggregation from `allRows`, `lines.push()` formatting
+
+### LLM Configuration Inputs
+- **Description:** Editable fields for the Ollama endpoint URL and model name. Save button stores configuration. Endpoint field is hidden for TIFM Backend mode, model field is shown only for Legacy Ollama mode. Three analysis modes: TIFM Backend (server-side `/ai/analyze`), Fine-tuned TIFM (calls `/ai/chat` with fine-tuned Qwen model), Legacy Ollama (local LLM via API).
+- **Tech:** `<input>` elements, `D.aiEndpoint.value`, `D.aiModel.value`, mode selector radio buttons, mode-dependent field visibility
+
+### AI Chat: Context Chips (7 types)
+- **Description:** Toggle-able context chips that inject specific data into the AI prompt: Selected Subject, Timeline, Meetings, Service Attribution, Graph Analysis, Tower Data, Raw Records. Active chips are included in the system prompt sent with each query.
+- **Tech:** `initContextChips()`, `getActiveContexts()` returns active chip values, `chatWithContext()` builds system prompt from active chips
+
+### AI Chat: Context Buttons (5 presets)
+- **Description:** Preset context buttons: Explain Subject, Explain Meeting, Explain Tower, Explain Cluster, Explain Session. Each sends a targeted query with relevant context data.
+- **Tech:** `chatWithContext(action)` dispatches to specific context builders
+
+### Investigator Notes & Follow-up Q&A (`analyzeWithAI`)
+- **Description:** Textarea for entering observations, hunches, or specific questions. The data package is sent as context for the LLM to provide targeted answers. Supports 3 modes: TIFM Backend (calls `/ai/analyze` then optionally sends to LLM), Fine-tuned TIFM (calls `/ai/chat`), Legacy Ollama (direct to local LLM).
+- **Tech:** `analyzeWithAI()`, prompt that includes data package + investigator notes, mode-dependent API routing
+
+### Context Chips (Data Injection)
+- **Description:** Pre-built clickable context chips (Case Overview, Top Links, Activity Spikes, SIM/Device Changes, Night Activity) that inject specific data into the AI Chat input to guide the LLM's analysis.
+- **Tech:** `initContextChips()`, `chatWithContext()` builds system prompt from active chip data
+
+### Markdown-to-HTML Renderer (`renderMd`)
+- **Description:** Converts raw markdown text to HTML for display in the report and response areas. Supports: headings (h1-h6), bold, italic, bold+italic, inline code, code blocks, links (target="_blank"), tables (basic), ordered and unordered lists, blockquotes, horizontal rules, paragraph wrapping.
+- **Tech:** Regex-based replacement pipeline, HTML `<p>` wrapper, `<table>` auto-grouping, `<blockquote>` consolidation
+
+### Copy Report / Copy Data Package
+- **Description:** Buttons to copy the generated report text or the data package summary to the clipboard.
+- **Tech:** `navigator.clipboard.writeText()`
+
+### Session Records Overlay
+- **Description:** Full-screen overlay showing session evidence chain, record table, and evidence integrity hash (EVID-XXXXXXXX). Accessible via "View Records" button in Gantt tooltips.
+- **Tech:** `showSessionRecords(sessionData)`, builds table of records with evidence hash
+
+### Meeting Detail Overlay
+- **Description:** Meeting detail overlay with time, tower, gap, score, evidence, and event list. Accessible via "View" button in subject profile co-location section.
+- **Tech:** `showMeetingOverlay(key, idx)`, meeting data from `detectMeetings()` results
+
+### Subject Records Overlay
+- **Description:** Shows the last 50 records for a subject in a paginated overlay. Accessible from subject profile.
+- **Tech:** `showSubjectRecords(sub)`, builds scrollable record listing
+
+### Meeting Detection Engine
+- **Description:** Unified meeting detection engine supporting single subject, all pairs (up to 30 subjects), or direct A/B comparison. Uses thresholds: High = 5 min gap, Medium = 15 min, Low = 60 min. Scoring: base from gap (80/50/20) + same service bonus (+10) + encounter multiplier (up to +20) + movement similarity bonus (up to +15 via LCS-based tower sequence similarity).
+- **Tech:** `detectMeetings(opts)`, `towerSequenceSimilarity()` with space-optimized LCS (Uint16Array, O(n) memory)
+
+---
+
+## 11. Identity Resolution
+
+### Chronological Identity State Tracking
+- **Description:** Tracks a chronological sequence of (IMEI, IMSI) states for each subject, including re-appearances. Unlike a simple deduplicated pair list, this captures A→B→A transitions where a subject returns to a previously used identity pair. Each state records firstSeen, lastSeen, record count, and associated MSISDNs.
+- **Tech:** `buildIdentityProfile()`, `timeline` array pushed on every IMEI/IMSI change from previous row, `seen` Map for deduplicated public API
+
+### Change Detection (5 Transition Types)
+- **Description:** Detects five types of identity transitions between consecutive states: SIM Swap (same IMEI, different IMSI), Device Change (same IMSI, different IMEI), Combined Change (both change simultaneously), Partial Device Change (IMEI only, no IMSI context), Partial SIM Swap (IMSI only, no IMEI context). Each change is timestamped with the firstSeen time of the new state and has a confidence label (high/medium).
+- **Tech:** Consecutive-state comparison loop, `p.imei/c.imei/p.imsi/c.imsi` null-safe equality checks, `changes.push()` with type/from/to/confidence
+
+### Identity Test Suite
+- **Description:** 38 assertions across 12 test scenarios in `tests/identity.test.js`: A→B→A re-appearance, SIM swap, device change, combined change, partial changes, no-change record aggregation, empty input, single record, complex A→B→C→A, sequential SIM-then-device change, MSISDN accumulation.
+- **Tech:** Node.js standalone test, extracted function from `app.js`, `assert()` helper, `process.exit(failed ? 1 : 0)`
+
+---
+
+## 12. Session Reconstruction & Service Classification
+
+### Client-Side Session Reconstruction (`reconstructSessions`)
+- **Description:** Groups an entity's IPDR records into sessions using **concurrent activity tracks**: records are bucketed by `(counterpart IP, activity family)` so simultaneous conversations (e.g. background DNS while in a WhatsApp call) form coherent parallel sessions instead of fragmenting when records interleave. Each track is split on a **family-adaptive idle gap** rather than one fixed threshold — DNS 60s, Web 300s, RTC/VoIP 1200s, VPN/Remote/P2P 1800s, Transfer 600s — so chatty/streaming flows tolerate long pauses while lookups stay bursty. Produces session objects (start, end, duration, record count) sorted chronologically, each classified by `classifySession()`.
+- **Tech:** `PORT_FAMILY` map, `FAMILY_GAP` thresholds, `recPortFamily(r)`, per-key open-track accumulator keyed by `peer|family`, replaces the old fixed-180s/counterpart/protocol-change splitter. Mirrored server-side by `reconstruct_ipdr_sessions()` in `investigation_service.py`.
+
+### Client-Side Session Classification (`classifySession`)
+- **Description:** Scores each reconstructed session using a multi-level service attribution engine. Phase 1 checks IP infrastructure against 40+ provider database with AS numbers, domains, and IP CIDR ranges. Scores providers on: base + port match (+15), protocol match (+10), activity category match (+10), duration bonuses, data volume bonuses, distinctive indicators (+15, e.g. WhatsApp UDP 3478-3480 from Meta IPs), VPN penalty (-25), infrastructure penalty (0.6x). Phase 2 falls back to port-only matching. Selected service is sorted into confidence tiers: Tier 1 (Infrastructure), Tier 2 (Likely service), Tier 3 (Possible service), Tier 4 (Multi/Unknown). Best match wins, capped at 95% confidence.
+- **Tech:** `scoreProvider()` scoring function, `pickBest()` tier selector, `matchService()` pipeline, `SERVICE_DB` with 40+ providers and IP/AS/domain metadata, `IP_RANGES` parsed CIDR ranges, `KNOWN_IP_HINTS` for well-known IPs (8.8.8.0/24, 1.1.1.0/24), `ipInRange()` / `ipHint()` for fast IP lookup, `trafficPattern()` behavioral classification. Port matching ignores an **ephemeral source port** (≥ `EPHEMERAL_MIN` = 49152) when a destination port exists, so a connection's own short-lived port can't be mistaken for the service. Port 853 (DNS-over-TLS) is classified rather than treated as generic encrypted traffic.
+
+### Behavioral Traffic Classification (`trafficPattern`)
+- **Description:** Classifies IPDR network behavior into 14+ categories with confidence deltas and evidence: VPN/Encrypted Tunnel (VPN ports + persistent UDP/TCP + duration >30s), Remote Desktop (RDP/VNC ports + TCP), File Transfer (FTP/SMB ports + bidirectional data), Cloud Sync (TCP + persistent + bidirectional + moderate data), Screen Sharing (UDP + sustained + moderate data), Video Call (UDP + high volume + long duration + symmetric), Voice Call (UDP + symmetric + moderate duration + VoIP ports), Streaming (TCP + download-heavy + long duration), Conference (UDP + long duration + moderate data), Media Upload (upload-heavy ratio > 0.7), Messaging (short burst + small data + UDP), Browsing/Interactive (TCP + short duration + moderate data), Presence/Keep-alive (minimal traffic + very short duration), Network Traffic (default fallback). Supports time-of-day enhancement for late-night / business hours annotations.
+- **Tech:** `trafficPattern(dur, up, dwn, protocol, portSet, recCount, hour)`, category-specific rules, evidence text generation. The VoIP/media port set used for Voice/Video detection covers real RTP/STUN ports only (3478-3481, 16384/16387, 19302-19305, 8801/8810, 5004) — spurious entries (9000, 45000, 65535) were removed to avoid false Voice/Video classification.
+
+### Service Provider Knowledge Base (60+ Providers)
+- **Description:** Hard-coded database of 60+ internet service providers with AS numbers, domains, IP CIDR ranges, and detailed service metadata. Covers: Meta (WhatsApp, Instagram, Facebook/Messenger, Threads), Google (Search, Gmail, YouTube, Meet, Drive, DNS, Pay, Gemini), Microsoft (Teams, Outlook, OneDrive, Skype, Xbox, LinkedIn), Amazon (AWS, Prime Video, Pay), Cloudflare CDN, Akamai CDN, Fastly CDN, Oracle Cloud, DigitalOcean, OVH, Telegram, Signal, Discord, Zoom, Cisco Webex, Slack, Apple (iMessage, FaceTime, iCloud, Push), Snapchat, X/Twitter, Reddit, Netflix, Spotify, Valve Steam, Riot Games, Epic Games, GitHub, GitLab, Docker Hub, OpenAI (ChatGPT, API), Anthropic Claude, Perplexity, Proton (VPN, Mail), NordVPN, ExpressVPN, Mullvad, Surfshark, Quad9 DNS, OpenDNS, Yahoo Mail, Dropbox, Mega, PayPal, PhonePe, Paytm, Flipkart, Myntra, Disney+, Blizzard Battle.net, Sony PlayStation Network, Yandex (Search, Mail), Alibaba Cloud, Hetzner, Vultr, Tor.
+- **Indian telecom access networks:** Reliance Jio (AS55836), Bharti Airtel (AS9498), Vodafone Idea/Vi (AS55410), and BSNL (AS9829) are included with their major announced IPv4 aggregates. These are flagged `isp:true` and treated as **access-network identification** (carrier the subject is on / contacted), labeled `"<Carrier> (Access Network)"` at low confidence — they never override a real content-provider match. Note: only the matcher's `ranges` field drives IP attribution; `asn`/`domains` are documentation. Consumer apps served purely over HTTPS from shared CDNs (most Indian e-commerce/streaming/fintech) cannot be IP-attributed and are intentionally not padded into the DB.
+- **Tech:** `SERVICE_DB` constant object in `app.js`, each entry with `asn`, `domains`, `ranges` (CIDR), optional `isp` flag, and a `services` array (name, ports, protocols, activities). `ISP_PROVIDERS` / `isIspProvider()` gate access-network handling; `matchService()` prefers a non-ISP counterpart-IP match before falling back to the subject's (carrier) IP.
+
+### Distinctive Indicators
+- **Description:** Multi-factor signatures that add confidence (+15) when port+protocol+provider combinations match: WhatsApp (UDP + ports 3478-3480 from Meta IPs), Telegram (provider match), Google Meet (UDP + 19302-19305 from Google), MS Teams (UDP + 3478-3481 from Microsoft), Zoom (UDP + 8801-8810 from Zoom), FaceTime (UDP + 16384-16387/3497 from Apple), Steam (27000-27100/27015-27050 from Valve), NordVPN (UDP + port 1194), Mullvad (UDP + port 51820).
+- **Tech:** Hard-coded indicator rules in `scoreProvider()`, checked when provider matches
+
+### Unified Attribution Knowledge Base (single source of truth)
+- **Description:** Both engines — the backend `service_attribution_service.py` and the frontend `app.js` — now read their provider IP ranges, port→family map, session gap thresholds, port-name lookup, and constants (ephemeral-port floor, CGNAT block, hosting providers, generic web families) from **one canonical file**, `backend/app/data/attribution_data.json`. This eliminates the drift that previously caused duplicate-key and divergent-range bugs: edit the JSON once and both engines stay consistent. The backend loads the JSON directly; the frontend consumes a generated `static/attribution_data.js` (global `ATTR_DATA`) so it stays synchronous with no runtime fetch. Note: this unifies the shared *data*; each engine keeps its own scoring algorithm (the frontend's tiered `scoreProvider`/`pickBest` vs the backend's combiner).
+- **Tech:** `attribution_data.json` (62 providers, 83 CIDR ranges, 53 port-families, 40 port names, constants), `scripts/gen_attribution_js.py` regenerates the frontend copy, `scripts/extract_attribution_data.js` was the one-time bootstrap from the old hardcoded tables; backend `_load_attribution_data()` builds `PROVIDER_RANGES`/`PORT_FAMILY_MAP`/`FAMILY_GAP_MAP`/`EPHEMERAL_MIN`/`_CGNAT_NET`/`_HOSTING_PROVIDERS`/`_GENERIC_PORT_FAMILIES`; frontend `SERVICE_DB`/`PORT_SVC`/`PORT_FAMILY`/`FAMILY_GAP`/`EPHEMERAL_MIN`/`HOSTING_PROVIDERS` all reference `ATTR_DATA`; `index.html` loads `attribution_data.js` before `app.js`
+
+### Session Evidence Integrity Hashing
+- **Description:** Generates EVID-XXXXXXXX hash from service label + evidence + duration + records for session integrity verification.
+- **Tech:** `evidenceHash(sessionData)`, simple hash algorithm, displayed in Gantt tooltip "View Records" overlay
+
+### Service Signature Knowledge Base (26 signatures)
+- **Description:** 26 entries across 16 service families: WhatsApp (Call, Call Init, Messaging, Media), Telegram (Messaging, Voice Call), Signal (Messaging, Voice Call), Instagram (Messaging, Voice/Video Call), Facebook/Messenger (Messaging, Voice Call), Discord (Messaging, Voice Channel), Google Meet, Zoom, MS Teams, Skype (Voice Call, Messaging), Snapchat, YouTube, Netflix, Google, Apple, Amazon, Cloudflare. Each entry has ports, protocol, duration thresholds, and evidence text.
+- **Tech:** `SERVICE_SIGS` constant array in `app.js` (legacy, superseded by `SERVICE_DB` for most lookups)
+
+### Service Color Map (100+ service families)
+- **Description:** Distinct colors for 100+ service families/entities used consistently across Gantt bars, service badges, and visual indicators. Falls back to a hash-based color for unknown services.
+- **Tech:** `SVC_COLORS` object, `svcColor(s)` lookup function with fallback
+
+### Backend Two-Layer Service Attribution (`service_attribution_service.py`)
+- **Description:** Server-side classification of IPDR records combining an **IP-range / provider layer** (Level 1) with a **port layer** (Level 2), mirroring the frontend engine so the timelines and `/investigation/services` get the same quality of attribution. For each record the destination and source IPs are checked against a provider CIDR table; a content-provider match (Meta, Google, Microsoft, Cloudflare, Apple, Telegram, Yandex, Alibaba Cloud, Hetzner, Vultr, …) names the service directly with confidence scaled by CIDR specificity (78–90%). If only an Indian carrier (Reliance Jio / Bharti Airtel / Vodafone Idea / BSNL) matches, the record keeps a *specific* port-mapped service (DNS, mail, VPN, …) annotated with the carrier, and otherwise is labeled `"<Carrier> (Access Network)"` at low confidence — a carrier match never overrides a real content-provider match (counterpart IP is preferred over the subject's own/carrier IP).
+- **Longest-prefix match:** `_match_ip()` returns the *most specific* CIDR containing an address (largest prefix length wins), so a tight block beats a broad one and overlaps resolve correctly. The frontend `ipInRange()` does the same (most 1-bits in the mask wins).
+- **Categories & deterministic flags:** every result now carries a `category` — `content`, `hosting` (Alibaba/Hetzner/Vultr/DigitalOcean → "possible VPN/proxy/self-hosted endpoint"), `access_network`, `vpn` (VPN/Tunnel ports), `anonymization` (Tor/proxy ports), `internal`, `service`, or `unknown`. A private/CGNAT/loopback/link-local **destination** is detected deterministically (`_ip_kind()`, RFC 6598 `100.64.0.0/10` + RFC 1918) and labeled "Carrier NAT (CGNAT)" / "Private / Internal Network" instead of being guessed as an internet service.
+- **Pluggable ASN/CIDR loader:** `_load_external_ranges()` optionally reads `backend/data/asn_ranges.csv` (or `ASN_RANGES_CSV` env path) with columns `network,provider,is_isp` — a drop-in for MaxMind GeoLite2-ASN / IPinfo data that extends coverage to every ASN with no code change (merged by longest-prefix specificity).
+- **Tech:** `PROVIDER_RANGES` table parsed via `ipaddress` into `_PROVIDER_NETS`, `_match_ip()` (LPM) / `_classify_by_ip()` (content-provider-before-ISP, destination-before-source), `_merge_provider()`, `_access_network_result()`, `_private_result()`, `_ip_kind()`, `_category_for()`, `_GENERIC_PORT_FAMILIES` guard, `_load_external_ranges()`, orchestrated by `attribute_service()`
+
+### Backend Port-to-Service Attribution (`_classify_by_port`)
+- **Description:** The port layer (Level 2) maps 250+ exact ports plus 12 port ranges to service families (DNS, Web, WhatsApp, VPN, VoIP, Mail, Database, Remote Desktop, File Transfer, IoT, etc.), with confidence from port, protocol alignment, and data-transfer volume. The destination port is inspected before the source port (the destination is the well-known service port on an outbound session). Matches on an **ephemeral source port** (49152–65535) are demoted when a stronger non-ephemeral match exists, and marked low-confidence when they are the only signal — preventing a coincidental source port (e.g. 50005) from being misread as MS Teams/Discord. Each result returns `service`, `subtype`, `confidence`, `family`, `port`, and an `evidence` list.
+- **Tech:** `PORT_MAP` dictionary, `PORT_RANGES` bands, `EPHEMERAL_MIN` guard, `_classify_whatsapp()` / `_classify_generic()` specialized classifiers, `_classify_by_port()` → `_public()` result builder
+
+### Backend Service Summary (`summarize_services`)
+- **Description:** Aggregates service classifications across all IPDR records, returning per service: record count, the **highest-confidence** classification as the representative example (evidence/subtype/family), and total bytes transferred. Using the most-confident example avoids reporting whichever record happened to be processed first.
+- **Tech:** `Counter` for counts and `total_bytes`, `attribute_service()`, max-confidence `best_example` selection, `_record_bytes()` helper, `most_common()` sorting
+
+### Port Service Lookup Map (30+ ports)
+- **Description:** Frontend port-to-name lookup covering 30+ well-known ports: FTP, SSH, SMTP, DNS, DHCP, HTTP, HTTPS, POP3, IMAP, LDAP, SMB, RDP, MySQL, PostgreSQL, Redis, MongoDB, and more.
+- **Tech:** `PORT_SVC` constant object in `app.js`, `portSvc()` function
+
+---
+
+## 13. Services Tab
+
+### Service Evidence Scorecards
+- **Description:** For each detected service, a full evidence scorecard with 6 checks: IP match (provider IP range matched), Port/protocol alignment (ports + protocol match service definition), Distinctive indicators (multi-factor service-specific signature), Session pattern (duration, volume, behavior matches expected), Multiple subjects (service observed across multiple subjects), Clear attribution (no conflicting evidence). Each check is shown as a green check or red X with descriptive text.
+- **Tech:** `renderServiceCard(svc)`, 6-criteria evidence analysis from session classification data
+
+### Service Cards
+- **Description:** Expandable cards for each detected service showing: evidence scorecard, alternative services (ranked bar chart with color-coded confidence bars), subject list using the service, tower list where service was detected, contact list communicating via the service, recent sessions (with Gantt-style bar and evidence tree).
+- **Tech:** `renderServiceCard(svc)`, `classifySession()` for session classification, service color indicators
+
+### Burst Detection
+- **Description:** Detects per-subject daily activity spikes (>3x average, minimum 10 records) for each service. Listed in the Burst section with subject ID, date, count, and average comparison.
+- **Tech:** `renderServiceBursts()`, daily per-subject frequency counting, threshold comparison
+
+### Filtering
+- **Description:** Name search filter for services and minimum confidence threshold selector (0-95%). Service list updates in real-time.
+- **Tech:** Text input for name filter, range selector for confidence, `.filter()` on service data
+
+---
+
+## 14. Correlation Tab
+
+### Cross-Subject Analysis
+- **Description:** Select two subjects (A and B) for detailed correlation analysis. Compare button triggers computation. Results include: weighted correlation score (contact overlap=5pts, service overlap=2pts, tower overlap=1pt, session overlap=4pts), meeting detection between the pair, common towers, common contacts, common services, service comparison grid, and overlapping time windows.
+- **Tech:** `runCorrelation()`, `Set` intersection for common entities, weighted score formula, `detectMeetings()` for A/B pair, `D.corrResults` display
+
+### Swap Button
+- **Description:** Swaps subjects A and B in the correlation interface for quick re-analysis.
+- **Tech:** `D.corrSubA.value ↔ D.corrSubB.value`, `runCorrelation()`
+
+---
+
+## 15. Backend Services
+
+### TIFM Multi-Agent AI Backend
+- **Description:** 5 specialized agents in `app/ai/agents.py`: ServiceAttributionAgent (maps ports to apps via knowledge_base.json), IdentityAgent (SIM swaps, device changes, burner detection), MovementAgent (home/work tower classification, meeting detection via co-location), NetworkAgent (NetworkX centrality, communities, kingpin identification), ReportAgent (generates markdown forensics report). Orchestrated by `TelecomIntelligenceOrchestrator` in `orchestrator.py`.
+- **Tech:** `agents.py` (374 lines), `orchestrator.py` (57 lines), `knowledge_base.json` (17 application entries, 187 lines)
+
+### PoliceInvestigator (12-Module Analysis)
+- **Description:** Comprehensive `PoliceInvestigator` in `investigator.py` with 12 analysis modules: SessionAnalyzer, CommunicationPatternAnalyzer, TemporalAnalyzer, LocationIntelligenceAnalyzer, SocialNetworkAnalyzer (k-core, triads, bridges, PageRank, clustering), IdentityDeepAnalyzer (SIM/device/burner/cycling/multi-SIM), AnomalyDetector (activity, contact, time-of-day, duration shifts), GapAnalyzer (network silence periods), CallDetailAnalyzer (short calls, odd hours, burst patterns).
+- **Tech:** `investigator.py` (~1300 lines), invoked via `POST /ai/investigate`, `renderInvestModules()` frontend
+
+### QLoRA Fine-Tuning Pipeline
+- **Description:** 15-type Q&A training data generator (`training_data.py`, 930 lines, 200 examples/type → 3218 total), fine-tuning scaffold (`finetune_scaffold.py`), local training script (`train_qwen_tifm.py`), unified pipeline (`pipeline_tifm_finetune.py`), and inference engine (`inference.py`) for Qwen2.5-3B-Instruct with 4-bit LoRA adapters. Cloud training notebooks: `tifm_kaggle_train.ipynb`, `tifm_colab_train.ipynb`.
+- **Tech:** transformers, peft, bitsandbytes, trl, SFTTrainer, QLoRA 4-bit, LoRA adapters saved to `tifm_lora_output/`
+
+### Fine-Tuned Inference (`/ai/chat`)
+- **Description:** Single-pass fine-tuned Qwen2.5-3B-Instruct inference. Loads LoRA adapter from `tifm_lora_output/`, accepts investigator question + trimmed analytics (2000 chars), returns evidence-grounded answer. Configurable via `POST /ai/chat`.
+- **Tech:** `inference.py`, `generate_answer()`, `load_model()` (4-bit QLoRA), `unload_model()` for memory management
+
+### Synthetic Data Generation
+- **Description:** Generates synthetic CDR/IPDR/tower records for 5 investigation scenarios (criminal, drug, scam, human_trafficking, financial_fraud). Used for testing TIFM agents and fine-tuning pipeline.
+- **Tech:** `dataset_generator.py`, `generate_synthetic_case()`, seeded with `random.seed(42)`, output format matching real CDR/IPDR schema
+
+### Record Querying with Dynamic Filters (`records_service.py`)
+- **Description:** Flexible query builder for CDR and IPDR records supporting: date range, tower ID, MSISDN, IMSI, IMEI, call type, direction, protocol, APN, RAT, free-text search (across 7-9 fields), limit, and offset.
+- **Tech:** SQLAlchemy `query.filter()` chaining, `or_()` for multi-field search, `.ilike()` for case-insensitive search
+
+### NetworkX Graph Construction (`graph_service.py`)
+- **Description:** Builds a NetworkX graph from CDR records by creating weighted edges between A-party and B-party numbers. Returns nodes and edges as JSON-serializable payloads.
+- **Tech:** NetworkX `nx.Graph()`, `edge_counts` Counter, `add_edge()` with weight attribute
+
+### Graph Metrics Computation (`graph_service.py`)
+- **Description:** Computes degree centrality (most connected entities), betweenness centrality (bridge entities), communities via greedy modularity, and structural bridges.
+- **Tech:** `nx.degree_centrality()`, `nx.betweenness_centrality()`, `greedy_modularity_communities()`, `nx.bridges()`
+
+### Unified Investigation Timeline (`investigation_service.py`)
+- **Description:** Merges CDR calls, **reconstructed** IPDR sessions, and tower registry data into a single chronologically sorted timeline. IPDR records are no longer emitted one event per row — they are grouped server-side by `reconstruct_ipdr_sessions()` into concurrent `(counterpart, activity family)` tracks with family-adaptive idle gaps (mirroring the frontend), and each session reports aggregated bytes, duration, record count, and a most-confident service attribution.
+- **Tech:** `reconstruct_ipdr_sessions()` + `_finalize_session()` (per-session byte/duration aggregation, most-confident `attribute_service()` across the session), `_port_family()`/`_FAMILY_GAP`, multi-model query, `sorted()` with `datetime.min`-safe key
+
+### Tower Activity & Colocation (`tower_service.py`)
+- **Description:** Counts CDR and IPDR events per tower. Identifies colocation candidates where multiple subjects appear at the same tower (potential meeting points).
+- **Tech:** `Counter` for per-tower event counts, `defaultdict(set)` for subject aggregation
+
+### Timeline Event Builder (`timeline_service.py`)
+- **Description:** Builds sorted timeline of CDR calls, IPDR sessions, and tower registry events with service attribution.
+- **Tech:** `get_timeline()`, multi-model query, `sorted()` with None-safe key
+
+### CDR/IPDR Statistics (`stats_service.py`)
+- **Description:** Aggregates CDR statistics (totals, duration, call type distribution, direction distribution, technology distribution, unique parties) and IPDR statistics (totals, bytes, protocol distribution, APN distribution, RAT distribution).
+- **Tech:** `Counter`, `db.query().count()`, `db.query().distinct().count()`
+
+### Database Fallback (PostgreSQL → SQLite)
+- **Description:** If PostgreSQL is unavailable (connection error), the app automatically falls back to SQLite using `cdrdb.sqlite3` with `check_same_thread=False`.
+- **Tech:** `try/except` in `database.py`, conditional SQLAlchemy `create_engine()`, `check_same_thread=False`
+
+### Automatic Table Creation
+- **Description:** All database tables are created automatically on startup via SQLAlchemy's `Base.metadata.create_all()`.
+- **Tech:** FastAPI `@app.on_event("startup")`, `Base.metadata.create_all(bind=engine)`
+
+---
+
+## 16. API Endpoints (40+ Routes)
+
+### Authentication (7 endpoints)
+- `POST /auth/login` — Login with username/password, returns session cookie
+- `GET /auth/me` — Get current user, session, and all active sessions
+- `POST /auth/logout` — Revoke current session, clear cookie
+- `GET /auth/sessions` — List all active sessions for the current user
+- `DELETE /auth/sessions` — Revoke all sessions (logout everywhere)
+- `DELETE /auth/sessions/{session_id}` — Revoke a specific session
+- `POST /auth/password` — Change current user's password
+
+### Data Upload (3 endpoints)
+- `POST /upload/cdr` — Upload CDR CSV (replaces existing)
+- `POST /upload/ipdr` — Upload IPDR CSV (replaces existing)
+- `POST /upload/towers` — Upload Towers CSV (merges)
+
+### Record Querying (3 endpoints)
+- `GET /records/cdr` — List CDR records with 10+ optional filters
+- `GET /records/ipdr` — List IPDR records with 10+ optional filters
+- `DELETE /records/reset` — Delete all CDR, IPDR, and Tower records
+
+### Geo-Spatial (3 endpoints)
+- `GET /geo/records` — All geo-tagged records (CDR + IPDR) with optional subject filter
+- `GET /geo/subjects` — All unique subjects with record counts
+- `GET /geo/towers` — All tower locations with metadata
+
+### Investigation (4 endpoints)
+- `GET /investigation/timeline` — Unified CDR/IPDR/Tower timeline
+- `GET /investigation/services` — Service classification summary
+- `GET /investigation/towers` — Tower activity counts
+- `GET /investigation/colocation` — Colocation candidates (shared towers)
+
+### Graph Analysis (2 endpoints)
+- `GET /graph/` — Network graph nodes + weighted edges
+- `GET /graph/metrics` — Centrality, communities, bridges
+
+### Timeline (1 endpoint)
+- `GET /timeline/` — Chronologically sorted timeline events
+
+### Statistics (3 endpoints)
+- `GET /stats/top-contacts` — Top 10 most frequent contacts
+- `GET /stats/cdr` — CDR aggregate statistics
+- `GET /stats/ipdr` — IPDR aggregate statistics
+
+### Annotations (3 endpoints)
+- `GET /annotations` — List all annotations for current user
+- `POST /annotations` — Create a new annotation
+- `DELETE /annotations/{id}` — Delete an annotation
+
+### Cases (4 endpoints)
+- `GET /cases` — List all cases with record counts
+- `POST /cases` — Create a new case
+- `PUT /cases/{id}` — Update a case
+- `DELETE /cases/{id}` — Delete a case and cascade-delete its records
+
+### AI/TIFM (7 endpoints)
+- `POST /ai/analyze` — Run TIFM multi-agent analysis on case data
+- `POST /ai/generate-report` — Generate forensics report
+- `GET /ai/knowledge-base` — Return the TIFM knowledge base
+- `POST /ai/generate-synthetic` — Generate synthetic case data
+- `POST /ai/investigate` — Run full PoliceInvestigator analysis (8 modules)
+- `POST /ai/chat` — Fine-tuned model Q&A endpoint
+- `GET /ai/finetune-dataset` — Export fine-tuning dataset
+
+### Admin User Management (5 endpoints)
+- `GET /auth/admin/users` — List all users (admin only)
+- `POST /auth/admin/users` — Create a user (admin only)
+- `PUT /auth/admin/users/{id}` — Update a user (admin only)
+- `PUT /auth/admin/users/{id}/password` — Reset user password (admin only)
+- `DELETE /auth/admin/users/{id}` — Delete a user (admin only)
+
+### Infrastructure (2 endpoints)
+- `GET /health` — Server health check
+- `GET /favicon.ico` — Empty response (204)
+
+---
+
+## 17. UI/UX Features
+
+### Tab-Based Navigation (10 Tabs)
+- **Description:** 10 top-level tabs (Dashboard, Network Graph, Tower Map, Timeline, Charts, Services, Correlation, Records, AI Insights, Admin) with active tab highlighting and content switching. Admin tab is visible only for users with `role=admin`.
+- **Tech:** `.topbar-tab` buttons with `data-tab` attributes, `.tab-content` sections, `switchTab()` function, admin role check `state.auth.user?.role === 'admin'`
+
+### Dark Mode
+- **Description:** A moon icon toggle button in the top bar switches the entire UI between light and dark color schemes. Palette is applied via CSS custom properties on `.dark` class. Persisted to `localStorage` and restored on page load. Applies to all surfaces, text, lines, charts, maps, tooltips, Gantt bars, and modals.
+- **Tech:** `document.body.classList.toggle('dark')`, `localStorage.setItem('darkMode')`, `.dark` CSS class with full `--bg`, `--surface`, `--text`, `--line`, `--accent` overrides, IIFE for early restore, dark tile layer for the map
+
+### CSS Custom Properties (Design Tokens)
+- **Description:** Centralized color scheme via CSS variables: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--accent-light`, `--danger`, `--warn`, `--success`, `--shadow`, `--card-bg`, `--fg`. Single source of truth for theming across light and dark modes.
+- **Tech:** `:root { --bg: #f0ebe4; ... }`, `.dark { --bg: #1a1a1a; ... }`, used throughout as `var(--bg)`
+
+### Responsive Layout
+- **Description:** Top bar with tabs, scrollable tab content, fixed session status. Uses flexbox for all layout components. Responsive breakpoint at 820px switches to single-column layout.
+- **Tech:** `display: flex`, `flex: 1`, `height: calc(100vh - 160px)`, `overflow: auto`, `@media(max-width: 820px)`
+
+### Dark/Light Readable Color Palette
+- **Description:** Warm, high-contrast color scheme designed for long investigation sessions: cream background, dark text, teal accent, muted earth tones.
+- **Tech:** CSS variables, `#f0ebe4` background, `#1f2330` text, `#2c6f79` accent
+
+### HTML Escaping Utility
+- **Description:** All user data rendered in the DOM is HTML-escaped to prevent XSS injection.
+- **Tech:** `esc()` function: `replace(/&/g, '&amp;').replace(/</g, '&lt;')...`
+
+### Date/Time Formatting Utilities
+- **Description:** Three formatting functions: `fmt()` (full locale string), `fmts()` (short date + HH:MM), `fmtd()` (date only), `n()` (number with locale formatting), `fmtBytes()` (human-readable byte sizes).
+- **Tech:** `new Date(v).toLocaleString()`, `.toLocaleTimeString()`, `.toLocaleDateString()`, `Number(v).toLocaleString()`, `['B','KB','MB','GB']` units for bytes
+
+### Modal System
+- **Description:** Reusable modal overlay pattern used for subject profile, session records, meeting details, admin forms, and upload preview. Click outside to close or press Escape.
+- **Tech:** `.modal-overlay` CSS (fixed position, inset 0, flex centering), `onclick` for background dismissal, `keydown Escape` listener
+
+### Gantt Tooltip with Smart Positioning
+- **Description:** Hovering a Gantt bar shows a tooltip with: service badge (colored), activity description, start/end time, duration, confidence percentage, and evidence text categorized into Infrastructure/Ports/Behavior/Signals. "View Records" button opens session evidence overlay. Tooltip is positioned with its top-left corner touching the bar's top-right corner (flips to left side if viewport overflows). Tooltip can be hovered directly without disappearing (200ms grace period on mouse leave from bar). Tooltip does not follow the cursor.
+- **Tech:** `showGanttTip()` / `scheduleHideGanttTip()` / `positionGanttTip(el)`, `getBoundingClientRect()` with viewport edge detection and flip-to-left logic, `onmouseenter`/`onmouseleave` on tooltip div, 200ms `setTimeout` hide delay, `pointer-events: auto` on tooltip, `position: fixed`, `width: max-content`
+
+### Infinite Scroll / Load More
+- **Description:** "Load More" button pattern used in the Records table. Loads 60 records at a time, shows/hides button based on remaining data.
+- **Tech:** `recPage` counter, `row.slice(0, recPage + 60)`, `D.recLoadMore.style.display`
+
+### Global HTML Element Cache
+- **Description:** All DOM elements are cached once at startup in a `D` object (80+ elements), accessed via `D.elementId` throughout the application.
+- **Tech:** `const D = { elementId: $('elementId'), ... }` where `$ = id => document.getElementById(id)`
+
+### Client-Side State Management
+- **Description:** Global `state` object holds application state: `auth`, `cdr`, `ipdr`, `towers`, `tab`, `subjects`, `graphData`, `timeline`, `charts`. Merged `allRows` array provides unified record access. `activeCaseId` tracks the selected case.
+- **Tech:** JavaScript object with module-level scope, initialized at script load
+
+### Named Event Handlers for Re-rendering
+- **Description:** Event listeners that are re-registered on re-render use a `._handler` property pattern to properly remove the old listener before adding the new one, preventing listener accumulation.
+- **Tech:** `D.graphSearch._handler = () => {...}`, `removeEventListener` + `addEventListener`
+
+### Evidence Export (.txt Report)
+- **Description:** "Export" button in the top bar generates a plain-text `.txt` investigation report. Includes: report header (timestamp, user, case name), summary with time span, top 10 attributed services, top 10 contacts, geofence coordinates if drawn, detailed subject profiles (up to 50 subjects with records, sessions, contacts, services, towers, APNs, RATs, meetings), all reconstructed sessions (up to 200 with service, confidence, duration, evidence, candidates), raw CDR/IPDR records (up to 200 each, non-empty fields only), tower list, and meeting evidence sorted by score. Download is timestamped.
+- **Tech:** `state.ipdr`/`state.cdr` data access, `recordSvcAttr()` for service attribution, `reconstructSessions()` for session summaries, `Blob` + `URL.createObjectURL()` for file download, `a.download` for filename
+
+---
+
+## 18. Case Management
+
+### Saved Cases (Backend)
+- **Description:** Full CRUD for investigation cases. `Case` model with id, name, description, timestamps, and record count. Deleting a case cascade-deletes all associated CDR and IPDR records. Cases are listed sorted alphabetically.
+- **Tech:** `Case` SQLAlchemy model, `GET/POST/PUT/DELETE /cases/` endpoints, `case_id` string field on `CDRRecord`/`IPDRRecord`, cascade delete via `session.delete()`, `record_count` computed via `db.query().filter()`
+
+### Case Selector Dropdown
+- **Description:** A dropdown in the top bar shows all cases with record counts. Selecting a case switches the active investigation and reloads all data filtered to that case. "New Case" option prompts for a name. "Manage Cases" opens the management modal.
+- **Tech:** `<select id="caseSelector">`, `loadCases()` populates, `activeCaseId` variable, `loadCaseData()` passes `?case_id=...`
+
+### Case Management Modal
+- **Description:** A modal listing all cases with name, record count, Switch and Delete buttons per row. Delete cascades to all associated records.
+- **Tech:** `showCaseManager()`, `API.del('/cases/'+c.id)`, `addEventListener` pattern (no inline onclick)
+
+### Case-Aware Data Filtering
+- **Description:** Records endpoints (`GET /records/cdr`, `GET /records/ipdr`, `DELETE /records/reset`) and upload endpoints (`POST /upload/cdr`, `POST /upload/ipdr`) accept optional `case_id` to filter or associate records with a specific case.
+- **Tech:** `case_id: str | None = Query(default=None)` in backend, `CDRRecord.case_id == case_id` filter, `case_id: str = Form("")` in upload endpoints
+
+---
+
+## 19. Admin User Management
+
+### Admin User CRUD
+- **Description:** Admin users can list, create, update, and delete users. User creation requires username and password (≥8 chars). User update supports changing username, role, and active status. Admin cannot delete their own account. Only users with `role=admin` can access these endpoints.
+- **Tech:** `get_current_admin()` dependency in `auth_service.py`, `GET/POST /auth/admin/users`, `PUT/DELETE /auth/admin/users/{id}`, `AdminCreateUserRequest`/`AdminUpdateUserRequest` schemas
+
+### Admin Frontend Tab
+- **Description:** An "Admin" tab visible only for admin users. Shows a table of all users with username, role, active status, and action buttons (Edit, Reset Password, Delete). Modal dialogs handle create/edit/reset-password forms.
+- **Tech:** `switchTab()` checks `state.auth.user?.role === 'admin'` to show the tab button, `renderAdminTable()` builds user rows, modal with form fields for username/role/password
+
+---
+
+## 20. Infrastructure Features
+
+### Environment-Based Configuration
+- **Description:** All configurable settings (database URL, cookie name, session TTL, bootstrap credentials) are managed via `.env` file with Pydantic Settings validation.
+- **Tech:** `pydantic-settings`, `.env` file, `Settings` class with `@lru_cache`
+
+### Cached Settings Singleton
+- **Description:** Application settings are loaded once and cached via `lru_cache(maxsize=1)`.
+- **Tech:** `@lru_cache(maxsize=1)` on `get_settings()`
+
+### FastAPI Swagger/ReDoc
+- **Description:** Interactive API documentation auto-generated at `/docs` (Swagger UI) and `/redoc` (ReDoc).
+- **Tech:** FastAPI built-in, `app.include_router()` with tags
+
+### Static File Serving
+- **Description:** Frontend static files (HTML, CSS, JS) are served directly by the backend via FastAPI's `StaticFiles`.
+- **Tech:** `app.mount("/static", StaticFiles(directory=static_dir), ...)`, `FileResponse(static_dir / "index.html")`
+
+### SPA Entry Point
+- **Description:** The root URL `/` serves the SPA (`index.html`). All frontend routing is handled client-side via tab switching.
+- **Tech:** `@app.get("/", include_in_schema=False)` returns `FileResponse`
+
+### Health Check Endpoint
+- **Description:** Simple `GET /health` returns `{"status": "ok"}`. No authentication required. Used by the frontend and monitoring tools.
+- **Tech:** `@app.get("/health")`, returns plain JSON
+
+### SQLite Fallback
+- **Description:** If PostgreSQL connection fails, automatically falls back to local SQLite file with zero configuration.
+- **Tech:** `try/except ConnectionError` in `database.py`, SQLite `check_same_thread=False` for multi-thread safety
+
+---
+
+## 21. Validation Infrastructure
+
+### Synthetic Validation Dataset Pack
+- **Description:** 8 curated CDR/IPDR datasets for testing AI findings, meeting detection, identity resolution, and false-positive rates: `normal_user` (regular 8am-10pm pattern, ~88 records), `family_group` (4 subjects sharing home tower, frequent intra-family calls), `business_user` (30+ contacts, multi-tower travel), `call_center` (326 records, single tower, repetitive 10am-7pm — critical false-positive benchmark), `criminal_network` (5 subjects, night meetings, SIM swaps, encrypted apps), `criminal_network_noise` (same criminal activity interleaved with normal family/business/social contacts per subject — 5 subjects, ~800 records, tests ability to extract signal from noise), `shared_transport` (10 commuters on same train, same towers/times — meeting detection false-positive stress test), `large_dataset` (50 subjects, ~119k records — performance stress test). Each dataset includes CDR/IPDR/towers CSVs and a `meta.json` describing expected behavior.
+- **Tech:** `tests/generate_datasets.js` generates all 8 scenarios, deterministic random seeds, Node.js CSV writer
+
+### Identity Resolution Test Suite
+- **Description:** 38 assertions across 12 scenarios in `tests/identity.test.js`: A→B→A re-appearance, SIM swap, device change, combined change, partial changes, no-change aggregation, empty input, single record, complex A→B→C→A, sequential SIM-then-device change, MSISDN accumulation. Run via `node tests/identity.test.js`.
+- **Tech:** Extracted `buildIdentityProfile()` function, standalone Node.js test runner
+
+### TIFM AI Test Suite
+- **Description:** 13 test classes (541 lines) in `tests/test_ai.py` covering: knowledge base validation, dataset generator (6 scenarios), all 5 TIFM agents, PoliceInvestigator (14 sub-tests across 5 scenarios), fine-tuning scaffold validation. Run via `python -m unittest tests.test_ai`.
+- **Tech:** Python unittest, mock data generation, agent output validation
+
+### LCS & Performance Benchmark
+- **Description:** Measures LCS vs greedy matching timing across sequence sizes (100-5000), scalability projection for 10-100 subjects, identity resolution timing for 1k-50k records, meeting detection timing (5-50 subjects at 1k-10k records), graph construction timing (10k-100k records), AI cache build timing (1k-100k records at 10-300 subjects), spike detection timing (10 subjects at 10-365 days), timeline entity mapping timing (1k-50k records at 10-500 entities), and 100-subject LCS profiling (50-5000 obs each, worst-case 5-shared-tower scenario). Run via `node tests/benchmark.js`.
+- **Tech:** `towerSequenceSimilarity()` and `greedySimilarity()` implementations, `Date.now()` timing, `detectMeetingsSimple()` for meeting detection, `buildGraph()` for graph construction, `buildAiCache()` for AI cache, `findSpikes()` for spike detection, `buildTimelineEntities()` for timeline mapping
+
+### Service-Attribution Metrics Harness
+- **Description:** 17 hand-verified labeled fixtures in `tests/test_attribution.py` that turn "is attribution better?" into a measured number: overall accuracy plus a per-category breakdown (content/hosting/access_network/vpn/anonymization/internal/service). Locks in the regression fixes — duplicate port keys (27017→MongoDB, 9418→Git), ephemeral-source-port guard, longest-prefix match, carrier/CGNAT handling — and asserts ≥95% accuracy. Run as a report (`python -m tests.test_attribution`) or as tests (`python -m unittest tests.test_attribution`).
+- **Tech:** `FIXTURES` list of (record, predicate), `evaluate()` returning accuracy/per-category/failures, `unittest.TestCase` with accuracy + required-keys + summary-aggregation assertions
+
+### Investigation Validation Checklist
+- **Description:** `tests/VALIDATION_CHECKLIST.md` provides step-by-step validation guidance: identity resolution tests, meeting detection expectations, subject assessment verification, lead scoring sanity checks, AI findings false-positive tracking table, activity spike detection expectations, and a pre-demo checklist (19 items).
+- **Tech:** Markdown checklist with per-dataset expected/actual columns, FP rate target <20%

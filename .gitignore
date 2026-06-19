@@ -1,0 +1,80 @@
+# ───────────────────────────── Python ─────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+backend/.venv/
+
+# ──────────────────────── Secrets / config ────────────────────────
+.env
+.env.*
+!.env.example
+*.local
+
+# ──────────────────────────── Database ────────────────────────────
+*.sqlite3
+*.sqlite
+*.db
+backend/cdrdb.sqlite3
+
+# ──────────── ML models / training artifacts (large) ──────────────
+backend/llm_models/
+backend/tifm_lora_output/
+backend/tifm_merged/
+backend/wandb/
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# ───────────────── Generated / runtime data ──────────────────────
+backend/sample_data/
+backend/testdata/
+backend/data/asn_ranges.csv
+*.log
+
+# ──────────────────────────── Node ───────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# ──────────────────── Editors / IDE / OS ─────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─────────────── Office / temp / lock files ──────────────────────
+~$*.docx
+~$*.xlsx
+~$*.pptx
+~WRL*.tmp
+*.tmp
+*.bak
+
+# ─────────────────────── Claude Code local ───────────────────────
+.claude/settings.local.json

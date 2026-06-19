@@ -1,0 +1,275 @@
+{
+  "whatsapp": {
+    "name": "WhatsApp",
+    "ports": [3478, 3479, 3480, 5222, 5223, 5228],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "STUN traffic to Meta IP ranges",
+      "TCP connection to WhatsApp chat servers on port 5222/5223",
+      "Push messaging traffic on port 5228",
+      "UDP media bursts on port 3478"
+    ],
+    "base_confidence": 92,
+    "asn_keywords": ["META", "WHATSAPP", "FACEBOOK"]
+  },
+  "telegram": {
+    "name": "Telegram",
+    "ports": [443, 80, 5222, 8443, 4430],
+    "protocols": ["TCP", "UDP"],
+    "indicators": [
+      "MTProto proxy traffic patterns",
+      "Sustained connections to Telegram Messenger LLP IP block",
+      "VoIP UDP traffic on random high ports to Telegram ASNs"
+    ],
+    "base_confidence": 85,
+    "asn_keywords": ["TELEGRAM"]
+  },
+  "signal": {
+    "name": "Signal",
+    "ports": [4433, 8443, 443, 3478],
+    "protocols": ["TCP", "UDP"],
+    "indicators": [
+      "TLS connection client hello matching Signal User-Agent patterns",
+      "Websocket connections on port 4433",
+      "TURN server communication on port 3478"
+    ],
+    "base_confidence": 88,
+    "asn_keywords": ["QUIET-GLOW", "SIGNAL-MESSENGER"]
+  },
+  "discord": {
+    "name": "Discord",
+    "ports": [50009, 50013, 50014, 443, 50001, 50002, 50003, 50004, 50005, 50006, 50007, 50008, 50010, 50011, 50012, 50015],
+    "protocols": ["TCP", "UDP"],
+    "indicators": [
+      "Voice/Video traffic on UDP ports in 50001-50030 range",
+      "Discord Gateway WebSocket traffic on port 443",
+      "Discord API calls"
+    ],
+    "base_confidence": 90,
+    "asn_keywords": ["DISCORD", "CLOUDFLARE"]
+  },
+  "instagram": {
+    "name": "Instagram",
+    "ports": [443, 80, 3478],
+    "protocols": ["TCP", "UDP"],
+    "indicators": [
+      "Instagram video/media streaming content transfers",
+      "STUN/ICE NAT traversal on port 3478 to Meta IP ranges"
+    ],
+    "base_confidence": 85,
+    "asn_keywords": ["META", "FACEBOOK", "INSTAGRAM"]
+  },
+  "facebook": {
+    "name": "Facebook",
+    "ports": [443, 80, 3478],
+    "protocols": ["TCP", "UDP"],
+    "indicators": [
+      "Messenger voice/video call init via STUN",
+      "Encrypted web browsing to Facebook server clusters"
+    ],
+    "base_confidence": 85,
+    "asn_keywords": ["META", "FACEBOOK"]
+  },
+  "google_meet": {
+    "name": "Google Meet",
+    "ports": [19302, 19303, 19304, 19305, 19306, 19307, 19308, 19309],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "RTP audio/video streams to Google LLC IP space",
+      "STUN connections to Google STUN ranges (19302-19309)"
+    ],
+    "base_confidence": 95,
+    "asn_keywords": ["GOOGLE"]
+  },
+  "zoom": {
+    "name": "Zoom",
+    "ports": [8801, 8802, 3478, 3479, 443, 80],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "UDP audio/video streaming to Zoom Video Communications servers on port 8801/8802",
+      "STUN negotiation on port 3478/3479"
+    ],
+    "base_confidence": 94,
+    "asn_keywords": ["ZOOM"]
+  },
+  "teams": {
+    "name": "Microsoft Teams",
+    "ports": [3478, 3479, 3480, 3481, 50000, 50001, 50002, 50003, 50004, 50005, 50006, 50007, 50008, 50009, 50010, 50011, 50012, 50013, 50014, 50015],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "Media streams on UDP ports 50000-50059 to Microsoft IP blocks",
+      "ICE/STUN negotiation on port 3478-3481"
+    ],
+    "base_confidence": 92,
+    "asn_keywords": ["MICROSOFT"]
+  },
+  "facetime": {
+    "name": "FaceTime",
+    "ports": [3478, 5349, 16393, 16394, 16395, 16396, 16397, 16398, 16399, 16400, 16401, 16402],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "Apple APNS push notifications",
+      "VoIP connectivity to Apple Inc. ASN ranges on ports 16393-16402"
+    ],
+    "base_confidence": 90,
+    "asn_keywords": ["APPLE"]
+  },
+  "email": {
+    "name": "Email (SMTP/POP3/IMAP)",
+    "ports": [25, 110, 143, 465, 587, 993, 995, 2525],
+    "protocols": ["TCP"],
+    "indicators": [
+      "SMTP mail submission on port 25/465/587",
+      "POP3 mail retrieval on port 110/995",
+      "IMAP mailbox access on port 143/993",
+      "Frequent connections to email server ASNs"
+    ],
+    "base_confidence": 88,
+    "asn_keywords": ["GOOGLE-MAIL", "OUTLOOK", "YAHOO-MAIL", "PROTONMAIL", "FASTMAIL"]
+  },
+  "steam": {
+    "name": "Steam",
+    "ports": [27015, 27016, 27017, 27018, 27019, 27020, 27031, 27036, 4380],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "Game client connectivity on ports 27015-27030",
+      "P2P multiplayer connection handshakes on UDP port 4380"
+    ],
+    "base_confidence": 88,
+    "asn_keywords": ["VALVE", "STEAM"]
+  },
+  "vpns": {
+    "name": "VPN / Tunnels",
+    "ports": [1194, 500, 4500, 1701, 1723, 51820, 51821, 3544],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "WireGuard protocol handshakes on port 51820",
+      "OpenVPN control channel activity on port 1194",
+      "IPsec IKE negotiations on port 500/4500",
+      "Sustained high-volume symmetric upload/download data rates"
+    ],
+    "base_confidence": 85,
+    "asn_keywords": ["NORDVPN", "EXPRESSVPN", "MULLVAD", "PROTONVPN", "PRIVATE-INTERNET-ACCESS"]
+  },
+  "cloudflare": {
+    "name": "Cloudflare CDN / Warp",
+    "ports": [443, 2408],
+    "protocols": ["TCP", "UDP"],
+    "indicators": [
+      "Cloudflare Warp connection on UDP port 2408",
+      "Highly aggregated requests routing through Cloudflare CDN ASNs"
+    ],
+    "base_confidence": 75,
+    "asn_keywords": ["CLOUDFLARE"]
+  },
+  "cdns": {
+    "name": "Content Delivery Networks",
+    "ports": [443, 80],
+    "protocols": ["TCP"],
+    "indicators": [
+      "Highly distributed edge server responses",
+      "Content cache retrieval from Akamai, Fastly, or AWS CloudFront"
+    ],
+    "base_confidence": 70,
+    "asn_keywords": ["AKAMAI", "FASTLY", "AMAZON-AES", "LLNW"]
+  },
+  "torrent": {
+    "name": "BitTorrent",
+    "ports": [6881, 6882, 6883, 6884, 6885, 6886, 6887, 6888, 6889, 6969],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "DHT network tracking traffic on UDP port 6881",
+      "Massive peer connection counts on random high UDP/TCP ports",
+      "Torrent tracker handshakes on port 6969"
+    ],
+    "base_confidence": 90,
+    "asn_keywords": []
+  },
+  "gaming": {
+    "name": "Online Gaming",
+    "ports": [3074, 3075, 3076, 2302, 28960, 28961, 25565, 26000, 27901, 27910, 4380],
+    "protocols": ["UDP", "TCP"],
+    "indicators": [
+      "Xbox Live / PlayStation Network connections on port 3074",
+      "Dynamic multiplayer traffic patterns",
+      "VoIP game channel traffic",
+      "Minecraft server connections on port 25565"
+    ],
+    "base_confidence": 80,
+    "asn_keywords": ["SONY", "MICROSOFT", "BLIZZARD", "EA", "NINTENDO", "RIOT"]
+  },
+  "ssh_remote": {
+    "name": "SSH / Remote Access",
+    "ports": [22, 23, 2222, 22222, 3389, 5900, 5901, 5902, 5903, 5631, 5632, 4899],
+    "protocols": ["TCP"],
+    "indicators": [
+      "Secure Shell / Telnet protocol handshakes",
+      "RDP / VNC remote desktop sessions on port 3389/5900",
+      "Alternate SSH ports for admin access"
+    ],
+    "base_confidence": 85,
+    "asn_keywords": []
+  },
+  "database": {
+    "name": "Database Traffic",
+    "ports": [3306, 5432, 1433, 1521, 2483, 2484, 27017, 27018, 27019, 28017, 6379, 6380, 9200, 9300, 11211],
+    "protocols": ["TCP"],
+    "indicators": [
+      "MySQL / PostgreSQL protocol handshakes",
+      "MongoDB wire protocol connections",
+      "Elasticsearch HTTP / transport traffic",
+      "Redis / Memcached in-memory data store queries"
+    ],
+    "base_confidence": 82,
+    "asn_keywords": []
+  },
+  "iot_mqtt": {
+    "name": "IoT / MQTT",
+    "ports": [1883, 8883, 5683],
+    "protocols": ["TCP", "UDP"],
+    "indicators": [
+      "MQTT publish/subscribe broker connections",
+      "CoAP device telemetry traffic",
+      "Low-bandwidth periodic keepalive messages"
+    ],
+    "base_confidence": 78,
+    "asn_keywords": []
+  },
+  "smb_netbios": {
+    "name": "SMB / File Sharing",
+    "ports": [137, 138, 139, 445],
+    "protocols": ["TCP", "UDP"],
+    "indicators": [
+      "NetBIOS name resolution / datagram traffic",
+      "SMB direct host file sharing sessions",
+      "Windows network neighbourhood discovery"
+    ],
+    "base_confidence": 80,
+    "asn_keywords": []
+  },
+  "tor_anonymity": {
+    "name": "Tor / Anonymity",
+    "ports": [9001, 9030, 9040, 9050, 9150],
+    "protocols": ["TCP"],
+    "indicators": [
+      "Tor OR port connections (9001)",
+      "Tor directory communication (9030)",
+      "Tor SOCKS proxy traffic (9050)",
+      "Obfsproxy bridged connection patterns"
+    ],
+    "base_confidence": 82,
+    "asn_keywords": []
+  },
+  "crypto_blockchain": {
+    "name": "Crypto / Blockchain",
+    "ports": [8332, 8333, 8444],
+    "protocols": ["TCP"],
+    "indicators": [
+      "Bitcoin peer-to-peer blockchain sync on port 8333",
+      "Bitcoin JSON-RPC on port 8332",
+      "Sustained symmetric traffic typical of blockchain sync"
+    ],
+    "base_confidence": 80,
+    "asn_keywords": ["BITCOIN", "BLOCKCHAIN"]
+  }
+}

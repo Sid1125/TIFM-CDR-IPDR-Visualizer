@@ -1,0 +1,2642 @@
+{
+  "providers": [
+    {
+      "pr": "Meta",
+      "asn": 32934,
+      "domains": [
+        "whatsapp.net",
+        "whatsapp.com",
+        "facebook.com",
+        "fbcdn.net",
+        "instagram.com",
+        "cdninstagram.com",
+        "messenger.com"
+      ],
+      "ranges": [
+        "157.240.0.0/16",
+        "69.171.0.0/16",
+        "31.13.0.0/16",
+        "179.60.0.0/16",
+        "185.60.0.0/16",
+        "66.220.144.0/20",
+        "69.63.176.0/20",
+        "74.119.76.0/22",
+        "204.15.20.0/22"
+      ],
+      "services": [
+        {
+          "n": "WhatsApp",
+          "cats": [
+            "Voice Call",
+            "Video Call",
+            "Messaging",
+            "Media Upload",
+            "Presence"
+          ],
+          "acts": [
+            "Messaging",
+            "Voice Call",
+            "Video Call",
+            "Media Upload",
+            "Call Setup"
+          ],
+          "ports": {
+            "tcp": [
+              80,
+              443,
+              4244,
+              5222,
+              5223,
+              5228,
+              5242
+            ],
+            "udp": [
+              3478,
+              3479,
+              3480,
+              45395,
+              50318,
+              59234
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        },
+        {
+          "n": "Instagram",
+          "cats": [
+            "Messaging",
+            "Media Upload",
+            "Video Call"
+          ],
+          "acts": [
+            "Messaging",
+            "Media Upload",
+            "Voice/Video Call"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        },
+        {
+          "n": "Facebook/Messenger",
+          "cats": [
+            "Messaging",
+            "Voice Call",
+            "Video Call"
+          ],
+          "acts": [
+            "Messaging",
+            "Voice Call",
+            "Video Call"
+          ],
+          "ports": {
+            "tcp": [
+              443,
+              5222
+            ],
+            "udp": [
+              3478,
+              3479
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        },
+        {
+          "n": "Threads",
+          "cats": [
+            "Messaging",
+            "Browsing"
+          ],
+          "acts": [
+            "Messaging",
+            "Browsing"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Google",
+      "asn": 15169,
+      "domains": [
+        "google.com",
+        "googlevideo.com",
+        "gmail.com",
+        "gstatic.com",
+        "googleapis.com",
+        "gemini.google.com"
+      ],
+      "ranges": [
+        "8.8.8.0/24",
+        "8.8.4.0/24",
+        "142.250.0.0/15",
+        "172.217.0.0/16",
+        "172.253.0.0/16",
+        "216.58.0.0/16",
+        "216.58.192.0/19",
+        "74.125.0.0/16",
+        "64.233.160.0/19",
+        "216.239.32.0/19",
+        "108.177.0.0/17",
+        "35.0.0.0/8"
+      ],
+      "services": [
+        {
+          "n": "Google Search",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Search/Web"
+          ],
+          "ports": {
+            "tcp": [
+              80,
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        },
+        {
+          "n": "Gmail",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Gmail"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "YouTube",
+          "cats": [
+            "Streaming",
+            "Media Upload"
+          ],
+          "acts": [
+            "Video Stream",
+            "Video Upload"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Google Meet",
+          "cats": [
+            "Conference",
+            "Video Call",
+            "Screen Sharing"
+          ],
+          "acts": [
+            "Video Conference",
+            "Screen Share"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443,
+              19302,
+              19303,
+              19305
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        },
+        {
+          "n": "Google Drive",
+          "cats": [
+            "Cloud Sync",
+            "File Transfer"
+          ],
+          "acts": [
+            "Drive",
+            "Photos"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Google DNS",
+          "cats": [
+            "Presence"
+          ],
+          "acts": [
+            "DNS Resolution"
+          ],
+          "ports": {
+            "tcp": [
+              53
+            ],
+            "udp": [
+              53
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        },
+        {
+          "n": "Google Pay",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "UPI",
+            "Payment"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Gemini",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "AI Chat"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Microsoft",
+      "asn": 8075,
+      "domains": [
+        "microsoft.com",
+        "office.com",
+        "live.com",
+        "teams.microsoft.com",
+        "outlook.com",
+        "xbox.com"
+      ],
+      "ranges": [
+        "13.64.0.0/11",
+        "13.104.0.0/14",
+        "20.0.0.0/8",
+        "40.0.0.0/8",
+        "52.0.0.0/8"
+      ],
+      "services": [
+        {
+          "n": "MS Teams",
+          "cats": [
+            "Conference",
+            "Voice Call",
+            "Video Call",
+            "Screen Sharing",
+            "Messaging"
+          ],
+          "acts": [
+            "Conference",
+            "Voice",
+            "Video",
+            "Screen Share"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              3478,
+              3479,
+              3480,
+              3481
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        },
+        {
+          "n": "Outlook",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Email",
+            "Calendar"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "OneDrive",
+          "cats": [
+            "Cloud Sync",
+            "File Transfer"
+          ],
+          "acts": [
+            "File Storage",
+            "Sync",
+            "Upload",
+            "Download"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Skype",
+          "cats": [
+            "Voice Call",
+            "Video Call",
+            "Messaging"
+          ],
+          "acts": [
+            "Voice Call",
+            "Video Call",
+            "Messaging"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              3478,
+              3479
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        },
+        {
+          "n": "Xbox Live",
+          "cats": [
+            "Voice Call",
+            "Conference"
+          ],
+          "acts": [
+            "Gaming",
+            "Voice Chat",
+            "Download"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              3478,
+              3479
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        },
+        {
+          "n": "LinkedIn",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Browsing",
+            "Messaging"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Amazon",
+      "asn": 16509,
+      "domains": [
+        "amazon.com",
+        "aws.amazon.com",
+        "amazonpay.com"
+      ],
+      "ranges": [
+        "54.0.0.0/8",
+        "52.0.0.0/8",
+        "35.0.0.0/8",
+        "13.0.0.0/8"
+      ],
+      "services": [
+        {
+          "n": "Amazon AWS",
+          "cats": [],
+          "acts": [
+            "Cloud",
+            "API",
+            "Hosting"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Amazon.com",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "E-Commerce",
+            "Browsing",
+            "Purchase"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Prime Video",
+          "cats": [
+            "Streaming"
+          ],
+          "acts": [
+            "Video Stream"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Amazon Pay",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Payment"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Cloudflare",
+      "asn": 13335,
+      "domains": [
+        "cloudflare.com",
+        "cloudflare-dns.com"
+      ],
+      "ranges": [
+        "1.1.1.0/24",
+        "1.0.0.0/24",
+        "104.16.0.0/12",
+        "104.24.0.0/14",
+        "172.64.0.0/13",
+        "131.0.72.0/22"
+      ],
+      "services": [
+        {
+          "n": "Cloudflare CDN",
+          "cats": [
+            "Browsing",
+            "Streaming"
+          ],
+          "acts": [
+            "CDN",
+            "Reverse Proxy",
+            "DDoS Protection",
+            "DNS"
+          ],
+          "ports": {
+            "tcp": [
+              80,
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Akamai",
+      "asn": 20940,
+      "ranges": [
+        "23.0.0.0/12",
+        "2.16.0.0/13",
+        "95.100.0.0/16",
+        "184.84.0.0/14"
+      ],
+      "services": [
+        {
+          "n": "Akamai CDN",
+          "cats": [
+            "Streaming",
+            "Browsing"
+          ],
+          "acts": [
+            "CDN",
+            "Video Delivery",
+            "Software Download"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Fastly",
+      "asn": 54113,
+      "domains": [
+        "fastly.com"
+      ],
+      "ranges": [
+        "151.101.0.0/16",
+        "151.101.128.0/17",
+        "199.232.0.0/16"
+      ],
+      "services": [
+        {
+          "n": "Fastly CDN",
+          "cats": [
+            "Browsing",
+            "Streaming"
+          ],
+          "acts": [
+            "CDN",
+            "Proxy"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Oracle",
+      "asn": 31898,
+      "services": [
+        {
+          "n": "Oracle Cloud",
+          "cats": [],
+          "acts": [
+            "Cloud",
+            "Hosting"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ],
+      "hosting": true
+    },
+    {
+      "pr": "DigitalOcean",
+      "asn": 14061,
+      "ranges": [
+        "159.89.0.0/16",
+        "165.227.0.0/16",
+        "138.68.0.0/16"
+      ],
+      "services": [
+        {
+          "n": "DigitalOcean",
+          "cats": [],
+          "acts": [
+            "Cloud",
+            "Hosting"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ],
+      "hosting": true
+    },
+    {
+      "pr": "OVH",
+      "asn": 16276,
+      "services": [
+        {
+          "n": "OVH",
+          "cats": [],
+          "acts": [
+            "Cloud",
+            "Hosting"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ],
+      "hosting": true
+    },
+    {
+      "pr": "Telegram",
+      "asn": 62041,
+      "domains": [
+        "telegram.org",
+        "t.me"
+      ],
+      "ranges": [
+        "149.154.0.0/16",
+        "91.108.0.0/16"
+      ],
+      "services": [
+        {
+          "n": "Telegram",
+          "cats": [
+            "Messaging",
+            "File Transfer",
+            "Voice Call",
+            "Video Call"
+          ],
+          "acts": [
+            "Messaging",
+            "File Transfer",
+            "Voice Call",
+            "Video Call",
+            "Channels"
+          ],
+          "ports": {
+            "tcp": [
+              80,
+              443,
+              5222
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Signal",
+      "domains": [
+        "signal.org"
+      ],
+      "services": [
+        {
+          "n": "Signal",
+          "cats": [
+            "Messaging",
+            "Voice Call",
+            "Video Call"
+          ],
+          "acts": [
+            "Messaging",
+            "Voice Call",
+            "Video Call"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Discord",
+      "domains": [
+        "discord.com",
+        "discord.gg"
+      ],
+      "services": [
+        {
+          "n": "Discord",
+          "cats": [
+            "Messaging",
+            "Voice Call",
+            "Video Call",
+            "Screen Sharing"
+          ],
+          "acts": [
+            "Messaging",
+            "Voice Channel",
+            "Video Call",
+            "Screen Share",
+            "Streaming"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443,
+              50000,
+              65535
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Zoom",
+      "domains": [
+        "zoom.us"
+      ],
+      "services": [
+        {
+          "n": "Zoom",
+          "cats": [
+            "Conference",
+            "Video Call",
+            "Voice Call",
+            "Screen Sharing"
+          ],
+          "acts": [
+            "Meeting Join",
+            "Conference",
+            "Screen Share",
+            "Voice",
+            "Video"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              3478,
+              3479,
+              8801,
+              8810
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Cisco",
+      "services": [
+        {
+          "n": "Webex",
+          "cats": [
+            "Conference",
+            "Voice Call",
+            "Video Call"
+          ],
+          "acts": [
+            "Meeting",
+            "Voice",
+            "Video"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              9000,
+              5004
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Slack",
+      "domains": [
+        "slack.com"
+      ],
+      "services": [
+        {
+          "n": "Slack",
+          "cats": [
+            "Messaging",
+            "Voice Call",
+            "Screen Sharing"
+          ],
+          "acts": [
+            "Messaging",
+            "Huddles",
+            "Calls",
+            "File Sharing"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Apple",
+      "domains": [
+        "icloud.com",
+        "apple.com",
+        "push.apple.com"
+      ],
+      "ranges": [
+        "17.0.0.0/8"
+      ],
+      "services": [
+        {
+          "n": "iMessage",
+          "cats": [
+            "Messaging",
+            "Presence"
+          ],
+          "acts": [
+            "iMessage",
+            "Messaging"
+          ],
+          "ports": {
+            "tcp": [
+              443,
+              5223
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "FaceTime",
+          "cats": [
+            "Voice Call",
+            "Video Call"
+          ],
+          "acts": [
+            "FaceTime",
+            "Video",
+            "Voice"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              3478,
+              3497,
+              16384,
+              16387
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        },
+        {
+          "n": "iCloud",
+          "cats": [
+            "Cloud Sync",
+            "File Transfer"
+          ],
+          "acts": [
+            "iCloud",
+            "Sync",
+            "Backup"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Apple Push",
+          "cats": [
+            "Presence",
+            "Messaging"
+          ],
+          "acts": [
+            "Apple Push",
+            "Notifications"
+          ],
+          "ports": {
+            "tcp": [
+              443,
+              5223
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Snapchat",
+      "domains": [
+        "snapchat.com"
+      ],
+      "services": [
+        {
+          "n": "Snapchat",
+          "cats": [
+            "Messaging",
+            "Media Upload",
+            "Voice Call",
+            "Video Call"
+          ],
+          "acts": [
+            "Messaging",
+            "Media Upload",
+            "Voice Call",
+            "Video Call",
+            "Stories"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "X (Twitter)",
+      "domains": [
+        "x.com",
+        "twitter.com"
+      ],
+      "services": [
+        {
+          "n": "X (Twitter)",
+          "cats": [
+            "Browsing",
+            "Messaging",
+            "Media Upload"
+          ],
+          "acts": [
+            "Browsing",
+            "Messaging",
+            "Media Upload",
+            "Spaces"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Reddit",
+      "domains": [
+        "reddit.com",
+        "redd.it"
+      ],
+      "services": [
+        {
+          "n": "Reddit",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Browsing",
+            "Chat",
+            "Media"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Netflix",
+      "domains": [
+        "netflix.com",
+        "nflxvideo.net"
+      ],
+      "services": [
+        {
+          "n": "Netflix",
+          "cats": [
+            "Streaming"
+          ],
+          "acts": [
+            "Video Stream"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Spotify",
+      "domains": [
+        "spotify.com"
+      ],
+      "services": [
+        {
+          "n": "Spotify",
+          "cats": [
+            "Streaming"
+          ],
+          "acts": [
+            "Music Stream"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Valve",
+      "services": [
+        {
+          "n": "Steam",
+          "cats": [
+            "File Transfer",
+            "Messaging"
+          ],
+          "acts": [
+            "Game Download",
+            "Game Update",
+            "Voice Chat"
+          ],
+          "ports": {
+            "tcp": [
+              27015,
+              27050
+            ],
+            "udp": [
+              27000,
+              27100
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Riot Games",
+      "services": [
+        {
+          "n": "Riot Games",
+          "cats": [
+            "File Transfer",
+            "Messaging"
+          ],
+          "acts": [
+            "Valorant",
+            "League of Legends"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Epic Games",
+      "services": [
+        {
+          "n": "Epic Games",
+          "cats": [
+            "File Transfer"
+          ],
+          "acts": [
+            "Fortnite",
+            "Launcher",
+            "Downloads"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "GitHub",
+      "asn": 36459,
+      "domains": [
+        "github.com",
+        "githubusercontent.com"
+      ],
+      "services": [
+        {
+          "n": "GitHub",
+          "cats": [
+            "Browsing",
+            "File Transfer"
+          ],
+          "acts": [
+            "Repository Access",
+            "Git Clone",
+            "Push",
+            "Actions"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "GitLab",
+      "domains": [
+        "gitlab.com"
+      ],
+      "services": [
+        {
+          "n": "GitLab",
+          "cats": [
+            "Browsing",
+            "File Transfer"
+          ],
+          "acts": [
+            "Repository Access"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Docker",
+      "domains": [
+        "docker.com",
+        "docker.io"
+      ],
+      "services": [
+        {
+          "n": "Docker Hub",
+          "cats": [
+            "File Transfer"
+          ],
+          "acts": [
+            "Container Pull",
+            "Container Push"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "OpenAI",
+      "domains": [
+        "openai.com",
+        "chatgpt.com",
+        "oaistatic.com"
+      ],
+      "services": [
+        {
+          "n": "ChatGPT",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Chat",
+            "API",
+            "File Upload"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "OpenAI API",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "API Calls"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Anthropic",
+      "domains": [
+        "anthropic.com",
+        "claude.ai"
+      ],
+      "services": [
+        {
+          "n": "Claude",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Chat",
+            "API"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Perplexity",
+      "domains": [
+        "perplexity.ai"
+      ],
+      "services": [
+        {
+          "n": "Perplexity",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Search",
+            "AI Chat"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Proton",
+      "domains": [
+        "protonvpn.com",
+        "protonmail.com",
+        "proton.me"
+      ],
+      "services": [
+        {
+          "n": "ProtonVPN",
+          "cats": [
+            "VPN"
+          ],
+          "acts": [
+            "VPN",
+            "Encrypted Tunnel"
+          ],
+          "ports": {
+            "tcp": [
+              443,
+              80
+            ],
+            "udp": [
+              443,
+              51820
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        },
+        {
+          "n": "Proton Mail",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Email",
+            "Encrypted Email"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "NordVPN",
+      "services": [
+        {
+          "n": "NordVPN",
+          "cats": [
+            "VPN"
+          ],
+          "acts": [
+            "VPN",
+            "Encrypted Tunnel"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443,
+              1194
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "ExpressVPN",
+      "services": [
+        {
+          "n": "ExpressVPN",
+          "cats": [
+            "VPN"
+          ],
+          "acts": [
+            "VPN",
+            "Encrypted Tunnel"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443,
+              1194
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Mullvad",
+      "asn": 42708,
+      "services": [
+        {
+          "n": "Mullvad",
+          "cats": [
+            "VPN"
+          ],
+          "acts": [
+            "VPN",
+            "Encrypted Tunnel"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443,
+              51820
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Surfshark",
+      "services": [
+        {
+          "n": "Surfshark",
+          "cats": [
+            "VPN"
+          ],
+          "acts": [
+            "VPN",
+            "Encrypted Tunnel"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Quad9",
+      "asn": 19281,
+      "services": [
+        {
+          "n": "Quad9 DNS",
+          "cats": [
+            "Presence"
+          ],
+          "acts": [
+            "DNS Resolution"
+          ],
+          "ports": {
+            "tcp": [
+              53
+            ],
+            "udp": [
+              53
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "OpenDNS",
+      "asn": 36692,
+      "services": [
+        {
+          "n": "OpenDNS",
+          "cats": [
+            "Presence"
+          ],
+          "acts": [
+            "DNS Resolution"
+          ],
+          "ports": {
+            "tcp": [
+              53
+            ],
+            "udp": [
+              53
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Yahoo",
+      "domains": [
+        "yahoo.com",
+        "yahoomail.com"
+      ],
+      "services": [
+        {
+          "n": "Yahoo Mail",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Email"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Dropbox",
+      "domains": [
+        "dropbox.com"
+      ],
+      "services": [
+        {
+          "n": "Dropbox",
+          "cats": [
+            "Cloud Sync",
+            "File Transfer"
+          ],
+          "acts": [
+            "File Storage",
+            "File Sharing",
+            "Sync"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Mega",
+      "domains": [
+        "mega.nz"
+      ],
+      "services": [
+        {
+          "n": "Mega",
+          "cats": [
+            "Cloud Sync",
+            "File Transfer"
+          ],
+          "acts": [
+            "Encrypted File Storage",
+            "File Sharing"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "PayPal",
+      "domains": [
+        "paypal.com"
+      ],
+      "services": [
+        {
+          "n": "PayPal",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Transfers",
+            "Payments"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "PhonePe",
+      "services": [
+        {
+          "n": "PhonePe",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "UPI",
+            "Payments",
+            "Wallet"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Paytm",
+      "services": [
+        {
+          "n": "Paytm",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Payments",
+            "Wallet",
+            "UPI"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Flipkart",
+      "domains": [
+        "flipkart.com"
+      ],
+      "services": [
+        {
+          "n": "Flipkart",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "E-Commerce",
+            "Browsing",
+            "Purchase"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Myntra",
+      "domains": [
+        "myntra.com"
+      ],
+      "services": [
+        {
+          "n": "Myntra",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Shopping"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Disney+",
+      "services": [
+        {
+          "n": "Disney+",
+          "cats": [
+            "Streaming"
+          ],
+          "acts": [
+            "Video Stream"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Blizzard",
+      "services": [
+        {
+          "n": "Battle.net",
+          "cats": [
+            "File Transfer",
+            "Messaging"
+          ],
+          "acts": [
+            "Gaming",
+            "Download"
+          ],
+          "ports": {
+            "tcp": [
+              443,
+              1119
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Sony",
+      "services": [
+        {
+          "n": "PlayStation Network",
+          "cats": [
+            "Voice Call",
+            "File Transfer"
+          ],
+          "acts": [
+            "Gaming",
+            "Voice Chat",
+            "Download"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              3478,
+              3479
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Reliance Jio",
+      "asn": 55836,
+      "isp": true,
+      "domains": [
+        "jio.com",
+        "jiocinema.com",
+        "jiosaavn.com"
+      ],
+      "ranges": [
+        "49.32.0.0/12",
+        "157.32.0.0/12",
+        "115.240.0.0/13"
+      ],
+      "services": [
+        {
+          "n": "Jio Network",
+          "cats": [],
+          "acts": [
+            "Mobile Data",
+            "Jio Access Network"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Bharti Airtel",
+      "asn": 9498,
+      "isp": true,
+      "domains": [
+        "airtel.in",
+        "airtelxstream.in"
+      ],
+      "ranges": [
+        "106.192.0.0/11",
+        "122.160.0.0/12",
+        "125.16.0.0/16",
+        "125.19.0.0/16"
+      ],
+      "services": [
+        {
+          "n": "Airtel Network",
+          "cats": [],
+          "acts": [
+            "Mobile/Broadband Data",
+            "Airtel Access Network"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Vodafone Idea",
+      "asn": 55410,
+      "isp": true,
+      "domains": [
+        "myvi.in",
+        "vodafoneidea.com"
+      ],
+      "ranges": [
+        "42.108.0.0/14",
+        "106.76.0.0/14",
+        "1.38.0.0/15"
+      ],
+      "services": [
+        {
+          "n": "Vi Network",
+          "cats": [],
+          "acts": [
+            "Mobile Data",
+            "Vi Access Network"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "BSNL",
+      "asn": 9829,
+      "isp": true,
+      "domains": [
+        "bsnl.co.in"
+      ],
+      "ranges": [
+        "117.192.0.0/10",
+        "59.88.0.0/13",
+        "59.96.0.0/14"
+      ],
+      "services": [
+        {
+          "n": "BSNL Network",
+          "cats": [],
+          "acts": [
+            "Broadband/Mobile Data",
+            "BSNL Access Network"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ],
+            "udp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP",
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Yandex",
+      "asn": 13238,
+      "domains": [
+        "yandex.com",
+        "yandex.ru"
+      ],
+      "ranges": [
+        "5.45.192.0/18",
+        "5.255.192.0/18",
+        "77.88.0.0/18",
+        "87.250.224.0/19",
+        "93.158.128.0/18",
+        "95.108.128.0/17",
+        "141.8.128.0/18",
+        "178.154.128.0/18",
+        "213.180.192.0/19"
+      ],
+      "services": [
+        {
+          "n": "Yandex Search",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Search/Web"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "Yandex Mail",
+          "cats": [
+            "Browsing",
+            "Messaging"
+          ],
+          "acts": [
+            "Email"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Alibaba Cloud",
+      "asn": 45102,
+      "domains": [
+        "alibabacloud.com",
+        "aliyun.com"
+      ],
+      "ranges": [
+        "47.88.0.0/15",
+        "47.92.0.0/15",
+        "8.208.0.0/15",
+        "47.246.0.0/16"
+      ],
+      "services": [
+        {
+          "n": "Alibaba Cloud",
+          "cats": [],
+          "acts": [
+            "Cloud",
+            "Hosting"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ],
+      "hosting": true
+    },
+    {
+      "pr": "Hetzner",
+      "asn": 24940,
+      "domains": [
+        "hetzner.com"
+      ],
+      "ranges": [
+        "5.9.0.0/16",
+        "176.9.0.0/16",
+        "178.63.0.0/16",
+        "188.40.0.0/16",
+        "162.55.0.0/16"
+      ],
+      "services": [
+        {
+          "n": "Hetzner",
+          "cats": [],
+          "acts": [
+            "Cloud",
+            "VPS Hosting"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ],
+      "hosting": true
+    },
+    {
+      "pr": "Vultr",
+      "asn": 20473,
+      "domains": [
+        "vultr.com"
+      ],
+      "ranges": [
+        "45.76.0.0/15",
+        "108.61.0.0/16",
+        "149.28.0.0/16"
+      ],
+      "services": [
+        {
+          "n": "Vultr",
+          "cats": [],
+          "acts": [
+            "Cloud",
+            "VPS Hosting"
+          ],
+          "ports": {
+            "tcp": [
+              443
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ],
+      "hosting": true
+    },
+    {
+      "pr": "Tor",
+      "services": [
+        {
+          "n": "Tor",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Tor Exit Traffic",
+            "Tor Directory"
+          ],
+          "ports": {
+            "tcp": [
+              443,
+              9001,
+              9030
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Mail Infrastructure",
+      "services": [
+        {
+          "n": "SMTP Mail",
+          "cats": [
+            "Messaging"
+          ],
+          "acts": [
+            "Email Submission"
+          ],
+          "ports": {
+            "tcp": [
+              25,
+              465,
+              587
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "POP3 Mail",
+          "cats": [
+            "Messaging"
+          ],
+          "acts": [
+            "Email Retrieval"
+          ],
+          "ports": {
+            "tcp": [
+              110,
+              995
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "IMAP Mail",
+          "cats": [
+            "Messaging"
+          ],
+          "acts": [
+            "Email Retrieval"
+          ],
+          "ports": {
+            "tcp": [
+              143,
+              993
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "DNS Infrastructure",
+      "services": [
+        {
+          "n": "DNS",
+          "cats": [
+            "Presence"
+          ],
+          "acts": [
+            "DNS Resolution"
+          ],
+          "ports": {
+            "tcp": [
+              53
+            ],
+            "udp": [
+              53
+            ]
+          },
+          "proto": [
+            "UDP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Database Infrastructure",
+      "services": [
+        {
+          "n": "MySQL",
+          "cats": [],
+          "acts": [
+            "Database Query"
+          ],
+          "ports": {
+            "tcp": [
+              3306
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "PostgreSQL",
+          "cats": [],
+          "acts": [
+            "Database Query"
+          ],
+          "ports": {
+            "tcp": [
+              5432
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "MSSQL",
+          "cats": [],
+          "acts": [
+            "Database Query"
+          ],
+          "ports": {
+            "tcp": [
+              1433
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "MongoDB",
+          "cats": [],
+          "acts": [
+            "Database Query"
+          ],
+          "ports": {
+            "tcp": [
+              27017
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    },
+    {
+      "pr": "Remote Access Infrastructure",
+      "services": [
+        {
+          "n": "SSH",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Remote Login"
+          ],
+          "ports": {
+            "tcp": [
+              22
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "RDP",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Remote Desktop"
+          ],
+          "ports": {
+            "tcp": [
+              3389
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        },
+        {
+          "n": "VNC",
+          "cats": [
+            "Browsing"
+          ],
+          "acts": [
+            "Remote Desktop"
+          ],
+          "ports": {
+            "tcp": [
+              5900
+            ]
+          },
+          "proto": [
+            "TCP"
+          ]
+        }
+      ]
+    }
+  ],
+  "port_svc": {
+    "20": "FTP-Data",
+    "21": "FTP",
+    "22": "SSH",
+    "23": "Telnet",
+    "25": "SMTP",
+    "53": "DNS",
+    "67": "DHCP",
+    "68": "DHCP",
+    "69": "TFTP",
+    "80": "HTTP",
+    "110": "POP3",
+    "123": "NTP",
+    "135": "RPC",
+    "137": "NetBIOS",
+    "138": "NetBIOS",
+    "139": "NetBIOS",
+    "143": "IMAP",
+    "161": "SNMP",
+    "162": "SNMP-Trap",
+    "389": "LDAP",
+    "443": "HTTPS",
+    "445": "SMB",
+    "465": "SMTPS",
+    "514": "Syslog",
+    "587": "SMTP-Sub",
+    "636": "LDAPS",
+    "853": "DNS-over-TLS",
+    "993": "IMAPS",
+    "995": "POP3S",
+    "1433": "MSSQL",
+    "1521": "Oracle",
+    "2049": "NFS",
+    "3306": "MySQL",
+    "3389": "RDP",
+    "5432": "PostgreSQL",
+    "6379": "Redis",
+    "8080": "HTTP-Alt",
+    "8443": "HTTPS-Alt",
+    "9090": "WebUI",
+    "27017": "MongoDB"
+  },
+  "port_families": {
+    "20": "Transfer",
+    "21": "Transfer",
+    "22": "Remote",
+    "23": "Remote",
+    "25": "Mail",
+    "53": "DNS",
+    "80": "Web",
+    "110": "Mail",
+    "143": "Mail",
+    "443": "Web",
+    "445": "Transfer",
+    "465": "Mail",
+    "500": "VPN",
+    "587": "Mail",
+    "853": "DNS",
+    "989": "Transfer",
+    "990": "Transfer",
+    "993": "Mail",
+    "995": "Mail",
+    "1194": "VPN",
+    "1195": "VPN",
+    "1701": "VPN",
+    "1723": "VPN",
+    "2049": "Transfer",
+    "3389": "Remote",
+    "3478": "RTC",
+    "3479": "RTC",
+    "3480": "RTC",
+    "3481": "RTC",
+    "4500": "VPN",
+    "4569": "VoIP",
+    "5060": "VoIP",
+    "5061": "VoIP",
+    "5353": "DNS",
+    "5900": "Remote",
+    "6881": "P2P",
+    "6882": "P2P",
+    "6883": "P2P",
+    "6889": "P2P",
+    "6969": "P2P",
+    "8000": "Web",
+    "8080": "Web",
+    "8443": "Web",
+    "8801": "RTC",
+    "8810": "RTC",
+    "8888": "Web",
+    "16384": "RTC",
+    "16387": "RTC",
+    "19302": "RTC",
+    "19303": "RTC",
+    "19304": "RTC",
+    "19305": "RTC",
+    "51820": "VPN"
+  },
+  "family_gaps": {
+    "DNS": 60,
+    "Web": 300,
+    "RTC": 1200,
+    "VoIP": 1200,
+    "VPN": 1800,
+    "Mail": 300,
+    "Transfer": 600,
+    "Remote": 1800,
+    "P2P": 1800,
+    "Other": 300
+  },
+  "constants": {
+    "ephemeral_min": 49152,
+    "cgnat": "100.64.0.0/10",
+    "hosting_providers": [
+      "Alibaba Cloud",
+      "Hetzner",
+      "Vultr",
+      "DigitalOcean",
+      "OVH",
+      "Oracle"
+    ],
+    "generic_families": [
+      "Web",
+      "Encrypted Web/App"
+    ]
+  }
+}
