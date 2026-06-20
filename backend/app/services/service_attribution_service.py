@@ -673,6 +673,34 @@ _EXTERNAL_RANGES_PATH = os.environ.get(
 _PROVIDER_NETS = _load_external_ranges(_EXTERNAL_RANGES_PATH) + _PROVIDER_NETS
 
 
+# --- Fast longest-prefix index ---
+# A linear scan over every CIDR per IP is fine for a curated table but melts down once
+# the live provider feeds add thousands of ranges (~2k AWS/Google/... prefixes). Index
+# IPv4 nets by their first octet: any prefix /8 or longer lives entirely inside one /8,
+# so a query only checks its own bucket plus the rare <\8 "broad" nets. Each entry is
+# precomputed integer (lo, hi) bounds so matching is integer comparison, not object
+# containment. This turns ~2000 checks/IP into a few dozen.
+_V4_BUCKETS: dict = {}   # first octet -> [(lo, hi, prefixlen, provider, is_isp, cidr)]
+_V4_BROAD: list = []     # IPv4 nets with prefixlen < 8 (span multiple /8s)
+_V6_NETS: list = []      # IPv6 (rare here) -> linear fallback
+
+
+def _index_provider_nets(nets):
+    for net, provider, is_isp in nets:
+        if net.version == 6:
+            _V6_NETS.append((net, provider, is_isp))
+            continue
+        entry = (int(net.network_address), int(net.broadcast_address),
+                 net.prefixlen, provider, is_isp, str(net))
+        if net.prefixlen < 8:
+            _V4_BROAD.append(entry)
+        else:
+            _V4_BUCKETS.setdefault(entry[0] >> 24, []).append(entry)
+
+
+_index_provider_nets(_PROVIDER_NETS)
+
+
 def _match_ip(ip):
     """Longest-prefix match: among all CIDRs containing the address, return the most
     specific one (largest prefix length), so a tight block beats a broad one."""
@@ -682,10 +710,24 @@ def _match_ip(ip):
         addr = ipaddress.ip_address(str(ip).strip())
     except (ValueError, AttributeError):
         return None
-    best = None
-    for net, provider, is_isp in _PROVIDER_NETS:
-        if addr in net and (best is None or net.prefixlen > best[3]):
-            best = (provider, is_isp, str(net), net.prefixlen)
+
+    if addr.version == 6:
+        best = None
+        for net, provider, is_isp in _V6_NETS:
+            if addr in net and (best is None or net.prefixlen > best[3]):
+                best = (provider, is_isp, str(net), net.prefixlen)
+        return best
+
+    ip_int = int(addr)
+    best = None  # (provider, is_isp, cidr, prefixlen)
+    bucket = _V4_BUCKETS.get(ip_int >> 24)
+    if bucket:
+        for lo, hi, plen, provider, is_isp, cidr in bucket:
+            if lo <= ip_int <= hi and (best is None or plen > best[3]):
+                best = (provider, is_isp, cidr, plen)
+    for lo, hi, plen, provider, is_isp, cidr in _V4_BROAD:
+        if lo <= ip_int <= hi and (best is None or plen > best[3]):
+            best = (provider, is_isp, cidr, plen)
     return best
 
 

@@ -8,3 +8,4 @@ networkx
 pydantic
 pydantic-settings
 python-dotenv
+certifi

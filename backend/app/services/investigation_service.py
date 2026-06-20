@@ -93,10 +93,51 @@ def reconstruct_ipdr_sessions(records):
     return sessions
 
 
+def _cdr_movement(records):
+    """Per-subject (a_party) movement delta between consecutive located calls, so the
+    timeline carries distance/speed/mode and impossible-travel flags, not just events."""
+    from app.services.geo import IMPOSSIBLE_KMH, classify_speed, haversine_km
+
+    by_subject = {}
+    for r in records:
+        by_subject.setdefault(r.a_party_number, []).append(r)
+    moves = {}
+    for subj, recs in by_subject.items():
+        recs.sort(key=lambda r: r.start_time or datetime.min)
+        prev = None
+        for r in recs:
+            if prev and prev.start_time and r.start_time:
+                dist = haversine_km(prev.latitude, prev.longitude, r.latitude, r.longitude)
+                dt_min = (r.start_time - prev.start_time).total_seconds() / 60.0
+                if dist is not None and dist >= 1.0 and dt_min > 0:
+                    speed = dist / (dt_min / 60.0)
+                    moves[id(r)] = {
+                        "from_tower": prev.tower_id, "distance_km": round(dist, 2),
+                        "dt_minutes": round(dt_min, 1), "speed_kmh": round(speed, 1),
+                        "mode": classify_speed(speed),
+                        "impossible": bool(speed > IMPOSSIBLE_KMH and dist >= 5.0),
+                    }
+                elif dist is not None and dist >= 5.0 and dt_min <= 0:
+                    # Same-minute records at far towers: undefined (infinite) speed, impossible.
+                    moves[id(r)] = {
+                        "from_tower": prev.tower_id, "distance_km": round(dist, 2),
+                        "dt_minutes": round(dt_min, 1), "speed_kmh": None,
+                        "mode": "impossible", "impossible": True,
+                    }
+            prev = r
+    return moves
+
+
 def build_unified_timeline(db, limit: int = 200):
     events = []
 
-    for record in db.query(CDRRecord).order_by(CDRRecord.start_time).limit(limit).all():
+    cdr_records = db.query(CDRRecord).order_by(CDRRecord.start_time).limit(limit).all()
+    moves = _cdr_movement(cdr_records)
+    for record in cdr_records:
+        details = {"duration": record.duration_seconds}
+        move = moves.get(id(record))
+        if move:
+            details["move"] = move
         events.append(
             {
                 "time": record.start_time,
@@ -105,7 +146,7 @@ def build_unified_timeline(db, limit: int = 200):
                 "subject": record.a_party_number,
                 "peer": record.b_party_number,
                 "tower_id": record.tower_id,
-                "details": {"duration": record.duration_seconds},
+                "details": details,
             }
         )
 

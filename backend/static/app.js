@@ -141,7 +141,7 @@ function renderMd(t){
 let allRows=[];
 let activeCaseId=null;
 async function loadCaseData(){
-  invalidateAiCache();state.geoRecords=null;
+  invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;
   try{
     const caseParam=activeCaseId?'?case_id='+activeCaseId:'';
     const[cdr,ipdr,towers]=await Promise.all([API.get('/records/cdr'+caseParam),API.get('/records/ipdr'+caseParam),API.get('/towers/')]);
@@ -967,6 +967,7 @@ function switchTab(tab){
   if(tab==='charts')renderCharts();
   if(tab==='services')renderServicesTab();
   if(tab==='correlation')renderCorrelationTab();
+  if(tab==='inferences')renderInferences();
   if(tab==='records')renderRecords();
   if(tab==='ai')renderAiInsights();
   if(tab==='admin')renderAdmin();
@@ -1538,6 +1539,14 @@ function popupHtml(r){
 function runMapMode(){
   const sub=D.mapSubject.value,mode=D.mapMode.value;
   D.mapTimeBar.style.display='none';
+  // Inference overlays: impossible-travel and co-presence are network-wide (work with
+  // no subject selected, or filtered to one); anchors need a subject.
+  if(mode==='inf_impossible')return showMapImpossible(sub);
+  if(mode==='inf_copresence')return showMapCopresence(sub);
+  if(mode==='inf_anchors'){
+    if(!sub){D.mapAnalysis.innerHTML='<p style="color:var(--muted);font-size:0.85rem">Select a subject to see their home/work anchors.</p>';return}
+    return showMapAnchors(sub);
+  }
   if(!sub){D.mapAnalysis.innerHTML='<p style="color:var(--muted);font-size:0.85rem">Select a subject.</p>';return}
   if(mode==='path')showMapPath(sub);
   else if(mode==='heat')showMapHeat(sub);
@@ -1546,17 +1555,93 @@ function runMapMode(){
   else if(mode==='triangulation')showMapTriangulation(sub);
   else if(mode==='meetings')showMapMeetings(sub);
 }
+// Tower id -> coordinates, derived from the loaded geo records (inferences reference
+// towers by id; this resolves them to points to draw).
+function towerCoords(){
+  const m={};
+  geoRecords.forEach(r=>{if(r.tower_id&&r.latitude!=null&&r.longitude!=null&&!m[r.tower_id])m[r.tower_id]={lat:r.latitude,lng:r.longitude};});
+  return m;
+}
+async function showMapImpossible(sub){
+  clearMap();
+  let rep;try{rep=await getInfReport();}catch(e){D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to load inferences.</p>';return;}
+  const tc=towerCoords();
+  let legs=rep.impossible_travel||[];
+  if(sub)legs=legs.filter(l=>l.subject===sub);
+  const cloneBy={};(rep.clone_corroboration||[]).forEach(c=>cloneBy[c.subject]=c);
+  if(!legs.length){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">No impossible-travel legs'+(sub?' for this subject':'')+'.</p>';return;}
+  const bounds=[];
+  legs.forEach(l=>{
+    const a=tc[l.from_tower],b=tc[l.to_tower];if(!a||!b)return;
+    const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:'#b94a48',weight:3,opacity:0.85,dashArray:'7,6'}).addTo(mapInstance);
+    line.bindPopup('<b>Impossible travel</b><br>'+esc(l.subject)+'<br><b>'+(l.speed_kmh!=null?Math.round(l.speed_kmh)+' km/h':'same minute (∞)')+'</b><br>'+l.distance_km+' km in '+l.dt_minutes+' min'+(l.from_imei!==l.to_imei?'<br>IMEI changed':'')+(cloneBy[l.subject]?'<br>⚠ '+esc(cloneBy[l.subject].verdict):''));
+    mapLayers.push(line);
+    [[a,l.from_tower],[b,l.to_tower]].forEach(p=>{const mk=L.circleMarker([p[0].lat,p[0].lng],{radius:7,color:'#fff',weight:2,fillColor:'#b94a48',fillOpacity:0.9}).addTo(mapInstance);mk.bindTooltip(esc(p[1]),{direction:'top'});mapMarkers.push(mk);bounds.push([p[0].lat,p[0].lng]);});
+  });
+  if(bounds.length)mapInstance.fitBounds(bounds,{padding:[60,60]});
+  let h='<h4 style="margin:0 0 6px;color:var(--danger)">Impossible Travel</h4><div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px">Red dashed legs exceed human travel speed (likely clone / spoofed record).</div>';
+  legs.forEach(l=>{h+='<div class="evt" onclick="showProfile(\''+esc(l.subject)+'\')"><span class="evt-time">'+esc(l.subject)+'</span><span class="evt-loc" style="color:var(--danger)">'+(l.speed_kmh!=null?Math.round(l.speed_kmh)+' km/h':'∞')+'</span></div>';});
+  D.mapAnalysis.innerHTML=h;
+}
+async function showMapCopresence(sub){
+  clearMap();
+  let rep;try{rep=await getInfReport();}catch(e){D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to load inferences.</p>';return;}
+  const tc=towerCoords();
+  let pairs=(rep.co_presence||[]).filter(c=>c.convoy||c.hidden_link);
+  if(sub)pairs=pairs.filter(c=>c.subject_a===sub||c.subject_b===sub);
+  if(!pairs.length){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">No convoy / hidden-link pairs'+(sub?' for this subject':'')+'.</p>';return;}
+  const bounds=[];
+  pairs.forEach(c=>{
+    const col=c.hidden_link?'#b94a48':'#d4a017';
+    (c.towers||[]).forEach(tw=>{
+      const base=String(tw).split('~')[0];const pt=tc[base];if(!pt)return;
+      const mk=L.circleMarker([pt.lat,pt.lng],{radius:9,color:'#fff',weight:2,fillColor:col,fillOpacity:0.85}).addTo(mapInstance);
+      mk.bindPopup('<b>'+(c.hidden_link?'Hidden link (met, never called)':'Convoy')+'</b><br>'+esc(c.subject_a)+' &amp; '+esc(c.subject_b)+'<br>'+c.occurrences+'× over '+c.distinct_days+' day(s)<br>'+(c.ever_called?'they also call each other':'never call each other')+'<br>Tower '+esc(base));
+      mapMarkers.push(mk);bounds.push([pt.lat,pt.lng]);
+    });
+  });
+  if(bounds.length)mapInstance.fitBounds(bounds,{padding:[60,60]});
+  let h='<h4 style="margin:0 0 6px;color:var(--warn)">Co-presence</h4><div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px">Amber = convoy (repeated co-location). Red = hidden link (co-located but never call).</div>';
+  pairs.forEach(c=>{h+='<div class="evt"><span class="evt-time">'+esc(c.subject_a)+' &amp; '+esc(c.subject_b)+'</span><span class="evt-loc" style="color:'+(c.hidden_link?'var(--danger)':'var(--warn)')+'">'+(c.hidden_link?'hidden':'convoy')+' ('+c.distinct_days+'d)</span></div>';});
+  D.mapAnalysis.innerHTML=h;
+}
+async function showMapAnchors(sub){
+  clearMap();
+  let rep;try{rep=await getInfReport();}catch(e){D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to load inferences.</p>';return;}
+  const mv=(rep.movement||{})[sub];
+  if(!mv||!mv.anchors){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">No anchors for this subject.</p>';return;}
+  const bounds=[];
+  geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null).forEach(r=>{const mk=L.circleMarker([r.latitude,r.longitude],{radius:3,color:'#888',weight:1,fillColor:'#888',fillOpacity:0.35}).addTo(mapInstance);mapMarkers.push(mk);bounds.push([r.latitude,r.longitude]);});
+  const place=(anchor,label,color)=>{
+    if(!anchor||anchor.latitude==null)return;
+    const mk=L.circleMarker([anchor.latitude,anchor.longitude],{radius:12,color:'#fff',weight:3,fillColor:color,fillOpacity:0.92}).addTo(mapInstance);
+    mk.bindPopup('<b>'+label+'</b><br>'+esc(sub)+'<br>Tower '+esc(anchor.tower_id)+'<br>'+anchor.events+' events');
+    mk.bindTooltip(label,{permanent:true,direction:'top'});mapMarkers.push(mk);bounds.push([anchor.latitude,anchor.longitude]);
+  };
+  place(mv.anchors.home,'Home','#2c6f79');
+  place(mv.anchors.work,'Work','#2d7d46');
+  if(bounds.length)mapInstance.fitBounds(bounds,{padding:[50,50]});
+  let h='<h4 style="margin:0 0 6px">Anchors — '+esc(sub)+'</h4>';
+  h+='<div class="stat-row"><span class="label">Home tower</span><span class="value">'+esc(mv.anchors.home?mv.anchors.home.tower_id:'?')+'</span></div>';
+  h+='<div class="stat-row"><span class="label">Work tower</span><span class="value">'+esc(mv.anchors.work?mv.anchors.work.tower_id:'?')+'</span></div>';
+  h+='<div class="stat-row"><span class="label">Distinct towers</span><span class="value">'+mv.distinct_towers+'</span></div>';
+  h+='<div class="stat-row"><span class="label">Max leg</span><span class="value">'+mv.max_leg_km+' km</span></div>';
+  if(mv.impossible_travel&&mv.impossible_travel.length)h+='<div class="stat-row"><span class="label" style="color:var(--danger)">Impossible legs</span><span class="value" style="color:var(--danger)">'+mv.impossible_travel.length+'</span></div>';
+  D.mapAnalysis.innerHTML=h;
+}
 D.mapGo.addEventListener('click',runMapMode);
 D.mapMode.addEventListener('change',runMapMode);
 D.mapSubject.addEventListener('change',()=>{if(D.mapSubject.value)runMapMode()});
 D.mapFit.addEventListener('click',()=>{const pts=[];geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})});
 
 // -- Geofence --
-let geoFenceLayer=null,geoFenceDrawn=false,geoFenceDrawing=false,geoFenceDrawHandler=null;
+let geoFenceLayer=null,geoFenceDrawn=false,geoFenceDrawing=false,geoFenceDrawHandler=null,geoFenceMarkers=[];
 D.geoFenceBtn.addEventListener('click',()=>{
   if(!mapInstance)return;
   if(geoFenceDrawn){
     mapInstance.removeLayer(geoFenceLayer);geoFenceLayer=null;geoFenceDrawn=false;
+    clearGeofenceHighlights();
+    D.mapAnalysis.innerHTML='<p style="color:var(--muted);font-size:0.85rem">Geofence cleared.</p>';
     D.geoFenceBtn.textContent='Geofence';D.geoFenceBtn.style.borderColor='var(--danger)';D.geoFenceBtn.style.color='var(--danger)';
     return;
   }
@@ -1582,27 +1667,160 @@ function initGeofenceListeners(){
     geoFenceLayer=e.layer;geoFenceDrawn=true;
     mapInstance.addLayer(geoFenceLayer);
     D.geoFenceBtn.textContent='Clear Fence';D.geoFenceBtn.style.borderColor='var(--success)';D.geoFenceBtn.style.color='var(--success)';
+    analyzeGeofence();
   });
 }
+function clearGeofenceHighlights(){
+  geoFenceMarkers.forEach(m=>{try{mapInstance.removeLayer(m)}catch(e){}});
+  geoFenceMarkers=[];
+}
+// Find every loaded geo record inside the drawn polygon, summarise the subjects/towers
+// present, and highlight the points on the map.
+function analyzeGeofence(){
+  if(!geoFenceLayer){return;}
+  clearGeofenceHighlights();
+  const fencePts=geoFenceLayer.getLatLngs();
+  const ring=Array.isArray(fencePts[0])?fencePts[0]:fencePts;
+  if(!ring||ring.length<3){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">Draw a closed area.</p>';return;}
+  const coords=ring.map(p=>[p.lng,p.lat]);
+  coords.push(coords[0]); // close the ring for turf
+  const poly=turf.polygon([coords]);
+  const inside=(geoRecords||[]).filter(r=>r.latitude!=null&&r.longitude!=null&&turf.booleanPointInPolygon(turf.point([r.longitude,r.latitude]),poly));
+  if(!inside.length){D.mapAnalysis.innerHTML='<h4 style="margin:0 0 6px">Geofence</h4><p style="color:var(--muted)">No records inside the drawn area.</p>';return;}
+  // Group by subject (phone number where available), collect towers + time span.
+  const bySub={},towers=new Set();let tMin=null,tMax=null;
+  inside.forEach(r=>{
+    const key=r.msisdn||r.subject||'unknown';
+    if(!bySub[key])bySub[key]={count:0,cdr:0,ipdr:0,towers:new Set()};
+    const g=bySub[key];g.count++;g[r.type==='IPDR'?'ipdr':'cdr']++;
+    if(r.tower_id)g.towers.add(r.tower_id);
+    if(r.tower_id)towers.add(r.tower_id);
+    if(r.start_time){if(!tMin||r.start_time<tMin)tMin=r.start_time;if(!tMax||r.start_time>tMax)tMax=r.start_time;}
+    const col=r.type==='IPDR'?'#2d7d46':'#b94a48';
+    const mk=L.circleMarker([r.latitude,r.longitude],{radius:5,color:'#fff',weight:1,fillColor:col,fillOpacity:0.85}).addTo(mapInstance);
+    mk.bindPopup(popupHtml(r));geoFenceMarkers.push(mk);
+  });
+  const subs=Object.entries(bySub).sort((a,b)=>b[1].count-a[1].count);
+  let h='<h4 style="margin:0 0 6px">Geofence — '+subs.length+' subject'+(subs.length>1?'s':'')+'</h4>';
+  h+='<div class="stat-row"><span class="label">Records inside</span><span class="value">'+n(inside.length)+'</span></div>';
+  h+='<div class="stat-row"><span class="label">Distinct towers</span><span class="value">'+towers.size+'</span></div>';
+  if(tMin)h+='<div class="stat-row"><span class="label">Time span</span><span class="value" style="font-size:0.7rem">'+fmt(tMin)+' → '+fmt(tMax)+'</span></div>';
+  h+='<h4 style="margin:10px 0 4px">Subjects in area</h4>';
+  subs.forEach(e=>{
+    const g=e[1];
+    h+='<div class="evt" onclick="showProfile(\''+esc(e[0])+'\')"><span class="evt-time">'+esc(e[0])+'</span>'
+      +'<span class="evt-loc">'+g.count+' ('+g.cdr+'C/'+g.ipdr+'I) · '+g.towers.size+' twr</span></div>';
+  });
+  D.mapAnalysis.innerHTML=h;
+}
 
+// Travel mode -> colour/label, used to grade each path leg by estimated speed.
+const MODE_STYLE={
+  'stationary':{color:'#9aa0a6',dash:'1,6',label:'Stationary / dwell'},
+  'walking':{color:'#2d7d46',label:'Walking'},
+  'local road':{color:'#1f9d8f',label:'Local road'},
+  'road / highway':{color:'#2563eb',label:'Road / highway'},
+  'rail / expressway':{color:'#7c3aed',label:'Rail / expressway'},
+  'air':{color:'#d4a017',label:'Air'},
+  'impossible':{color:'#b94a48',label:'Impossible'},
+  'unknown':{color:'#9aa0a6',dash:'3,5',label:'Unknown gap'}
+};
+// Speed (km/h) -> plausible travel mode, mirroring the backend geo.classify_speed bands.
+function travelMode(kmh){
+  if(kmh==null)return null;
+  if(kmh<=3)return 'stationary';if(kmh<=12)return 'walking';if(kmh<=45)return 'local road';
+  if(kmh<=120)return 'road / highway';if(kmh<=250)return 'rail / expressway';if(kmh<=900)return 'air';
+  return 'impossible';
+}
+function fmtGap(sec){
+  if(sec==null)return '?';const s=Math.abs(sec);
+  if(s<60)return Math.round(s)+'s';if(s<3600)return Math.round(s/60)+' min';
+  if(s<86400)return (s/3600).toFixed(1)+' h';return (s/86400).toFixed(1)+' d';
+}
+// Initial compass bearing a->b, for rotating direction arrows.
+function bearing(la1,lo1,la2,lo2){
+  const tR=d=>d*Math.PI/180;const y=Math.sin(tR(lo2-lo1))*Math.cos(tR(la2));
+  const x=Math.cos(tR(la1))*Math.sin(tR(la2))-Math.sin(tR(la1))*Math.cos(tR(la2))*Math.cos(tR(lo2-lo1));
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+// Metrics + styling + hover tooltip for one path leg (a -> b).
+function segMetrics(a,b,km){
+  let dtSec=null,kmh=null;
+  if(a.start_time&&b.start_time){dtSec=(new Date(b.start_time)-new Date(a.start_time))/1000;if(dtSec>0)kmh=km/(dtSec/3600);}
+  // Same tower (jitter aside) or sub-200m apart => effectively the same place, a stay.
+  const dwell=(a.tower_id&&a.tower_id===b.tower_id)||km<0.2;
+  const impossible=kmh!=null&&kmh>900&&km>=5;
+  let mode=dwell?'stationary':(kmh!=null?travelMode(kmh):'unknown');
+  if(impossible)mode='impossible';
+  const st=MODE_STYLE[mode]||MODE_STYLE.unknown;
+  const head='<div style="border-left:3px solid '+st.color+';padding:1px 0 1px 6px;line-height:1.45;min-width:150px">'
+    +'<b style="color:'+st.color+'">'+st.label+'</b>';
+  const body=dwell
+    ? '<br>Stayed '+fmtGap(dtSec)+(a.tower_id?' near '+esc(a.tower_id):'')
+    : '<br><b>'+km.toFixed(2)+' km</b> in '+fmtGap(dtSec)
+      +(kmh!=null?'<br><b>'+Math.round(kmh)+' km/h</b>':'<br>same-minute — speed n/a')
+      +(impossible?' <span style="color:#ffb3b3">⚠</span>':'');
+  const ctx='<br><span style="opacity:0.7;font-size:0.92em">'+fmt(a.start_time)+' → '+fmt(b.start_time)+'</span>'
+    +'<br><span style="opacity:0.7;font-size:0.92em">'+esc(a.tower_id||'?')+' → '+esc(b.tower_id||'?')+'</span></div>';
+  return {tip:head+body+ctx,color:st.color,dash:st.dash,weight:impossible?5:(dwell?2:3.5),
+          dwell,impossible,kmh,km,mode,dtSec,label:st.label};
+}
 function showMapPath(sub){
   clearMap();const rows=geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null);
   rows.sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   if(!rows.length){D.mapAnalysis.innerHTML='No geo records.';return}
   const coords=rows.map(r=>[r.latitude,r.longitude]);
-  mapPolyline=L.polyline(coords,{color:'#2c6f79',weight:3,opacity:0.7}).addTo(mapInstance);
+  // One polyline per leg, graded by travel mode; a rotated arrow shows direction.
+  let dist=0,flagged=0,fastest=0;const usedModes=new Set();const legs=[];
+  for(let i=1;i<rows.length;i++){
+    const a=rows[i-1],b=rows[i];
+    const km=mapInstance.distance([a.latitude,a.longitude],[b.latitude,b.longitude])/1000;
+    dist+=km;
+    const seg=segMetrics(a,b,km);usedModes.add(seg.mode);legs.push({a,b,seg,i});
+    if(seg.impossible)flagged++;
+    if(seg.kmh&&!seg.dwell&&seg.kmh>fastest)fastest=seg.kmh;
+    const opts={color:seg.color,weight:seg.weight,opacity:0.85};if(seg.dash)opts.dashArray=seg.dash;
+    const line=L.polyline([[a.latitude,a.longitude],[b.latitude,b.longitude]],opts);
+    line.bindTooltip(seg.tip,{sticky:true,direction:'top',opacity:0.97});
+    line.on('mouseover',function(){this.setStyle({weight:seg.weight+3,opacity:1})});
+    line.on('mouseout',function(){this.setStyle({weight:seg.weight,opacity:0.85})});
+    line.addTo(mapInstance);mapLayers.push(line);
+    if(!seg.dwell&&km>=0.25){ // direction arrow at the leg midpoint (real moves only)
+      const ang=bearing(a.latitude,a.longitude,b.latitude,b.longitude);
+      const arrow=L.marker([(a.latitude+b.latitude)/2,(a.longitude+b.longitude)/2],{interactive:false,
+        icon:L.divIcon({className:'',html:'<div style="transform:rotate('+ang+'deg);color:'+seg.color+';font-size:13px;line-height:1;text-shadow:0 0 2px #fff">&#9650;</div>',iconSize:[13,13],iconAnchor:[7,7]})});
+      arrow.addTo(mapInstance);mapMarkers.push(arrow);
+    }
+  }
+  // Stop markers; first = start (green), last = end (red), with sequence numbers.
   rows.forEach((r,i)=>{
-    const m=L.circleMarker([r.latitude,r.longitude],{radius:6,color:'#fff',weight:2,fillColor:'#2c6f79',fillOpacity:0.8});
-    m.bindPopup(popupHtml(r));m.bindTooltip(fmt(r.start_time),{direction:'top'});m.addTo(mapInstance);mapMarkers.push(m);
+    const isStart=i===0,isEnd=i===rows.length-1;
+    const col=isStart?'#2d7d46':isEnd?'#b94a48':'#2c6f79';
+    const lbl=isStart?'S':isEnd?'E':String(i+1);
+    const m=L.marker([r.latitude,r.longitude],{icon:L.divIcon({className:'',
+      html:'<div style="background:'+col+';color:#fff;border:2px solid #fff;border-radius:50%;width:'+((isStart||isEnd)?20:16)+'px;height:'+((isStart||isEnd)?20:16)+'px;display:flex;align-items:center;justify-content:center;font-size:'+((isStart||isEnd)?10:8)+'px;font-weight:700;box-shadow:0 0 3px rgba(0,0,0,.4)">'+lbl+'</div>',
+      iconSize:[(isStart||isEnd)?20:16,(isStart||isEnd)?20:16],iconAnchor:[(isStart||isEnd)?10:8,(isStart||isEnd)?10:8]})});
+    m.bindPopup(popupHtml(r));m.bindTooltip('#'+(i+1)+' · '+fmt(r.start_time),{direction:'top'});
+    m.addTo(mapInstance);mapMarkers.push(m);
   });
-  if(coords.length>1)mapInstance.fitBounds(mapPolyline.getBounds(),{padding:[40,40]});else mapInstance.setView(coords[0],14);
-  let dist=0;for(let i=1;i<rows.length;i++){const a=[rows[i-1].latitude,rows[i-1].longitude],b=[rows[i].latitude,rows[i].longitude];if(a[0]!=null&&b[0]!=null)dist+=mapInstance.distance(a,b)/1000}
-  let h='<h4 style="margin:0 0 6px">Observed Tower Sequence <span style="font-size:0.68rem;font-weight:400;color:var(--warn)">(not verified travel path)</span></h4>';
-  h+=`<div class="stat-row"><span class="label">Records</span><span class="value">${rows.length}</span></div>`;
+  if(coords.length>1)mapInstance.fitBounds(L.latLngBounds(coords),{padding:[40,40]});else mapInstance.setView(coords[0],14);
+  // Sidebar
+  let h='<h4 style="margin:0 0 4px">Movement Path <span style="font-size:0.66rem;font-weight:400;color:var(--warn)">(tower-based estimate)</span></h4>';
+  h+='<div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px">Legs graded by speed; arrows show direction. Hover a leg for distance, time gap, speed &amp; mode.</div>';
+  // legend (only modes actually present)
+  h+='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">'+Object.keys(MODE_STYLE).filter(m=>usedModes.has(m)).map(m=>'<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.64rem;color:var(--muted)"><span style="width:14px;height:3px;background:'+MODE_STYLE[m].color+';display:inline-block;border-radius:2px"></span>'+MODE_STYLE[m].label+'</span>').join('')+'</div>';
+  h+=`<div class="stat-row"><span class="label">Records / Stops</span><span class="value">${rows.length}</span></div>`;
   h+=`<div class="stat-row"><span class="label">Linear Distance</span><span class="value">${Math.round(dist)} km</span></div>`;
   h+=`<div class="stat-row"><span class="label">Distinct Towers</span><span class="value">${new Set(rows.map(r=>r.tower_id).filter(Boolean)).size}</span></div>`;
-  h+='<h4 style="margin:8px 0 4px">Tower Handoff Sequence (chronological)</h4>';
-  rows.slice(-15).reverse().forEach(r=>{h+=`<div class="evt" onclick="mapInstance.setView([${r.latitude},${r.longitude}],15)"><span class="evt-time">${fmt(r.start_time)}</span><span class="evt-loc">${esc(r.tower_id||r.cell_id||'')}</span></div>`});
+  h+=`<div class="stat-row"><span class="label">Fastest Leg</span><span class="value">${Math.round(fastest)} km/h</span></div>`;
+  if(flagged)h+=`<div class="stat-row"><span class="label" style="color:var(--danger)">Impossible Legs</span><span class="value" style="color:var(--danger)">${flagged}</span></div>`;
+  h+='<h4 style="margin:10px 0 4px">Travel Legs (latest first)</h4>';
+  legs.slice(-20).reverse().forEach(L2=>{
+    const s=L2.seg;const speed=s.kmh!=null?Math.round(s.kmh)+' km/h':(s.dwell?'dwell':'n/a');
+    h+='<div class="evt" title="Zoom to this leg" onclick="mapInstance.fitBounds([['+L2.a.latitude+','+L2.a.longitude+'],['+L2.b.latitude+','+L2.b.longitude+']],{padding:[80,80]})">'
+      +'<span class="evt-time"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+s.color+';margin-right:5px"></span>'+fmt(L2.b.start_time)+'</span>'
+      +'<span class="evt-loc" style="color:'+(s.impossible?'var(--danger)':'inherit')+'">'+s.km.toFixed(1)+' km · '+speed+'</span></div>';
+  });
   D.mapAnalysis.innerHTML=h;
   D.mapTimeBar.style.display='flex';setupMapTime(rows);
 }
@@ -2551,6 +2769,141 @@ function exportFeedback(){
 function toggleFindingDetail(i){
   const el=document.getElementById('aiFindEv'+i);
   if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+// ====== SPATIOTEMPORAL INFERENCES ======
+let _infCache=null,_infReport=null;
+// Shared fetch+cache of the inference report, reused by the Inferences tab and the map.
+async function getInfReport(force){
+  if(_infReport&&!force)return _infReport;
+  const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+  _infReport=await API.get('/inference/report'+cq);
+  return _infReport;
+}
+async function renderInferences(force){
+  const box=$('infResults'),status=$('infStatus'),btn=$('infRefreshBtn');
+  if(!box)return;
+  if(btn&&!btn._bound){btn._bound=true;btn.onclick=()=>{_infCache=null;_infReport=null;renderInferences(true);};}
+  if(_infCache&&!force){box.innerHTML=_infCache;return;}
+  status.textContent='Analyzing...';
+  box.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Running inference engine...</div>';
+  let rep;
+  try{rep=await getInfReport(force);}
+  catch(e){status.textContent='Error';box.innerHTML='<div style="padding:40px;text-align:center;color:var(--danger)">Failed: '+esc(e.message)+'</div>';return;}
+  _infCache=buildInferenceHtml(rep);
+  box.innerHTML=_infCache;
+  status.textContent=n(rep.subjects)+' subjects analyzed';
+}
+function _infCard(title,count,color,body){
+  return '<div style="background:var(--card-bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:12px">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(body?'10px':'0')+'">'
+    +'<span style="width:9px;height:9px;border-radius:50%;background:'+color+';flex-shrink:0"></span>'
+    +'<strong style="font-size:0.85rem;color:var(--text)">'+title+'</strong>'
+    +(count!=null?'<span style="margin-left:auto;font-size:0.72rem;color:var(--muted)">'+count+'</span>':'')
+    +'</div>'+(body||'')+'</div>';
+}
+function _infChip(t,c){return '<span style="display:inline-block;padding:2px 7px;border-radius:4px;font-size:0.66rem;background:var(--accent-light);color:'+(c||'var(--accent)')+';margin:2px 2px 0 0">'+esc(t)+'</span>';}
+function _infSubj(s){return '<a style="color:var(--accent);cursor:pointer;text-decoration:none" onclick="showProfile(\''+esc(s)+'\')">'+esc(s)+'</a>';}
+function buildInferenceHtml(rep){
+  let h='';
+  const conv=rep.co_presence.filter(c=>c.convoy).length;
+  const hidden=rep.co_presence.filter(c=>c.hidden_link).length;
+  const gd=Object.values(rep.behavioral).filter(b=>b.going_dark).length;
+  const counters=[
+    ['Impossible travel',rep.impossible_travel.length,'var(--danger)'],
+    ['Convoys',conv,'var(--warn)'],
+    ['Hidden links',hidden,'var(--danger)'],
+    ['SIM swaps/clones',rep.devices.sim_swaps.length,'var(--danger)'],
+    ['Burner handsets',rep.devices.burner_handsets.length,'var(--warn)'],
+    ['Periodic contacts',rep.periodic_contacts.length,'var(--accent)'],
+    ['Going dark',gd,'var(--warn)'],
+    ['VPN / proxy',(rep.vpn_proxy||[]).length,'var(--warn)'],
+  ];
+  h+='<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">'+counters.map(function(c){
+    return '<div style="flex:1;min-width:108px;background:var(--card-bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px">'
+      +'<div style="font-size:1.4rem;font-weight:700;color:'+(c[1]?c[2]:'var(--muted)')+'">'+n(c[1])+'</div>'
+      +'<div style="font-size:0.66rem;color:var(--muted)">'+c[0]+'</div></div>';}).join('')+'</div>';
+
+  // Impossible travel + clone corroboration
+  const cloneBy={};rep.clone_corroboration.forEach(function(c){cloneBy[c.subject]=c;});
+  if(rep.impossible_travel.length){
+    const rows=rep.impossible_travel.map(function(x){
+      const cl=cloneBy[x.subject];
+      return '<div style="padding:8px 0;border-top:1px solid var(--line)">'
+        +'<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><strong>'+_infSubj(x.subject)+'</strong>'
+        +'<span style="color:var(--danger);font-weight:700">'+(x.speed_kmh!=null?n(Math.round(x.speed_kmh))+' km/h':'same minute (∞)')+'</span>'
+        +'<span style="font-size:0.7rem;color:var(--muted)">'+esc(x.from_tower)+' → '+esc(x.to_tower)+'</span></div>'
+        +'<div style="font-size:0.7rem;color:var(--muted)">'+x.distance_km+' km in '+x.dt_minutes+' min'
+        +(x.from_imei!==x.to_imei?' · IMEI changed '+esc(x.from_imei)+' → '+esc(x.to_imei):'')+'</div>'
+        +(cl?'<div style="font-size:0.7rem;color:var(--danger);margin-top:2px">⚠ '+esc(cl.verdict)+'</div>':'')+'</div>';
+    }).join('');
+    h+=_infCard('Impossible travel &amp; cloning',rep.impossible_travel.length+' flagged','var(--danger)',rows);
+  }
+
+  // Co-presence
+  const cps=rep.co_presence.filter(function(c){return c.convoy||c.hidden_link;});
+  if(cps.length){
+    const rows=cps.map(function(c){
+      return '<div style="padding:7px 0;border-top:1px solid var(--line)">'
+        +'<div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap">'+_infSubj(c.subject_a)+'<span style="color:var(--muted)">&amp;</span>'+_infSubj(c.subject_b)
+        +(c.hidden_link?_infChip('hidden link','var(--danger)'):'')+(c.convoy?_infChip('convoy','var(--warn)'):'')+'</div>'
+        +'<div style="font-size:0.7rem;color:var(--muted)">'+c.occurrences+'× over '+c.distinct_days+' day(s) · '
+        +(c.ever_called?'they also call each other':'never call each other')+' · '+esc((c.towers||[]).slice(0,3).join(', '))+'</div></div>';
+    }).join('');
+    h+=_infCard('Co-presence (convoy / hidden links)',cps.length,'var(--warn)',rows);
+  }
+
+  // Device & identity
+  if(rep.devices.sim_swaps.length||rep.devices.burner_handsets.length){
+    let rows='';
+    rep.devices.sim_swaps.forEach(function(s){rows+='<div style="padding:6px 0;border-top:1px solid var(--line)"><strong>'+_infSubj(s.msisdn)+'</strong> '+_infChip('number on '+s.imeis.length+' handsets','var(--danger)')+'<div style="font-size:0.68rem;color:var(--muted)">IMEIs: '+esc(s.imeis.join(', '))+'</div></div>';});
+    rep.devices.burner_handsets.forEach(function(b){rows+='<div style="padding:6px 0;border-top:1px solid var(--line)"><strong>'+esc(b.imei)+'</strong> '+_infChip('handset with '+b.msisdns.length+' numbers','var(--warn)')+'<div style="font-size:0.68rem;color:var(--muted)">Numbers: '+b.msisdns.map(_infSubj).join(', ')+'</div></div>';});
+    h+=_infCard('Device &amp; identity anomalies',rep.devices.sim_swaps.length+rep.devices.burner_handsets.length,'var(--danger)',rows);
+  }
+
+  // Behavioral
+  const beh=Object.entries(rep.behavioral);
+  const dark=beh.filter(function(e){return e[1].going_dark;});
+  const odd=beh.filter(function(e){return e[1].odd_hours&&e[1].odd_hours.flag;});
+  if(dark.length||odd.length){
+    let rows='';
+    dark.forEach(function(e){const d=e[1].going_dark;rows+='<div style="padding:6px 0;border-top:1px solid var(--line)"><strong>'+_infSubj(e[0])+'</strong> '+_infChip('going dark','var(--warn)')+'<div style="font-size:0.68rem;color:var(--muted)">'+d.encrypted_sessions+' encrypted/VPN sessions · calls before/after first: '+d.calls_sms_before+'/'+d.calls_sms_after+'</div></div>';});
+    odd.forEach(function(e){rows+='<div style="padding:6px 0;border-top:1px solid var(--line)"><strong>'+_infSubj(e[0])+'</strong> '+_infChip('odd hours','var(--muted)')+'<span style="font-size:0.68rem;color:var(--muted)"> '+Math.round(e[1].odd_hours.share*100)+'% of activity 01:00–05:00</span></div>';});
+    h+=_infCard('Behavioral flags',dark.length+odd.length,'var(--warn)',rows);
+  }
+
+  // VPN / proxy use
+  const vp=rep.vpn_proxy||[];
+  if(vp.length){
+    const rows=vp.map(function(v){
+      const col=v.confidence==='high'?'var(--danger)':(v.confidence==='medium'?'var(--warn)':'var(--muted)');
+      return '<div style="padding:7px 0;border-top:1px solid var(--line)"><div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap"><strong>'+_infSubj(v.subject)+'</strong>'+_infChip(v.confidence+' likelihood',col)
+        +(v.vpn_sessions?_infChip(v.vpn_sessions+' VPN'):'')+(v.proxy_tor_sessions?_infChip(v.proxy_tor_sessions+' proxy/Tor'):'')+'</div>'
+        +'<div style="font-size:0.68rem;color:var(--muted)">'+v.evidence.map(esc).join('<br>')+(v.endpoints&&v.endpoints.length?'<br>Endpoints: '+esc(v.endpoints.slice(0,4).join(', ')):'')+'</div></div>';
+    }).join('');
+    h+=_infCard('Possible VPN / proxy use',vp.length,'var(--warn)',rows);
+  }
+
+  // Periodic contacts
+  if(rep.periodic_contacts.length){
+    const rows=rep.periodic_contacts.slice(0,15).map(function(p){return '<div style="padding:5px 0;border-top:1px solid var(--line);font-size:0.74rem">'+_infSubj(p.subject)+' → '+esc(p.peer)+' · '+p.calls+' calls every ~'+p.mean_gap_hours+'h <span style="color:var(--muted)">(regularity cv '+p.regularity_cv+')</span></div>';}).join('');
+    h+=_infCard('Periodic contact cadence',rep.periodic_contacts.length,'var(--accent)',rows);
+  }
+
+  // Movement profiles (most mobile)
+  const movers=Object.entries(rep.movement).map(function(e){return Object.assign({s:e[0]},e[1]);}).sort(function(a,b){return b.distinct_towers-a.distinct_towers;}).slice(0,10);
+  if(movers.length){
+    const rows=movers.map(function(m){
+      const modes=Object.entries(m.modes||{}).map(function(x){return _infChip(x[0]+' ×'+x[1]);}).join('');
+      const home=m.anchors&&m.anchors.home?m.anchors.home.tower_id:'?';
+      const work=m.anchors&&m.anchors.work?m.anchors.work.tower_id:'?';
+      return '<div style="padding:6px 0;border-top:1px solid var(--line)"><div style="display:flex;gap:8px;flex-wrap:wrap"><strong>'+_infSubj(m.s)+'</strong>'
+        +'<span style="font-size:0.7rem;color:var(--muted)">'+m.distinct_towers+' towers · max leg '+m.max_leg_km+' km · home '+esc(home)+' / work '+esc(work)+'</span></div><div>'+modes+'</div></div>';
+    }).join('');
+    h+=_infCard('Movement profiles (most mobile)',movers.length+' shown','var(--accent)',rows);
+  }
+
+  if(!h)h='<div style="padding:40px;text-align:center;color:var(--muted)">No data loaded. Upload CDR/IPDR records first.</div>';
+  return h;
 }
 function buildInvestigationLeads(){
   const g=document.getElementById('aiLeadsGrid');if(!g)return;

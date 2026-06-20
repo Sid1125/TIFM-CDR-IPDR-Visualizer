@@ -41,6 +41,7 @@
       <button class="topbar-tab" data-tab="charts">Charts</button>
       <button class="topbar-tab" data-tab="services">Services</button>
       <button class="topbar-tab" data-tab="correlation">Correlation</button>
+      <button class="topbar-tab" data-tab="inferences">Inferences</button>
       <button class="topbar-tab" data-tab="records">Records</button>
       <button class="topbar-tab" data-tab="ai">AI Insights</button>
       <button class="topbar-tab" data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
@@ -127,6 +128,10 @@
         <option value="colocation">Co-location</option>
         <option value="triangulation">Triangulation</option>
         <option value="meetings">Meetings</option>
+        <option disabled>──────────</option>
+        <option value="inf_impossible">Impossible Travel (inference)</option>
+        <option value="inf_copresence">Co-presence / Convoy (inference)</option>
+        <option value="inf_anchors">Anchors: Home/Work (inference)</option>
       </select>
       <button id="mapGoBtn" class="btn">Go</button>
       <button id="mapFitBtn" class="btn">Fit</button>
@@ -198,6 +203,21 @@
     <div id="corrResults" class="corr-results" style="flex:1;overflow:auto">
       <div style="padding:40px;text-align:center;color:var(--muted)">Select two subjects and click Compare.</div>
     </div>
+  </section>
+
+  <!-- INFERENCES TAB -->
+  <section id="tab-inferences" class="tab-content">
+    <div class="svc-toolbar">
+      <h3 style="margin:0;flex:1">Spatiotemporal Inferences</h3>
+      <button id="infRefreshBtn" class="btn-sm" title="Re-run the inference engine">Refresh</button>
+      <span id="infStatus" style="font-size:0.75rem;color:var(--muted)">Not loaded</span>
+    </div>
+    <div style="font-size:0.7rem;color:var(--muted);margin-bottom:10px">
+      Derived from tower locations + timestamps. Tower coordinates approximate the handset's
+      area and times are minute-resolution, so distances/speeds are estimates &mdash; each item is a
+      graded signal, not proof.
+    </div>
+    <div id="infResults" style="flex:1;overflow:auto"></div>
   </section>
 
   <!-- RECORDS TAB -->

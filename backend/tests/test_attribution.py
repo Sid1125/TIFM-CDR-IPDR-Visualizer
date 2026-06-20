@@ -13,6 +13,9 @@ from __future__ import annotations
 import types
 import unittest
 
+import ipaddress
+
+from app.services import service_attribution_service as svc
 from app.services.service_attribution_service import attribute_service, summarize_services
 
 
@@ -99,6 +102,26 @@ class AttributionMetrics(unittest.TestCase):
             r = attribute_service(record)
             for key in ("service", "subtype", "confidence", "family", "category", "evidence"):
                 self.assertIn(key, r, f"{label} missing {key}")
+
+    def test_index_matches_bruteforce_lpm(self):
+        """The bucketed longest-prefix index must return exactly what a linear scan
+        over every provider net would, for both hits and misses."""
+        def brute(ip):
+            addr = ipaddress.ip_address(ip)
+            best = None
+            for net, provider, is_isp in svc._PROVIDER_NETS:
+                if addr.version == net.version and addr in net and (best is None or net.prefixlen > best[3]):
+                    best = (provider, is_isp, str(net), net.prefixlen)
+            return best
+
+        samples = [
+            "1.1.1.1", "8.8.8.8", "142.250.1.1", "3.5.140.1", "140.82.112.3",
+            "151.101.1.1", "17.0.5.5", "49.32.5.5", "157.240.1.1", "104.16.9.9",
+            "203.0.113.7", "198.51.100.5", "192.0.2.1", "100.64.1.1", "10.0.0.1",
+            "223.255.255.1", "11.22.33.44",
+        ]
+        for ip in samples:
+            self.assertEqual(svc._match_ip(ip), brute(ip), f"index/brute mismatch for {ip}")
 
     def test_summary_aggregates_keys_and_bytes(self):
         recs = [
