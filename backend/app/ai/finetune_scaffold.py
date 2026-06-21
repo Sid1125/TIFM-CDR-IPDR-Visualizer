@@ -77,6 +77,18 @@ python pipeline_tifm_finetune.py --generate-only --count 12
 - LoRA rank: 16, alpha: 32
 - Max steps: 500, batch size: 2, grad accumulation: 4
 - Context length: 4096 tokens
+
+## Under the Hood
+The pipeline wraps the 4-bit base model with a PEFT `LoraConfig` and trains it with
+TRL's `SFTTrainer`:
+```python
+from peft import LoraConfig
+from trl import SFTTrainer
+
+peft_config = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM")
+trainer = SFTTrainer(model=model, train_dataset=dataset, peft_config=peft_config, args=training_args)
+trainer.train()
+```
 """
 
 def export_to_jsonl(records: list[dict], output_path: str | Path) -> int:

@@ -140,6 +140,12 @@ function renderMd(t){
 // ====== DATA LOADING ======
 let allRows=[];
 let activeCaseId=null;
+// Persist the chosen case across page refreshes (activeCaseId is otherwise in-memory only,
+// so a refresh would reset to whichever case the API returns first).
+function setActiveCase(id){
+  activeCaseId=(id!=null&&id!=='')?String(id):null;
+  try{if(activeCaseId)localStorage.setItem('activeCaseId',activeCaseId);else localStorage.removeItem('activeCaseId');}catch(e){}
+}
 async function loadCaseData(){
   invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;
   try{
@@ -174,9 +180,14 @@ async function loadCases(){
   try{let cases=await API.get('/cases/');
     if(!cases.length){
       const c=await API.post('/cases/',{name:'Default Case'});
-      cases=[c];activeCaseId=c.id;
-    }else if(!activeCaseId){
-      activeCaseId=cases[0].id;
+      cases=[c];setActiveCase(c.id);
+    }else{
+      // Keep the current selection; else restore the saved one; else fall back to first.
+      const has=id=>cases.some(c=>String(c.id)===String(id));
+      const saved=(()=>{try{return localStorage.getItem('activeCaseId')}catch(e){return null}})();
+      if(activeCaseId&&has(activeCaseId)){/* keep */}
+      else if(saved&&has(saved))setActiveCase(saved);
+      else setActiveCase(cases[0].id);
     }
     const sel=D.caseSelector;
     sel.innerHTML=cases.map(c=>`<option value="${c.id}"${activeCaseId==c.id?' selected':''}>${esc(c.name)} (${c.record_count})</option>`).join('')+
@@ -185,9 +196,9 @@ async function loadCases(){
 }
 D.caseSelector.addEventListener('change',async function(){
   const v=this.value;
-  if(v==='__new__'){const n=prompt('Case name:');if(n&&n.trim()){try{const c=await API.post('/cases/',{name:n.trim()});activeCaseId=c.id;await loadCaseData();await loadCases();}catch(e){alert('Failed: '+e.message)}}this.value=activeCaseId||'';return}
+  if(v==='__new__'){const n=prompt('Case name:');if(n&&n.trim()){try{const c=await API.post('/cases/',{name:n.trim()});setActiveCase(c.id);await loadCaseData();await loadCases();}catch(e){alert('Failed: '+e.message)}}this.value=activeCaseId||'';return}
   if(v==='__manage__'){showCaseManager();this.value=activeCaseId||'';return}
-  activeCaseId=v||null;await loadCaseData();
+  setActiveCase(v||null);await loadCaseData();
 });
 async function showCaseManager(){
   const cases=await API.get('/cases/');
@@ -217,12 +228,12 @@ async function showCaseManager(){
     const c=cases[i];
     if(!c)return;
     row.querySelector('.cm-switch').addEventListener('click',()=>{
-      activeCaseId=c.id;m.style.display='none';loadCaseData();loadCases();
+      setActiveCase(c.id);m.style.display='none';loadCaseData();loadCases();
     });
     row.querySelector('.cm-delete').addEventListener('click',async()=>{
       if(!confirm('Delete case "'+c.name+'" and all its records?'))return;
       await API.del('/cases/'+c.id);
-      if(activeCaseId===c.id)activeCaseId=null;
+      if(String(activeCaseId)===String(c.id))setActiveCase(null);
       loadCases();m.style.display='none';loadCaseData();
     });
   });
@@ -263,7 +274,10 @@ const DISTINCTIVE_INDICATORS=[
 // -- Identity Resolution --
 // Builds per-subject identity profiles linking MSISDN, IMEI, IMSI
 function buildIdentityProfile(sub){
-  const rows=rowsFor(sub).filter(r=>r.ts&&(r.imei||r.imsi||r.msisdn)).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  // Only records the subject OWNS (their own device/SIM) describe their identity. A
+  // record where the subject is merely the counterpart (callee) carries the *other*
+  // party's imei/imsi/msisdn — including those produced bogus "SIM swaps".
+  const rows=rowsFor(sub).filter(r=>(r.msisdn===sub||r.sub===sub)&&r.ts&&(r.imei||r.imsi||r.msisdn)).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
   const timeline=[]; // chronological (imei,imsi) state sequence (no dedup)
   const imeiHistory=[],imsiHistory=[];
   rows.forEach(r=>{
@@ -337,7 +351,7 @@ function computeQualityMetrics(){
 }
 // -- Tower Analytics --
 function towerAnalytics(sub){
-  const rows=rowsFor(sub).filter(r=>r.ts&&r.tow).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const rows=ownedRowsFor(sub).filter(r=>r.ts&&r.tow).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
   if(!rows.length)return{};
   const towerCounts={};let nightTower=null,weekendTower=null;
   const nightCounts={},weekendCounts={};
@@ -889,12 +903,17 @@ function recPortFamily(r){
 // parallel sessions instead of fragmenting, and each track splits on a family-adaptive
 // idle gap rather than one fixed threshold.
 function reconstructSessions(entity){
-  const ipdrs=allRows.filter(r=>r.type==='IPDR'&&(r.sub===entity||r.cnt===entity)).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  // IPDR rows identify the subject by msisdn; sub/cnt hold the source/destination IPs.
+  // Matching on msisdn (or an IP entity) is required — filtering by sub/cnt alone never
+  // matches a phone-number subject, which silently produced zero sessions.
+  const ipdrs=allRows.filter(r=>r.type==='IPDR'&&(r.msisdn===entity||r.sub===entity||r.cnt===entity)).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
   if(!ipdrs.length)return[];
   const open={};const sessions=[];
   const flush=k=>{const o=open[k];if(o&&o.recs.length){const cls=classifySession(o.recs);if(cls)sessions.push(cls)}delete open[k]};
   for(const r of ipdrs){
-    const peer=(r.sub===entity)?(r.cnt||'?'):(r.sub||'?');
+    // Peer = the destination service IP for the subject's own sessions; if the entity is
+    // itself the destination IP, the peer is the source.
+    const peer=(r.cnt===entity)?(r.sub||'?'):(r.cnt||'?');
     const fam=recPortFamily(r);
     const key=peer+'|'+fam;
     const ts=new Date(r.ts).getTime();
@@ -954,6 +973,10 @@ function buildNarrative(subject){
   return narrative.slice(0,50);
 }
 function rowsFor(sub){if(!sub)return allRows;return allRows.filter(r=>r.sub===sub||r.cnt===sub||r.msisdn===sub)}
+// Records the subject OWNS (their own device / a-party). A CDR geolocates only the
+// caller, so tower/location and identity stats must use these, not records where the
+// subject is merely the called counterpart (whose tower belongs to the other party).
+function ownedRowsFor(sub){if(!sub)return allRows;return allRows.filter(r=>r.msisdn===sub||r.sub===sub)}
 
 // ====== TAB SWITCHING ======
 function switchTab(tab){
@@ -1052,8 +1075,11 @@ D.resetCaseBtn.addEventListener('click',resetCase);
 
 // ====== 1. DASHBOARD ======
 function renderDashboard(){
+  const _ht=$('dashHeroTitle'),_hs=$('dashHeroSub');
   if(!allRows.length){
-    D.dashCards.innerHTML='<div class="dash-card" style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)"><div class="dash-label">No Data</div><div class="dash-value" style="font-size:1rem;font-weight:400">Upload CDR / IPDR CSV files to begin analysis.</div></div>';
+    if(_ht)_ht.textContent='Dashboard';
+    if(_hs)_hs.textContent='Upload CDR, IPDR and Tower CSVs to begin building the case.';
+    D.dashCards.innerHTML='<div class="dash-card" style="grid-column:1/-1;text-align:center;padding:36px;color:var(--muted)">No data yet — use the upload cards above to add CDR / IPDR records and begin analysis.</div>';
     D.dashGraph.innerHTML='<p style="color:var(--muted);text-align:center;padding:40px 0;font-size:0.85rem">No data to display</p>';
     ['dashPie','dashHeat','dashBar'].forEach(k=>{if(D[k])D[k].innerHTML=''});
     try{window.dashPieChart&&(window.dashPieChart.destroy(),window.dashPieChart=null)}catch(e){}
@@ -1076,6 +1102,13 @@ function renderDashboard(){
   const uniqueContacts=new Set(allRows.map(r=>r.cnt).filter(Boolean));
   const uniqueSubjects=new Set(allRows.map(r=>r.sub).filter(Boolean));
 
+  // Hero: case name + live one-line summary
+  if(_ht){const opt=D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex];
+    const cn=opt?opt.text.replace(/\s*\(\d+\)\s*$/,'').trim():'';_ht.textContent=cn||'Investigation overview';}
+  if(_hs){const ts=allRows.filter(r=>r.ts).map(r=>new Date(r.ts)).sort((a,b)=>a-b);
+    const span=ts.length?ts[0].toLocaleDateString()+' – '+ts[ts.length-1].toLocaleDateString():'';
+    _hs.textContent=n(total)+' records · '+n(uniqueSubjects.size)+' subjects · '+n(uniqueContacts.size)+' contacts'+(span?' · '+span:'');}
+
   D.dashCards.innerHTML=[
     {l:'Total Records',v:n(total),d:`${n(totalCdr)} CDR + ${n(totalIpdr)} IPDR`},
     {l:'Reconstructed Sessions',v:n(totalSessions),d:'From session reconstruction engine'},
@@ -1094,7 +1127,7 @@ function renderDashboard(){
       (geoRecords||[]).forEach(r=>{
         if(r.latitude!=null&&r.longitude!=null&&turf.booleanPointInPolygon(turf.point([r.longitude,r.latitude]),poly))inside++;
       });
-      return {l:'Geo-fenced Records',v:n(inside),d:'Within drawn geofence'};
+      return {l:'Geo-fenced Records',v:n(inside),d:'Within drawn geofence',cat:'warn'};
     })():null,
     (()=>{
       // Burst detection for dashboard
@@ -1106,9 +1139,9 @@ function renderDashboard(){
         const avg=counts.reduce((a,c)=>a+c,0)/counts.length;const thr=Math.max(avg*3,20);
         days.forEach((c,d)=>{if(c>=thr)totalBursts++});
       });
-      return totalBursts?{l:'Activity Spikes',v:n(totalBursts),d:'Days with anomalous volume'}:null;
+      return totalBursts?{l:'Activity Spikes',v:n(totalBursts),d:'Days with anomalous volume',cat:'alert'}:null;
     })(),
-  ].filter(Boolean).map(c=>`<div class="dash-card"><div class="dash-label">${c.l}</div><div class="dash-value">${c.v}</div><div class="dash-detail">${c.d}</div></div>`).join('');
+  ].filter(Boolean).map(c=>`<div class="dash-card ${c.cat||''}"><div class="dash-label">${c.l}</div><div class="dash-value">${c.v}</div><div class="dash-detail">${c.d}</div></div>`).join('');
 
   renderCaseSummary();
   renderQualityCard();
@@ -1518,7 +1551,8 @@ async function loadGeoData(){
   try{const[recs,subs]=await Promise.all([API.get('/geo/records'+cq),API.get('/geo/subjects'+cq)]);geoRecords=recs;geoSubjects=subs;state.geoRecords=recs;populateMapSubjects()}catch(e){console.error(e)}
 }
 function populateMapSubjects(){
-  D.mapSubject.innerHTML='<option value="">All subjects</option>'+geoSubjects.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  const dl=document.getElementById('mapSubjectList');
+  if(dl)dl.innerHTML=geoSubjects.map(s=>`<option value="${esc(s)}"></option>`).join('');
 }
 function clearMap(){
   mapLayers.forEach(l=>mapInstance.removeLayer(l));mapMarkers.forEach(m=>mapInstance.removeLayer(m));mapCircles.forEach(c=>mapInstance.removeLayer(c));
@@ -1566,9 +1600,9 @@ async function showMapImpossible(sub){
   clearMap();
   let rep;try{rep=await getInfReport();}catch(e){D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to load inferences.</p>';return;}
   const tc=towerCoords();
-  let legs=rep.impossible_travel||[];
+  let legs=(rep.cdr&&rep.cdr.impossible_travel)||[];
   if(sub)legs=legs.filter(l=>l.subject===sub);
-  const cloneBy={};(rep.clone_corroboration||[]).forEach(c=>cloneBy[c.subject]=c);
+  const cloneBy={};((rep.cdr&&rep.cdr.clone_corroboration)||[]).forEach(c=>cloneBy[c.subject]=c);
   if(!legs.length){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">No impossible-travel legs'+(sub?' for this subject':'')+'.</p>';return;}
   const bounds=[];
   legs.forEach(l=>{
@@ -1587,7 +1621,7 @@ async function showMapCopresence(sub){
   clearMap();
   let rep;try{rep=await getInfReport();}catch(e){D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to load inferences.</p>';return;}
   const tc=towerCoords();
-  let pairs=(rep.co_presence||[]).filter(c=>c.convoy||c.hidden_link);
+  let pairs=((rep.cdr&&rep.cdr.co_presence)||[]).filter(c=>c.convoy||c.hidden_link);
   if(sub)pairs=pairs.filter(c=>c.subject_a===sub||c.subject_b===sub);
   if(!pairs.length){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">No convoy / hidden-link pairs'+(sub?' for this subject':'')+'.</p>';return;}
   const bounds=[];
@@ -1608,7 +1642,7 @@ async function showMapCopresence(sub){
 async function showMapAnchors(sub){
   clearMap();
   let rep;try{rep=await getInfReport();}catch(e){D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to load inferences.</p>';return;}
-  const mv=(rep.movement||{})[sub];
+  const mv=((rep.cdr&&rep.cdr.movement)||{})[sub];
   if(!mv||!mv.anchors){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">No anchors for this subject.</p>';return;}
   const bounds=[];
   geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null).forEach(r=>{const mk=L.circleMarker([r.latitude,r.longitude],{radius:3,color:'#888',weight:1,fillColor:'#888',fillOpacity:0.35}).addTo(mapInstance);mapMarkers.push(mk);bounds.push([r.latitude,r.longitude]);});
@@ -1632,6 +1666,8 @@ async function showMapAnchors(sub){
 D.mapGo.addEventListener('click',runMapMode);
 D.mapMode.addEventListener('change',runMapMode);
 D.mapSubject.addEventListener('change',()=>{if(D.mapSubject.value)runMapMode()});
+// Run immediately when a complete subject is typed or picked from the suggestions.
+D.mapSubject.addEventListener('input',()=>{if(geoSubjects.includes(D.mapSubject.value))runMapMode()});
 D.mapFit.addEventListener('click',()=>{const pts=[];geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})});
 
 // -- Geofence --
@@ -1766,7 +1802,10 @@ function segMetrics(a,b,km){
           dwell,impossible,kmh,km,mode,dtSec,label:st.label};
 }
 function showMapPath(sub){
-  clearMap();const rows=geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null);
+  // Owned records only: a CDR locates the caller, so plotting records where the subject
+  // is the called counterpart would place them at the other party's tower (and can
+  // fabricate impossible "jumps"). Mirrors the backend, which keys movement by msisdn.
+  clearMap();const rows=geoRecords.filter(r=>(r.msisdn===sub||r.subject===sub)&&r.latitude!=null&&r.longitude!=null);
   rows.sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   if(!rows.length){D.mapAnalysis.innerHTML='No geo records.';return}
   const coords=rows.map(r=>[r.latitude,r.longitude]);
@@ -2351,9 +2390,11 @@ function showProfile(sub){
   const contacts=new Set();const towers=new Set();const svcCounts={};const hours=Array(24).fill(0);const dailyMap={};
   rows.forEach(r=>{
     if(r.cnt&&r.cnt!==sub)contacts.add(r.cnt);if(r.sub&&r.sub!==sub)contacts.add(r.sub);
-    if(r.tow)towers.add(r.tow);const s=r.svc||'Unknown';svcCounts[s]=(svcCounts[s]||0)+1;
+    const s=r.svc||'Unknown';svcCounts[s]=(svcCounts[s]||0)+1;
     if(r.ts){hours[new Date(r.ts).getHours()]++;const d=new Date(r.ts).toLocaleDateString();dailyMap[d]=(dailyMap[d]||0)+1}
   });
+  // Towers must be the subject's OWN serving cells (a CDR locates the caller only).
+  ownedRowsFor(sub).forEach(r=>{if(r.tow)towers.add(r.tow)});
   const topSvc=Object.entries(svcCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const topHourIdx=hours.indexOf(Math.max(...hours));
   const dayNight=hours.slice(6,18).reduce((s,v)=>s+v,0)>hours.slice(18,24).concat(hours.slice(0,6)).reduce((s,v)=>s+v,0)?'Day (6-18)':'Night (18-6)';
@@ -2379,80 +2420,70 @@ function showProfile(sub){
   // Identity profile
   const identity=buildIdentityProfile(sub);
   const changes=identity.changes;
-  // Collect MSISDNs and IMEIs/IMSIs for display
-  const allMsisdns=new Set();const allImeis=new Set();const allImsis=new Set();const allNumbers=new Set();
+  // Collect the subject's OWN MSISDNs and IMEIs/IMSIs (identity is already owned-only).
+  const allMsisdns=new Set();const allImeis=new Set();const allImsis=new Set();
   identity.identities.forEach(id=>{id.msisdns.forEach(m=>allMsisdns.add(m));if(id.imei)allImeis.add(id.imei);if(id.imsi)allImsis.add(id.imsi)});
-  rows.forEach(r=>{
-    if(r.sub&&r.sub!==sub&&(r.sub.includes('@')||/^\d{10,15}$/.test(r.sub)))allNumbers.add(r.sub);
-    if(r.cnt&&r.cnt!==sub&&(r.cnt.includes('@')||/^\d{10,15}$/.test(r.cnt)))allNumbers.add(r.cnt);
-  });
   // Tower analytics
   const towerAn=towerAnalytics(sub);
   // Sessions
   const sessions=reconstructSessions(sub);
   const svcFromSessions={};sessions.forEach(s=>{const n=s.primary?s.primary.service:(s.service||'Unknown');svcFromSessions[n]=(svcFromSessions[n]||0)+1});
   const topSessionSvcs=Object.entries(svcFromSessions).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxDorm=maxDormancy>24?Math.round(maxDormancy/24)+'d':Math.round(maxDormancy)+'h';
   D.profileTitle.textContent=`Subject: ${esc(sub)}`;
   D.profileBody.innerHTML=`
     <div class="prof-grid">
-      <div class="prof-card"><div class="prof-label">Contacts</div><div class="prof-value">${contacts.size}</div></div>
       <div class="prof-card"><div class="prof-label">Records</div><div class="prof-value">${rows.length}</div></div>
-      <div class="prof-card"><div class="prof-label">Sessions</div><div class="prof-value">${sessions.length}</div></div>
+      <div class="prof-card"><div class="prof-label">Contacts</div><div class="prof-value">${contacts.size}</div></div>
       <div class="prof-card"><div class="prof-label">Towers</div><div class="prof-value">${towers.size}</div></div>
-      <div class="prof-card"><div class="prof-label">Top Service</div><div class="prof-value">${esc(topSvc[0]?topSvc[0][0]:'n/a')}</div></div>
-      <div class="prof-card"><div class="prof-label">Avg/Day</div><div class="prof-value">${avgDay}</div></div>
-      <div class="prof-card"><div class="prof-label">Peak Hour</div><div class="prof-value">${topHourIdx}:00</div></div>
-      <div class="prof-card"><div class="prof-label">Pattern</div><div class="prof-value">${dayNight}</div></div>
+      <div class="prof-card"><div class="prof-label">Sessions</div><div class="prof-value">${sessions.length}</div></div>
       <div class="prof-card"><div class="prof-label">Meetings</div><div class="prof-value">${meetings.length}</div></div>
-      <div class="prof-card"><div class="prof-label">First Seen</div><div class="prof-value">${firstSeen?firstSeen.toLocaleDateString():'n/a'}</div></div>
-      <div class="prof-card"><div class="prof-label">Last Seen</div><div class="prof-value">${lastSeen?lastSeen.toLocaleDateString():'n/a'}</div></div>
-      <div class="prof-card"><div class="prof-label">Dormant Periods</div><div class="prof-value">${dormantPeriods}</div></div>
-      <div class="prof-card"><div class="prof-label">Activity Spikes</div><div class="prof-value">${spikeDays}</div></div>
-      <div class="prof-card"><div class="prof-label">Max Dormancy</div><div class="prof-value">${maxDormancy>24?Math.round(maxDormancy/24)+'d':Math.round(maxDormancy)+'h'}</div></div>
-      <div class="prof-card"><div class="prof-label">Date Span</div><div class="prof-value">${days.length?'<span title="'+days[0]+' — '+days[days.length-1]+'">'+days.length+' days</span>':'n/a'}</div></div>
+      <div class="prof-card"><div class="prof-label">Avg / Day</div><div class="prof-value">${avgDay}</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
-      <div>
-        <h4 style="margin:0 0 6px;font-size:0.82rem;color:var(--muted)">Identity Profile</h4>
-        <div style="font-size:0.75rem">
-          ${allMsisdns.size?`<div><strong>MSISDN:</strong> ${[...allMsisdns].join(', ')}</div>`:''}
-          ${allImeis.size?`<div><strong>IMEI:</strong> ${[...allImeis].join(', ')}</div>`:''}
-          ${allImsis.size?`<div><strong>IMSI:</strong> ${[...allImsis].join(', ')}</div>`:''}
-          ${allNumbers.size?`<div><strong>Numbers:</strong> ${[...allNumbers].join(', ')}</div>`:''}
-          ${identity.identities.length?`<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--line)"><strong>Identity Timeline:</strong>${identity.identities.map(id=>`<div style="font-size:0.68rem;padding:1px 0">${id.imei||'?'} / ${id.imsi||'?'} — ${id.firstSeen.toLocaleDateString()} ? ${id.lastSeen.toLocaleDateString()} (${id.records} records)</div>`).join('')}</div>`:''}
+    <div class="prof-sub">
+      <b>${firstSeen?firstSeen.toLocaleDateString():'n/a'}</b> → <b>${lastSeen?lastSeen.toLocaleDateString():'n/a'}</b> &middot; ${days.length} day span &middot;
+      peak <b>${String(topHourIdx).padStart(2,'0')}:00</b> &middot; ${dayNight} &middot; top service <b>${esc(topSvc[0]?topSvc[0][0]:'n/a')}</b>
+      <br>Dormancy: ${dormantPeriods} period${dormantPeriods===1?'':'s'} (max ${maxDorm}) &middot; activity spikes: ${spikeDays}
+    </div>
+    <div class="prof-two">
+      <div class="prof-section">
+        <h4>Identity</h4>
+        <div class="prof-id">
+          ${allMsisdns.size?`<div><strong>MSISDN</strong> ${[...allMsisdns].join(', ')}</div>`:''}
+          ${allImeis.size?`<div><strong>IMEI</strong> ${[...allImeis].join(', ')}</div>`:''}
+          ${allImsis.size?`<div><strong>IMSI</strong> ${[...allImsis].join(', ')}</div>`:''}
+          ${identity.identities.length>1?`<div style="margin-top:5px">${identity.identities.map(id=>`<div class="tl">${id.imei||'?'} / ${id.imsi||'?'} — ${id.firstSeen.toLocaleDateString()}→${id.lastSeen.toLocaleDateString()} (${id.records})</div>`).join('')}</div>`:''}
         </div>
-        ${changes.length?`<h4 style="margin:8px 0 4px;font-size:0.8rem;color:var(--warn)">Detected Changes (${changes.length})</h4>
-          <div style="font-size:0.7rem;max-height:60px;overflow-y:auto">${changes.slice(-5).map(c=>`<div style="padding:1px 0"><span style="color:${c.type==='sim_swap'?'var(--danger)':'var(--warn)'}">&#9654;</span> ${esc(c.detail)} <span style="color:var(--muted)">${c.time.toLocaleDateString()}</span></div>`).join('')}</div>`:''}
+        ${changes.length?`<h4 class="alert" style="margin-top:8px">Identity changes (${changes.length})</h4>
+          <div class="prof-list">${changes.slice(-5).map(c=>`<div style="padding:1px 0"><span style="color:${c.type==='sim_swap'?'var(--danger)':'var(--warn)'}">&#9654;</span> ${esc(c.detail)} <span style="color:var(--muted)">${c.time.toLocaleDateString()}</span></div>`).join('')}</div>`:''}
       </div>
-      <div>
-        <h4 style="margin:0 0 6px;font-size:0.82rem;color:var(--muted)">Tower Analytics</h4>
-        <div style="font-size:0.75rem">
-          <div>Total towers: ${towerAn.totalTowers||towers.size}</div>
-          ${towerAn.nightTower?`<div>Night tower: ${esc(towerAn.nightTower)}</div>`:''}
-          ${towerAn.weekendTower?`<div>Weekend tower: ${esc(towerAn.weekendTower)}</div>`:''}
-          ${towerAn.topTowers?`<div style="margin-top:4px">Top: ${towerAn.topTowers.map(([t,c])=>esc(t)+' ('+c+')').join(', ')}</div>`:''}
+      <div class="prof-section">
+        <h4>Tower analytics</h4>
+        <div class="prof-id">
+          <div>${towerAn.totalTowers||towers.size} towers${towerAn.nightTower?` &middot; night <strong>${esc(towerAn.nightTower)}</strong>`:''}${towerAn.weekendTower?` &middot; weekend <strong>${esc(towerAn.weekendTower)}</strong>`:''}</div>
+          ${towerAn.topTowers?`<div style="color:var(--muted);font-size:0.7rem;margin-top:2px">Top: ${towerAn.topTowers.map(([t,c])=>esc(t)+' ('+c+')').join(', ')}</div>`:''}
         </div>
-        <h4 style="margin:8px 0 4px;font-size:0.82rem;color:var(--muted)">Attributed Services</h4>
-        ${topSessionSvcs.length?'<div style="font-size:0.75rem">'+topSessionSvcs.map(([n,c])=>'<div style="display:flex;gap:6px;padding:2px 0"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+svcColor(n)+';flex-shrink:0;margin-top:4px"></span><span style="flex:1">'+esc(n)+'</span><span style="color:var(--muted)">'+c+' sessions</span></div>').join('')+'</div>':'<div style="font-size:0.75rem;color:var(--muted)">No session data</div>'}
+        <h4 style="margin-top:8px">Attributed services</h4>
+        ${topSessionSvcs.length?'<div class="prof-id">'+topSessionSvcs.map(([nm,c])=>'<div style="display:flex;gap:6px;align-items:center;padding:1px 0"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+svcColor(nm)+';flex-shrink:0"></span><span style="flex:1">'+esc(nm)+'</span><span style="color:var(--muted)">'+c+'</span></div>').join('')+'</div>':'<div style="font-size:0.74rem;color:var(--muted)">No session data</div>'}
       </div>
     </div>
-    ${towers.size?`<h4 style="margin:10px 0 4px;font-size:0.82rem;color:var(--muted)">Towers (${towers.size})</h4>
-      <div style="font-size:0.75rem;display:flex;flex-wrap:wrap;gap:4px">${[...towers].slice(0,15).map(t=>'<span style="padding:2px 8px;border-radius:4px;background:var(--accent-light);color:var(--accent);cursor:pointer" onclick="switchTab(\'map\')">'+esc(t)+'</span>').join('')}</div>`:''}
-    ${meetings.length?`<h4 style="margin:10px 0 4px;font-size:0.82rem;color:var(--danger)">Detected Co-locations (${meetings.length})</h4>
-      <div style="font-size:0.75rem;max-height:80px;overflow-y:auto">${meetings.slice(0,8).map((m,mi)=>{
+    ${towers.size?`<div class="prof-section"><h4>Towers (${towers.size})</h4>
+      <div class="prof-tags">${[...towers].slice(0,15).map(t=>'<span class="prof-tag" onclick="switchTab(\'map\')">'+esc(t)+'</span>').join('')}</div></div>`:''}
+    ${meetings.length?`<div class="prof-section"><h4 class="alert">Detected co-locations (${meetings.length})</h4>
+      <div class="prof-list">${meetings.slice(0,8).map((m,mi)=>{
         const confColor=m.gapLevel==='high'?'var(--success)':m.gapLevel==='medium'?'var(--warn)':'var(--muted)';
         const confLabel=m.gapLevel==='high'?'High':m.gapLevel==='medium'?'Med':'Low';
-        return '<div style="padding:2px 0;display:flex;align-items:center;gap:4px"><span style="color:'+confColor+'">&#9679;</span> '+esc(m.time.toLocaleString())+' with <strong style="cursor:pointer;color:var(--accent)" onclick="showProfile(\''+esc(m.subB)+'\')">'+esc(m.subB)+'</strong> at '+esc(m.tow)+' <span style="color:'+confColor+';font-weight:600;font-size:0.68rem">['+confLabel+' score:'+m.score+']</span><button onclick="showMeetingOverlay(\''+esc(sub+'|'+sub)+'\','+mi+')" style="background:none;border:1px solid var(--line);color:var(--accent);padding:1px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem">View</button></div>';
-      }).join('')}</div>`:''}
-    <h4 style="margin:10px 0 4px;font-size:0.82rem;color:var(--muted)">Hourly Activity</h4>
-    <div class="prof-hours">${hours.map((h,i)=>`<div class="prof-hour" style="background:${h>Math.max(...hours)*0.7?'#b94a48':h>Math.max(...hours)*0.4?'#d4a017':'var(--accent)'};height:${Math.max(4,(h/Math.max(...hours||1))*40)}px" title="${i}:00 - ${h}"></div>`).join('')}</div>
-    <h4 style="margin:10px 0 4px;font-size:0.82rem;color:var(--muted)">Timeline Narrative</h4>
-    <div style="font-size:0.75rem;max-height:120px;overflow-y:auto;border-left:2px solid var(--line);padding-left:8px">${(()=>{
+        return '<div style="padding:2px 0;display:flex;align-items:center;gap:4px"><span style="color:'+confColor+'">&#9679;</span> '+esc(m.time.toLocaleString())+' with <strong style="cursor:pointer;color:var(--accent)" onclick="showProfile(\''+esc(m.subB)+'\')">'+esc(m.subB)+'</strong> at '+esc(m.tow)+' <span style="color:'+confColor+';font-weight:600;font-size:0.68rem">['+confLabel+' '+m.score+']</span><button onclick="showMeetingOverlay(\''+esc(sub+'|'+sub)+'\','+mi+')" style="background:none;border:1px solid var(--line);color:var(--accent);padding:1px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem">View</button></div>';
+      }).join('')}</div></div>`:''}
+    <div class="prof-section"><h4>Hourly activity</h4>
+      <div class="prof-hours">${hours.map((h,i)=>`<div class="prof-hour" style="background:${h>Math.max(...hours)*0.7?'#b94a48':h>Math.max(...hours)*0.4?'#d4a017':'var(--accent)'};height:${Math.max(4,(h/Math.max(...hours||1))*40)}px" title="${i}:00 - ${h}"></div>`).join('')}</div></div>
+    <div class="prof-section"><h4>Timeline narrative</h4>
+      <div class="prof-list" style="border-left:2px solid var(--line);padding-left:8px">${(()=>{
       const narr=buildNarrative(sub);
-      return narr.length?narr.map(n=>`<div style="padding:1px 0;display:flex;gap:4px"><span style="color:${n.type==='call'?'var(--danger)':n.type==='movement'?'var(--warn)':n.type==='meeting'?'var(--accent)':'var(--muted)'};flex-shrink:0">&#x2022;</span><span>${esc(n.text)}</span></div>`).join(''):'<span style="color:var(--muted)">Insufficient data for narrative</span>';
-    })()}</div>
-    <h4 style="margin:10px 0 4px;font-size:0.82rem;color:var(--muted)">Recent Activity</h4>
-    ${rows.slice(-10).reverse().map(r=>`<div class="evt" onclick="mapInstance&&mapInstance.setView([${r.lat||0},${r.lng||0}],13)"><span class="evt-time">${fmt(r.ts)}</span> <span class="evt-loc">${esc(r.type)} ${esc(r.cnt||'')} ${r.cll||''}</span></div>`).join('')}
+      return narr.length?narr.map(nn=>`<div style="padding:1px 0;display:flex;gap:4px"><span style="color:${nn.type==='call'?'var(--danger)':nn.type==='movement'?'var(--warn)':nn.type==='meeting'?'var(--accent)':'var(--muted)'};flex-shrink:0">&#x2022;</span><span>${esc(nn.text)}</span></div>`).join(''):'<span style="color:var(--muted)">Insufficient data for narrative</span>';
+    })()}</div></div>
+    <div class="prof-section"><h4>Recent activity</h4>
+      ${rows.slice(-10).reverse().map(r=>`<div class="evt" onclick="mapInstance&&mapInstance.setView([${r.lat||0},${r.lng||0}],13)"><span class="evt-time">${fmt(r.ts)}</span> <span class="evt-loc">${esc(r.type)} ${esc(r.cnt||'')} ${r.cll||''}</span></div>`).join('')}</div>
   `;
   D.profile.style.display='flex';
 }
@@ -2791,120 +2822,169 @@ async function renderInferences(force){
   catch(e){status.textContent='Error';box.innerHTML='<div style="padding:40px;text-align:center;color:var(--danger)">Failed: '+esc(e.message)+'</div>';return;}
   _infCache=buildInferenceHtml(rep);
   box.innerHTML=_infCache;
-  status.textContent=n(rep.subjects)+' subjects analyzed';
+  status.textContent=n((rep.cdr&&rep.cdr.subjects)||0)+' phone subjects · '+n((rep.ipdr&&rep.ipdr.sessions)||0)+' IPDR sessions';
 }
 function _infCard(title,count,color,body){
-  return '<div style="background:var(--card-bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:12px">'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(body?'10px':'0')+'">'
-    +'<span style="width:9px;height:9px;border-radius:50%;background:'+color+';flex-shrink:0"></span>'
-    +'<strong style="font-size:0.85rem;color:var(--text)">'+title+'</strong>'
-    +(count!=null?'<span style="margin-left:auto;font-size:0.72rem;color:var(--muted)">'+count+'</span>':'')
+  return '<div class="inf-card"><div class="inf-card-head">'
+    +'<span class="dot" style="background:'+color+'"></span><strong>'+title+'</strong>'
+    +(count!=null?'<span class="count">'+count+'</span>':'')
     +'</div>'+(body||'')+'</div>';
 }
-function _infChip(t,c){return '<span style="display:inline-block;padding:2px 7px;border-radius:4px;font-size:0.66rem;background:var(--accent-light);color:'+(c||'var(--accent)')+';margin:2px 2px 0 0">'+esc(t)+'</span>';}
-function _infSubj(s){return '<a style="color:var(--accent);cursor:pointer;text-decoration:none" onclick="showProfile(\''+esc(s)+'\')">'+esc(s)+'</a>';}
+function _infChip(t,c){return '<span class="inf-chip"'+(c?' style="color:'+c+'"':'')+'>'+esc(t)+'</span>';}
+function _infSubj(s){return '<a class="inf-link" onclick="showProfile(\''+esc(s)+'\')">'+esc(s)+'</a>';}
 function buildInferenceHtml(rep){
-  let h='';
-  const conv=rep.co_presence.filter(c=>c.convoy).length;
-  const hidden=rep.co_presence.filter(c=>c.hidden_link).length;
-  const gd=Object.values(rep.behavioral).filter(b=>b.going_dark).length;
-  const counters=[
-    ['Impossible travel',rep.impossible_travel.length,'var(--danger)'],
-    ['Convoys',conv,'var(--warn)'],
-    ['Hidden links',hidden,'var(--danger)'],
-    ['SIM swaps/clones',rep.devices.sim_swaps.length,'var(--danger)'],
-    ['Burner handsets',rep.devices.burner_handsets.length,'var(--warn)'],
-    ['Periodic contacts',rep.periodic_contacts.length,'var(--accent)'],
-    ['Going dark',gd,'var(--warn)'],
-    ['VPN / proxy',(rep.vpn_proxy||[]).length,'var(--warn)'],
-  ];
-  h+='<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">'+counters.map(function(c){
-    return '<div style="flex:1;min-width:108px;background:var(--card-bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px">'
-      +'<div style="font-size:1.4rem;font-weight:700;color:'+(c[1]?c[2]:'var(--muted)')+'">'+n(c[1])+'</div>'
-      +'<div style="font-size:0.66rem;color:var(--muted)">'+c[0]+'</div></div>';}).join('')+'</div>';
+  const C=rep.cdr||{}, I=rep.ipdr||{};
+  const subjects=C.subjects||0, sessions=I.sessions||0;
+  if(!subjects && !sessions){
+    return '<div class="inf-empty">No records in this case yet.<br>Upload CDR/IPDR data to run the analysis.</div>';
+  }
+  const cps=C.co_presence||[];
+  const convoys=cps.filter(c=>c.convoy&&!c.hidden_link);
+  const hidden=cps.filter(c=>c.hidden_link);
+  const beh=Object.entries(C.behavioral||{});
+  const odd=beh.filter(e=>e[1].odd_hours&&e[1].odd_hours.flag);
+  const swaps=(C.devices&&C.devices.sim_swaps)||[];
+  const burners=(C.devices&&C.devices.burner_handsets)||[];
+  const imp=C.impossible_travel||[];
+  const periodic=C.periodic_contacts||[];
+  const vp=I.vpn_proxy||[];
 
-  // Impossible travel + clone corroboration
-  const cloneBy={};rep.clone_corroboration.forEach(function(c){cloneBy[c.subject]=c;});
-  if(rep.impossible_travel.length){
-    const rows=rep.impossible_travel.map(function(x){
-      const cl=cloneBy[x.subject];
-      return '<div style="padding:8px 0;border-top:1px solid var(--line)">'
-        +'<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><strong>'+_infSubj(x.subject)+'</strong>'
+  // ----- Persons of interest (CDR phone-number subjects only) -----
+  const poi={};
+  const flag=(subj,label,sev,w)=>{
+    if(!subj)return;
+    if(!poi[subj])poi[subj]={flags:[],score:0,sev:'info'};
+    if(!poi[subj].flags.some(f=>f.label===label)){poi[subj].flags.push({label,sev});poi[subj].score+=w;}
+    const rank={info:0,high:1,crit:2};
+    if(rank[sev]>rank[poi[subj].sev])poi[subj].sev=sev;
+  };
+  imp.forEach(x=>flag(x.subject,'Impossible travel','crit',5));
+  (C.clone_corroboration||[]).forEach(c=>{if(c.number_on_multiple_handsets)flag(c.subject,'Cloned SIM','crit',5);});
+  swaps.forEach(s=>flag(s.msisdn,'Multiple handsets','crit',4));
+  burners.forEach(b=>b.msisdns.forEach(m=>flag(m,'Shared handset','high',3)));
+  hidden.forEach(c=>{flag(c.subject_a,'Covert meetings','crit',4);flag(c.subject_b,'Covert meetings','crit',4);});
+  convoys.forEach(c=>{flag(c.subject_a,'Convoy','high',3);flag(c.subject_b,'Convoy','high',3);});
+  odd.forEach(e=>flag(e[0],'Odd-hours','info',1));
+  periodic.forEach(p=>flag(p.subject,'Scheduled contact','info',1));
+  const poiList=Object.entries(poi).sort((a,b)=>b[1].score-a[1].score);
+
+  const critN=imp.length+swaps.length+burners.length+hidden.length;
+  const highN=convoys.length;
+  const vpIps=vp.length;
+
+  let h='<div class="inf-wrap">';
+  h+='<div class="inf-intro"><h3>Automated case analysis</h3>'
+    +'<p>Two <b>separate</b> data sources, analysed independently and never cross-linked: '
+    +'<b>CDR</b> (calls/SMS &mdash; subjects are <b>phone numbers</b>) and <b>IPDR</b> '
+    +'(internet sessions &mdash; subjects are <b>IP addresses</b>). Every item is a lead to verify; '
+    +'distances and times are tower-based estimates.</p></div>';
+
+  h+='<div class="inf-summary">'
+    +'<div class="inf-stat"><div class="n">'+n(subjects)+'</div><div class="t">CDR subjects (phone)</div></div>'
+    +'<div class="inf-stat crit"><div class="n" style="color:'+(critN?'var(--danger)':'var(--muted)')+'">'+n(critN)+'</div><div class="t">Critical leads</div></div>'
+    +'<div class="inf-stat high"><div class="n" style="color:'+(highN?'var(--warn)':'var(--muted)')+'">'+n(highN)+'</div><div class="t">Notable leads</div></div>'
+    +'<div class="inf-stat info"><div class="n">'+n(sessions)+'</div><div class="t">IPDR sessions (IP)</div></div>'
+    +'</div>';
+
+  // ===================== CDR ANALYSIS (phone numbers) =====================
+  if(poiList.length){
+    let rows='';
+    poiList.slice(0,10).forEach(([s,d])=>{
+      rows+='<div class="inf-poi-row"><span class="inf-sev '+d.sev+'">'+(d.sev==='crit'?'Critical':d.sev==='high'?'Notable':'Context')+'</span>'
+        +'<span class="who">'+_infSubj(s)+'</span>'
+        +'<span class="flags">'+d.flags.map(f=>_infChip(f.label,f.sev==='crit'?'var(--danger)':f.sev==='high'?'var(--warn)':'var(--accent)')).join('')+'</span></div>';
+    });
+    h+=_infCard('Persons of interest','phone subjects, ranked','var(--danger)',
+      '<div class="inf-blurb">CDR phone-number subjects sorted by the seriousness of what was flagged. Start here. Click a number to open its profile.</div>'+rows);
+  }
+
+  const card=(title,count,color,sev,blurb,rows)=>_infCard(
+     title+' <span class="inf-sev '+sev+'" style="margin-left:6px">'+(sev==='crit'?'Critical':sev==='high'?'Notable':'Context')+'</span>',
+     count,color,'<div class="inf-blurb">'+blurb+'</div>'+rows);
+
+  // -- Identity & device fraud --
+  let theme='';
+  const cloneBy={};(C.clone_corroboration||[]).forEach(c=>cloneBy[c.subject]=c);
+  if(imp.length){
+    const rows=imp.map(x=>{const cl=cloneBy[x.subject];
+      return '<div class="inf-row"><div class="top"><strong>'+_infSubj(x.subject)+'</strong>'
         +'<span style="color:var(--danger);font-weight:700">'+(x.speed_kmh!=null?n(Math.round(x.speed_kmh))+' km/h':'same minute (∞)')+'</span>'
         +'<span style="font-size:0.7rem;color:var(--muted)">'+esc(x.from_tower)+' → '+esc(x.to_tower)+'</span></div>'
-        +'<div style="font-size:0.7rem;color:var(--muted)">'+x.distance_km+' km in '+x.dt_minutes+' min'
-        +(x.from_imei!==x.to_imei?' · IMEI changed '+esc(x.from_imei)+' → '+esc(x.to_imei):'')+'</div>'
-        +(cl?'<div style="font-size:0.7rem;color:var(--danger);margin-top:2px">⚠ '+esc(cl.verdict)+'</div>':'')+'</div>';
+        +'<div class="meta">'+x.distance_km+' km in '+x.dt_minutes+' min'+(x.from_imei!==x.to_imei?' · IMEI changed':'')+(cl?' · '+esc(cl.verdict):'')+'</div></div>';
     }).join('');
-    h+=_infCard('Impossible travel &amp; cloning',rep.impossible_travel.length+' flagged','var(--danger)',rows);
+    theme+=card('Impossible travel &amp; cloning',imp.length+' flagged','var(--danger)','crit',
+      'The same number registered in two places too far apart for the time between them &mdash; physically impossible. Almost always a <b>cloned/duplicated SIM</b> or a spoofed record.',rows);
   }
-
-  // Co-presence
-  const cps=rep.co_presence.filter(function(c){return c.convoy||c.hidden_link;});
-  if(cps.length){
-    const rows=cps.map(function(c){
-      return '<div style="padding:7px 0;border-top:1px solid var(--line)">'
-        +'<div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap">'+_infSubj(c.subject_a)+'<span style="color:var(--muted)">&amp;</span>'+_infSubj(c.subject_b)
-        +(c.hidden_link?_infChip('hidden link','var(--danger)'):'')+(c.convoy?_infChip('convoy','var(--warn)'):'')+'</div>'
-        +'<div style="font-size:0.7rem;color:var(--muted)">'+c.occurrences+'× over '+c.distinct_days+' day(s) · '
-        +(c.ever_called?'they also call each other':'never call each other')+' · '+esc((c.towers||[]).slice(0,3).join(', '))+'</div></div>';
-    }).join('');
-    h+=_infCard('Co-presence (convoy / hidden links)',cps.length,'var(--warn)',rows);
-  }
-
-  // Device & identity
-  if(rep.devices.sim_swaps.length||rep.devices.burner_handsets.length){
+  if(swaps.length||burners.length){
     let rows='';
-    rep.devices.sim_swaps.forEach(function(s){rows+='<div style="padding:6px 0;border-top:1px solid var(--line)"><strong>'+_infSubj(s.msisdn)+'</strong> '+_infChip('number on '+s.imeis.length+' handsets','var(--danger)')+'<div style="font-size:0.68rem;color:var(--muted)">IMEIs: '+esc(s.imeis.join(', '))+'</div></div>';});
-    rep.devices.burner_handsets.forEach(function(b){rows+='<div style="padding:6px 0;border-top:1px solid var(--line)"><strong>'+esc(b.imei)+'</strong> '+_infChip('handset with '+b.msisdns.length+' numbers','var(--warn)')+'<div style="font-size:0.68rem;color:var(--muted)">Numbers: '+b.msisdns.map(_infSubj).join(', ')+'</div></div>';});
-    h+=_infCard('Device &amp; identity anomalies',rep.devices.sim_swaps.length+rep.devices.burner_handsets.length,'var(--danger)',rows);
+    swaps.forEach(s=>{rows+='<div class="inf-row"><div class="top"><strong>'+_infSubj(s.msisdn)+'</strong>'+_infChip('on '+s.imeis.length+' handsets','var(--danger)')+'</div><div class="meta">IMEIs: '+esc(s.imeis.join(', '))+'</div></div>';});
+    burners.forEach(b=>{rows+='<div class="inf-row"><div class="top"><strong>'+esc(b.imei)+'</strong>'+_infChip(b.msisdns.length+' numbers','var(--warn)')+'</div><div class="meta">Numbers: '+b.msisdns.map(_infSubj).join(', ')+'</div></div>';});
+    theme+=card('SIM swaps &amp; burner handsets',swaps.length+burners.length,'var(--danger)','crit',
+      'One number seen on several handsets (possible <b>SIM swap/clone</b>), or one handset cycling several numbers (a <b>burner</b>).',rows);
   }
+  if(theme){h+='<div class="inf-theme">CDR · Identity &amp; device fraud</div>'+theme;}
 
-  // Behavioral
-  const beh=Object.entries(rep.behavioral);
-  const dark=beh.filter(function(e){return e[1].going_dark;});
-  const odd=beh.filter(function(e){return e[1].odd_hours&&e[1].odd_hours.flag;});
-  if(dark.length||odd.length){
-    let rows='';
-    dark.forEach(function(e){const d=e[1].going_dark;rows+='<div style="padding:6px 0;border-top:1px solid var(--line)"><strong>'+_infSubj(e[0])+'</strong> '+_infChip('going dark','var(--warn)')+'<div style="font-size:0.68rem;color:var(--muted)">'+d.encrypted_sessions+' encrypted/VPN sessions · calls before/after first: '+d.calls_sms_before+'/'+d.calls_sms_after+'</div></div>';});
-    odd.forEach(function(e){rows+='<div style="padding:6px 0;border-top:1px solid var(--line)"><strong>'+_infSubj(e[0])+'</strong> '+_infChip('odd hours','var(--muted)')+'<span style="font-size:0.68rem;color:var(--muted)"> '+Math.round(e[1].odd_hours.share*100)+'% of activity 01:00–05:00</span></div>';});
-    h+=_infCard('Behavioral flags',dark.length+odd.length,'var(--warn)',rows);
+  // -- Covert & structured coordination --
+  theme='';
+  if(hidden.length){
+    const rows=hidden.map(c=>'<div class="inf-row"><div class="top">'+_infSubj(c.subject_a)+'<span style="color:var(--muted)">&amp;</span>'+_infSubj(c.subject_b)+_infChip('never call','var(--danger)')+'</div>'
+      +'<div class="meta">Together '+c.occurrences+'× over '+c.distinct_days+' day(s) at '+esc((c.towers||[]).slice(0,3).join(', '))+'</div></div>').join('');
+    theme+=card('Hidden links',hidden.length,'var(--danger)','crit',
+      'Pairs repeatedly in the <b>same place at the same time</b> who <b>never call each other</b> &mdash; meeting in person while avoiding a phone trail.',rows);
   }
-
-  // VPN / proxy use
-  const vp=rep.vpn_proxy||[];
-  if(vp.length){
-    const rows=vp.map(function(v){
-      const col=v.confidence==='high'?'var(--danger)':(v.confidence==='medium'?'var(--warn)':'var(--muted)');
-      return '<div style="padding:7px 0;border-top:1px solid var(--line)"><div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap"><strong>'+_infSubj(v.subject)+'</strong>'+_infChip(v.confidence+' likelihood',col)
-        +(v.vpn_sessions?_infChip(v.vpn_sessions+' VPN'):'')+(v.proxy_tor_sessions?_infChip(v.proxy_tor_sessions+' proxy/Tor'):'')+'</div>'
-        +'<div style="font-size:0.68rem;color:var(--muted)">'+v.evidence.map(esc).join('<br>')+(v.endpoints&&v.endpoints.length?'<br>Endpoints: '+esc(v.endpoints.slice(0,4).join(', ')):'')+'</div></div>';
-    }).join('');
-    h+=_infCard('Possible VPN / proxy use',vp.length,'var(--warn)',rows);
+  if(convoys.length){
+    const rows=convoys.map(c=>'<div class="inf-row"><div class="top">'+_infSubj(c.subject_a)+'<span style="color:var(--muted)">&amp;</span>'+_infSubj(c.subject_b)+_infChip(c.distinct_days+' days','var(--warn)')+'</div>'
+      +'<div class="meta">Co-located '+c.occurrences+'× · '+(c.ever_called?'also call each other':'no calls between them')+'</div></div>').join('');
+    theme+=card('Convoys / co-movement',convoys.length,'var(--warn)','high',
+      'Subjects repeatedly together across <b>different days</b> &mdash; they travel together or meet regularly. Likely close associates.',rows);
   }
-
-  // Periodic contacts
-  if(rep.periodic_contacts.length){
-    const rows=rep.periodic_contacts.slice(0,15).map(function(p){return '<div style="padding:5px 0;border-top:1px solid var(--line);font-size:0.74rem">'+_infSubj(p.subject)+' → '+esc(p.peer)+' · '+p.calls+' calls every ~'+p.mean_gap_hours+'h <span style="color:var(--muted)">(regularity cv '+p.regularity_cv+')</span></div>';}).join('');
-    h+=_infCard('Periodic contact cadence',rep.periodic_contacts.length,'var(--accent)',rows);
+  if(periodic.length){
+    const rows=periodic.slice(0,12).map(p=>'<div class="inf-row" style="padding:5px 0;font-size:0.74rem">'+_infSubj(p.subject)+' → '+esc(p.peer)+' · '+p.calls+' calls every ~'+p.mean_gap_hours+'h <span style="color:var(--muted)">(very regular)</span></div>').join('');
+    theme+=card('Scheduled contact',periodic.length,'var(--accent)','info',
+      'Pairs who call on a <b>regular cadence</b> &mdash; a structured, recurring relationship rather than ad-hoc contact.',rows);
   }
+  if(theme){h+='<div class="inf-theme">CDR · Covert &amp; structured coordination</div>'+theme;}
 
-  // Movement profiles (most mobile)
-  const movers=Object.entries(rep.movement).map(function(e){return Object.assign({s:e[0]},e[1]);}).sort(function(a,b){return b.distinct_towers-a.distinct_towers;}).slice(0,10);
+  // -- Movement & behaviour --
+  theme='';
+  if(odd.length){
+    const rows=odd.map(e=>'<div class="inf-row" style="padding:5px 0;font-size:0.74rem">'+_infSubj(e[0])+' · '+Math.round(e[1].odd_hours.share*100)+'% of activity between 01:00–05:00</div>').join('');
+    theme+=card('Odd-hours activity',odd.length,'var(--accent)','info',
+      'Subjects unusually active in the <b>dead of night</b>.',rows);
+  }
+  const movers=Object.entries(C.movement||{}).map(e=>Object.assign({s:e[0]},e[1])).filter(m=>m.distinct_towers>1).sort((a,b)=>b.distinct_towers-a.distinct_towers).slice(0,8);
   if(movers.length){
-    const rows=movers.map(function(m){
-      const modes=Object.entries(m.modes||{}).map(function(x){return _infChip(x[0]+' ×'+x[1]);}).join('');
-      const home=m.anchors&&m.anchors.home?m.anchors.home.tower_id:'?';
-      const work=m.anchors&&m.anchors.work?m.anchors.work.tower_id:'?';
-      return '<div style="padding:6px 0;border-top:1px solid var(--line)"><div style="display:flex;gap:8px;flex-wrap:wrap"><strong>'+_infSubj(m.s)+'</strong>'
-        +'<span style="font-size:0.7rem;color:var(--muted)">'+m.distinct_towers+' towers · max leg '+m.max_leg_km+' km · home '+esc(home)+' / work '+esc(work)+'</span></div><div>'+modes+'</div></div>';
-    }).join('');
-    h+=_infCard('Movement profiles (most mobile)',movers.length+' shown','var(--accent)',rows);
+    const rows=movers.map(m=>{const home=m.anchors&&m.anchors.home?m.anchors.home.tower_id:'?';const work=m.anchors&&m.anchors.work?m.anchors.work.tower_id:'?';
+      return '<div class="inf-row" style="padding:5px 0"><div class="top"><strong>'+_infSubj(m.s)+'</strong><span style="font-size:0.7rem;color:var(--muted)">'+m.distinct_towers+' towers · home '+esc(home)+' / work '+esc(work)+'</span></div></div>';}).join('');
+    theme+=card('Movement &amp; anchors','top '+movers.length,'var(--accent)','info',
+      'Each subject&rsquo;s likely <b>home and work cells</b> and how mobile they are &mdash; context for the flags above.',rows);
+  }
+  if(theme){h+='<div class="inf-theme">CDR · Movement &amp; behaviour</div>'+theme;}
+
+  if(critN+highN+odd.length+periodic.length+movers.length===0){
+    h+='<div class="inf-blurb" style="padding:8px 0">No CDR (call) patterns flagged for the '+n(subjects)+' phone subjects.</div>';
   }
 
-  if(!h)h='<div style="padding:40px;text-align:center;color:var(--muted)">No data loaded. Upload CDR/IPDR records first.</div>';
+  // ===================== IPDR ANALYSIS (IP addresses) =====================
+  if(vp.length){
+    const rows=vp.slice(0,30).map(v=>{
+      return '<div class="inf-row"><div class="top"><strong style="font-family:monospace">'+esc(v.source_ip)+'</strong>'
+        +'<span style="font-size:0.66rem;color:var(--muted)">source IP</span>'
+        +(v.vpn_sessions?_infChip(v.vpn_sessions+' VPN','var(--danger)'):'')
+        +(v.proxy_tor_sessions?_infChip(v.proxy_tor_sessions+' proxy/Tor','var(--warn)'):'')+'</div>'
+        +'<div class="meta">'+v.evidence.map(esc).join(' · ')
+        +(v.servers&&v.servers.length?'<br>Servers: '+esc(v.servers.join(', ')):'')
+        +' · ports '+esc((v.ports||[]).join(', '))+'</div></div>';
+    }).join('');
+    h+='<div class="inf-theme">IPDR · Internet sessions</div>';
+    h+=card('VPN / proxy connections',vp.length+' source IP'+(vp.length===1?'':'s'),'var(--warn)','high',
+      'IPDR <b>data sessions</b> opened to VPN/Tor tunnel ports. Subjects here are <b>source IP addresses</b> (the IPDR record subject) &mdash; not linked to any phone number. The destination is the server reached.',rows);
+  }
+
+  h+='</div>';
   return h;
 }
+
 function buildInvestigationLeads(){
   const g=document.getElementById('aiLeadsGrid');if(!g)return;
   const c=getAiCache();

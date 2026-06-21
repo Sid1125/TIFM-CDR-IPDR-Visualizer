@@ -57,17 +57,29 @@
 
   <!-- DASHBOARD TAB -->
   <section id="tab-dashboard" class="tab-content active">
-    <div class="import-grid">
-      <label class="import-card"><span>CDR CSV</span><input type="file" id="cdrFile" accept=".csv"/><em>Upload call records</em></label>
-      <label class="import-card"><span>IPDR CSV</span><input type="file" id="ipdrFile" accept=".csv"/><em>Upload IP sessions</em></label>
-      <label class="import-card"><span>Tower CSV</span><input type="file" id="towerFile" accept=".csv"/><em>Upload tower registry</em></label>
-      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:200px;justify-content:flex-end">
-        <div id="importStatus" style="font-size:0.82rem;color:var(--muted);">Upload CSV files to begin.</div>
-        <button id="resetCaseBtn" class="btn btn-sm" style="border-color:var(--danger);color:var(--danger);background:none;white-space:nowrap">Reset Case</button>
+    <!-- Case hero -->
+    <div class="dash-hero">
+      <div class="dash-hero-info">
+        <div class="dash-hero-eyebrow">Investigation workspace</div>
+        <h2 id="dashHeroTitle">Dashboard</h2>
+        <p id="dashHeroSub">Upload CDR, IPDR and Tower CSVs to begin building the case.</p>
+      </div>
+      <div class="dash-upload">
+        <label class="up-card"><input type="file" id="cdrFile" accept=".csv"/><strong>CDR</strong><em>Call records</em></label>
+        <label class="up-card"><input type="file" id="ipdrFile" accept=".csv"/><strong>IPDR</strong><em>IP sessions</em></label>
+        <label class="up-card"><input type="file" id="towerFile" accept=".csv"/><strong>Towers</strong><em>Registry</em></label>
+        <div class="up-meta">
+          <span id="importStatus">Upload CSV files to begin.</span>
+          <button id="resetCaseBtn" class="btn-sm up-reset">Reset case</button>
+        </div>
       </div>
     </div>
+
+    <!-- Key metrics -->
+    <div class="dash-cards" id="dashCards"></div>
+
     <!-- Case Summary -->
-    <div class="case-summary" id="caseSummary" style="margin-bottom:0;border-bottom:1px solid var(--line)">
+    <div class="case-summary" id="caseSummary" style="margin-bottom:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden">
       <div class="cs-head" onclick="const b=this.nextElementSibling;const a=this.querySelector('.cs-arrow');const o=b.style.display!=='none';b.style.display=o?'none':'block';a.textContent=o?'&#9654;':'&#9660;';this.classList.toggle('open',!o)">
         <span class="cs-arrow">&#9660;</span>
         <span style="font-weight:700;font-size:0.85rem">Case Investigation Summary</span>
@@ -78,7 +90,7 @@
       </div>
     </div>
     <!-- Compare Periods -->
-    <div class="compare-bar" id="compareBar" style="display:none;padding:8px 16px;border-bottom:1px solid var(--line);align-items:center;gap:8px;flex-wrap:wrap">
+    <div class="compare-bar" id="compareBar" style="display:none;padding:8px 16px;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-weight:600;font-size:0.78rem;color:var(--muted)">Compare Periods:</span>
       <label style="font-size:0.72rem">From <input type="date" id="cpStartA" style="font-size:0.72rem;padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--text)"/></label>
       <label style="font-size:0.72rem">To <input type="date" id="cpEndA" style="font-size:0.72rem;padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--text)"/></label>
@@ -89,13 +101,14 @@
       <button id="cpCloseBtn" class="btn-sm" style="font-size:0.72rem;border-color:var(--line)">&#10005;</button>
       <span id="cpStatus" style="font-size:0.72rem;color:var(--muted);margin-left:4px"></span>
     </div>
-    <div class="compare-results" id="cpResults" style="display:none;padding:10px 16px;border-bottom:1px solid var(--line);font-size:0.78rem"></div>
-    <div class="dash-cards" id="dashCards"></div>
+    <div class="compare-results" id="cpResults" style="display:none;padding:10px 16px;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;font-size:0.78rem"></div>
+
+    <!-- Analysis panels -->
     <div class="dash-grid">
-      <div class="card"><h3>Network Overview</h3><div id="dashGraph" class="dash-graph-container"></div></div>
-      <div class="card"><h3>Service Distribution</h3><canvas id="dashPieChart"></canvas></div>
-      <div class="card" style="grid-column:span 2"><h3>Activity Heatmap</h3><canvas id="dashHeatmap"></canvas></div>
-      <div class="card"><h3>Top Contacts</h3><canvas id="dashBarChart"></canvas></div>
+      <div class="card"><div class="card-h">Network Overview<a class="card-act" onclick="switchTab('graph')">Open graph &rarr;</a></div><div id="dashGraph" class="dash-graph-container"></div></div>
+      <div class="card"><div class="card-h">Service Distribution<a class="card-act" onclick="switchTab('services')">Details &rarr;</a></div><canvas id="dashPieChart"></canvas></div>
+      <div class="card" style="grid-column:span 2"><div class="card-h">Activity Heatmap<a class="card-act" onclick="switchTab('charts')">Charts &rarr;</a></div><canvas id="dashHeatmap"></canvas></div>
+      <div class="card"><div class="card-h">Top Contacts<a class="card-act" onclick="switchTab('graph')">Network &rarr;</a></div><canvas id="dashBarChart"></canvas></div>
     </div>
   </section>
 
@@ -120,7 +133,8 @@
   <!-- MAP TAB -->
   <section id="tab-map" class="tab-content">
     <div class="map-toolbar">
-      <select id="mapSubject"><option value="">All subjects</option></select>
+      <input id="mapSubject" list="mapSubjectList" placeholder="All subjects — type to search…" autocomplete="off"/>
+      <datalist id="mapSubjectList"></datalist>
       <select id="mapMode">
         <option value="path">Movement Path</option>
         <option value="heat">Activity Heatmap</option>

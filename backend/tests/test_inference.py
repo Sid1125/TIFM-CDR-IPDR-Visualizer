@@ -55,7 +55,7 @@ class MovementTests(unittest.TestCase):
             cdr("900", "x", base, "T_CHN", *CHENNAI, imei="A"),
             cdr("900", "x", base + timedelta(minutes=18), "T_DEL", *DELHI, imei="B"),
         ]
-        streams = inf.build_subject_streams(recs, [])
+        streams = inf.build_subject_streams(recs)
         legs = inf.impossible_travel(streams["900"])
         self.assertEqual(len(legs), 1)
         self.assertGreater(legs[0]["speed_kmh"], 900)
@@ -68,7 +68,7 @@ class MovementTests(unittest.TestCase):
             cdr("950", "x", t, "T_CHN", *CHENNAI, imei="A"),
             cdr("950", "x", t, "T_DEL", *DELHI, imei="B"),
         ]
-        streams = inf.build_subject_streams(recs, [])
+        streams = inf.build_subject_streams(recs)
         legs = inf.impossible_travel(streams["950"])
         self.assertEqual(len(legs), 1)
         self.assertIsNone(legs[0]["speed_kmh"])
@@ -80,7 +80,7 @@ class MovementTests(unittest.TestCase):
             cdr("901", "x", base, "T1", 13.0000, 80.2000),
             cdr("901", "x", base + timedelta(minutes=10), "T2", 13.0180, 80.2000),
         ]
-        streams = inf.build_subject_streams(recs, [])
+        streams = inf.build_subject_streams(recs)
         self.assertEqual(inf.impossible_travel(streams["901"]), [])
 
     def test_anchors_home_and_work(self):
@@ -90,7 +90,7 @@ class MovementTests(unittest.TestCase):
             recs.append(cdr("902", "x", datetime(2026, 1, day, 23, 0), "HOME", 13.0, 80.0))
         for day in (6, 7, 8):  # Tue-Thu daytime
             recs.append(cdr("902", "x", datetime(2026, 1, day, 11, 0), "WORK", 13.1, 80.1))
-        streams = inf.build_subject_streams(recs, [])
+        streams = inf.build_subject_streams(recs)
         anchors = inf.infer_anchors(streams["902"])
         self.assertEqual(anchors["home"]["tower_id"], "HOME")
         self.assertEqual(anchors["work"]["tower_id"], "WORK")
@@ -107,7 +107,7 @@ class CoPresenceTests(unittest.TestCase):
         for day in (11, 18, 25):
             recs.append(cdr("C", "z", datetime(2026, 1, day, 20, 0), "TWR2", 13.0, 80.0))
             recs.append(cdr("D", "z", datetime(2026, 1, day, 20, 4), "TWR2", 13.0, 80.0))
-        streams = inf.build_subject_streams(recs, [])
+        streams = inf.build_subject_streams(recs)
         out = inf.co_presence(streams, inf._call_pairs(recs))
         by_pair = {(c["subject_a"], c["subject_b"]): c for c in out}
         self.assertTrue(by_pair[("A", "B")]["convoy"])
@@ -129,52 +129,35 @@ class BehavioralTests(unittest.TestCase):
         recs = [cdr("B", "P", base + timedelta(minutes=10 * i), "T", 13.0, 80.0) for i in range(5)]
         self.assertFalse(any(p["subject"] == "B" for p in inf.periodic_contacts(recs)))
 
-    def test_going_dark_on_vpn(self):
-        recs = [cdr("V", "x", datetime(2026, 1, 1, 10, 0), "T", 13.0, 80.0)]
-        # Hetzner range + OpenVPN port -> hosting/VPN category.
-        sessions = [
-            ipdr("V", "5.9.120.30", datetime(2026, 1, 2, 2, 0), "T", 13.0, 80.0, port=1194, proto="UDP"),
-            ipdr("V", "5.9.10.40", datetime(2026, 1, 3, 2, 0), "T", 13.0, 80.0, port=1194, proto="UDP"),
-        ]
-        streams = inf.build_subject_streams(recs, sessions)
-        dark = inf.going_dark(streams["V"])
-        self.assertIsNotNone(dark)
-        self.assertTrue(dark["flag"])
-
     def test_odd_hours_share(self):
         recs = [cdr("O", "x", datetime(2026, 1, d, 3, 0), "T", 13.0, 80.0) for d in range(1, 6)]
-        prof = inf.odd_hours_profile(inf.build_subject_streams(recs, [])["O"])
+        prof = inf.odd_hours_profile(inf.build_subject_streams(recs)["O"])
         self.assertTrue(prof["flag"])
 
 
 class VpnProxyTests(unittest.TestCase):
-    def test_explicit_vpn_port_flagged_high(self):
-        sessions = [
-            ipdr("VPNUSER", "5.9.120.30", datetime(2026, 1, 1, 10), "T", 13.0, 80.0, port=1194, proto="UDP"),
-            ipdr("VPNUSER", "5.9.50.10", datetime(2026, 1, 2, 10), "T", 13.0, 80.0, port=51820, proto="UDP"),
-        ]
-        out = inf.vpn_proxy_use(sessions)
-        self.assertTrue(out and out[0]["subject"] == "VPNUSER")
-        self.assertEqual(out[0]["confidence"], "high")
-        self.assertGreaterEqual(out[0]["vpn_sessions"], 1)
+    def _src(self, sessions, ip):
+        # Force a known source IP onto the IPDR fixtures (which default to 100.64.1.1).
+        for s in sessions:
+            s.source_ip = ip
+        return sessions
 
-    def test_concentration_to_hosting_endpoint_flagged(self):
-        # All traffic to one Hetzner (hosting) IP on 443 -> tunnel-like concentration.
-        sessions = [
-            ipdr("STEALTH", "5.9.99.99", datetime(2026, 1, 1, 10), "T", 13.0, 80.0, port=443, down=50_000_000),
-            ipdr("STEALTH", "5.9.99.99", datetime(2026, 1, 1, 12), "T", 13.0, 80.0, port=443, down=40_000_000),
-            ipdr("STEALTH", "142.250.1.1", datetime(2026, 1, 1, 13), "T", 13.0, 80.0, port=443, down=1_000_000),
-        ]
+    def test_vpn_port_flagged_with_source_ip_subject(self):
+        # The subject is the SOURCE IP, never a phone number; destination server is shown.
+        sessions = self._src([
+            ipdr("ignored-msisdn", "5.9.120.30", datetime(2026, 1, 1, 10), "T", 13.0, 80.0, port=1194, proto="UDP"),
+            ipdr("ignored-msisdn", "5.9.50.10", datetime(2026, 1, 2, 10), "T", 13.0, 80.0, port=51820, proto="UDP"),
+        ], "203.0.113.9")
         out = inf.vpn_proxy_use(sessions)
-        self.assertTrue(any(o["subject"] == "STEALTH" for o in out))
+        self.assertEqual(out[0]["source_ip"], "203.0.113.9")
+        self.assertEqual(out[0]["vpn_sessions"], 2)
+        self.assertNotIn("subject", out[0])  # no phone-number attribution
 
     def test_normal_browsing_not_flagged(self):
-        # Diverse content destinations, no tunnel ports -> no flag.
-        sessions = [
-            ipdr("NORMAL", "142.250.1.1", datetime(2026, 1, 1, 10), "T", 13.0, 80.0, port=443, down=3_000_000),
-            ipdr("NORMAL", "157.240.1.1", datetime(2026, 1, 1, 11), "T", 13.0, 80.0, port=443, down=2_000_000),
-            ipdr("NORMAL", "104.16.1.1", datetime(2026, 1, 1, 12), "T", 13.0, 80.0, port=443, down=2_500_000),
-        ]
+        sessions = self._src([
+            ipdr("x", "142.250.1.1", datetime(2026, 1, 1, 10), "T", 13.0, 80.0, port=443),
+            ipdr("x", "157.240.1.1", datetime(2026, 1, 1, 11), "T", 13.0, 80.0, port=443),
+        ], "203.0.113.9")
         self.assertEqual(inf.vpn_proxy_use(sessions), [])
 
 
@@ -196,7 +179,7 @@ class DeviceTests(unittest.TestCase):
             cdr("CL", "x", base, "T_CHN", *CHENNAI, imei="A"),
             cdr("CL", "x", base + timedelta(minutes=18), "T_DEL", *DELHI, imei="B"),
         ]
-        streams = inf.build_subject_streams(recs, [])
+        streams = inf.build_subject_streams(recs)
         dev = inf.device_anomalies(recs)
         out = inf.clone_corroboration(streams, dev)
         self.assertEqual(len(out), 1)
@@ -211,10 +194,15 @@ class OrchestrationTests(unittest.TestCase):
             cdr("CL", "HUB", base, "T_CHN", *CHENNAI, imei="A"),
             cdr("CL", "HUB", base + timedelta(minutes=18), "T_DEL", *DELHI, imei="B"),
         ]
-        rep = inf.run_all(recs, [])
-        self.assertEqual(rep["subjects"], 1)
-        self.assertEqual(len(rep["impossible_travel"]), 1)
-        self.assertEqual(len(rep["clone_corroboration"]), 1)
+        sessions = [ipdr("x", "5.9.1.1", base, "T", 13.0, 80.0, port=1194, proto="UDP")]
+        sessions[0].source_ip = "203.0.113.5"
+        rep = inf.run_all(recs, sessions)
+        # CDR block: phone-number subjects
+        self.assertEqual(rep["cdr"]["subjects"], 1)
+        self.assertEqual(len(rep["cdr"]["impossible_travel"]), 1)
+        self.assertEqual(len(rep["cdr"]["clone_corroboration"]), 1)
+        # IPDR block: IP subjects, kept separate
+        self.assertEqual(rep["ipdr"]["vpn_proxy"][0]["source_ip"], "203.0.113.5")
 
 
 if __name__ == "__main__":

@@ -749,15 +749,19 @@ def _ip_kind(ip):
 
 
 def _classify_by_ip(record: IPDRRecord):
-    """Resolve the strongest provider IP match. Prefer a content provider over an
-    access-network/ISP match, and the counterpart (destination) over the subject's
-    own (often carrier) IP."""
+    """Resolve the provider for the SERVICE the subject contacted — which is the
+    DESTINATION. The source IP is the subject's own endpoint (carrier/CGNAT, or for a
+    server-side record the host itself); using it to name the contacted service would
+    mislabel any session merely *originating* from an AWS/Meta IP as that service.
+    The source is therefore only consulted to identify the subject's access network
+    (ISP) when the destination matches nothing — never as a content-provider label."""
     dest = _match_ip(getattr(record, "destination_ip", None))
+    if dest:
+        return dest
     src = _match_ip(getattr(record, "source_ip", None))
-    for cand in (dest, src):
-        if cand and not cand[1]:
-            return cand
-    return dest or src
+    if src and src[1]:  # source identifies the subject's carrier (ISP) only
+        return src
+    return None
 
 
 def _category_for(family):

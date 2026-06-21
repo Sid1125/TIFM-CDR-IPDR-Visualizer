@@ -73,7 +73,10 @@ async def upload_cdr(
         if case_id:
             db.query(CDRRecord).filter(CDRRecord.case_id == case_id).delete(synchronize_session=False)
         else:
-            db.query(CDRRecord).delete(synchronize_session=False)
+            # No case selected: replace only un-cased records, never wipe other cases' data.
+            db.query(CDRRecord).filter(
+                (CDRRecord.case_id.is_(None)) | (CDRRecord.case_id == "")
+            ).delete(synchronize_session=False)
 
         for col in ["start_time", "end_time"]:
             if col in df.columns:
@@ -83,7 +86,7 @@ async def upload_cdr(
         for _, row in df.iterrows():
             records.append(
                 CDRRecord(
-                    case_id=case_id or _to_str(row.get("case_id")),
+                    case_id=case_id or None,  # the selected case is authoritative; never trust a CSV's own case_id column (it scatters rows into phantom, unregistered cases)
                     msisdn=_to_str(row.get("msisdn")),
                     imsi=_to_str(row.get("imsi")),
                     imei=_to_str(row.get("imei")),
@@ -139,7 +142,10 @@ async def upload_ipdr(
         if case_id:
             db.query(IPDRRecord).filter(IPDRRecord.case_id == case_id).delete(synchronize_session=False)
         else:
-            db.query(IPDRRecord).delete(synchronize_session=False)
+            # No case selected: replace only un-cased records, never wipe other cases' data.
+            db.query(IPDRRecord).filter(
+                (IPDRRecord.case_id.is_(None)) | (IPDRRecord.case_id == "")
+            ).delete(synchronize_session=False)
 
         for col in ["start_time", "end_time"]:
             if col in df.columns:
@@ -149,7 +155,7 @@ async def upload_ipdr(
         for _, row in df.iterrows():
             records.append(
                 IPDRRecord(
-                    case_id=case_id or _to_str(row.get("case_id")),
+                    case_id=case_id or None,  # the selected case is authoritative; never trust a CSV's own case_id column (it scatters rows into phantom, unregistered cases)
                     msisdn=_to_str(row.get("msisdn")),
                     imsi=_to_str(row.get("imsi")),
                     imei=_to_str(row.get("imei")),
