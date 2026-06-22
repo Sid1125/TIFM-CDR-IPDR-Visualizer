@@ -52,6 +52,15 @@ NET_RELAY_WINDOW_MIN = 30           # A->B then B->C within this window = onward
 NET_RELAY_MAX = 30
 NET_RECIPROCITY_MIN = 3             # min calls on the dominant side to report a one-way tie
 
+# Temporal/behavioral (Phase 3). Timestamps are naive and treated as a single (data-local)
+# timezone — day/hour bucketing assumes that convention.
+BASELINE_MIN_EVENTS = 5            # below this a per-subject baseline is "insufficient history"
+ESCALATION_MIN_DAYS = 5           # need this many active days to judge a trend (not one spike)
+ESCALATION_MIN_RECENT = 3         # recent-window mean must clear this absolute floor
+ESCALATION_FACTOR = 2.0           # ...and be >= this multiple of the earlier baseline
+DORMANCY_MIN_GAP_DAYS = 14        # silence >= this then renewed activity = reactivation
+FIRST_CONTACT_TOPN = 12
+
 # Tunnel/anonymisation destination ports, shared by going-dark and VPN/proxy detection.
 VPN_PORTS = {500, 1194, 1195, 1701, 1723, 4500, 51820, 51821}
 PROXY_TOR_PORTS = {1080, 3128, 8118, 9001, 9030, 9050, 9051}
@@ -417,6 +426,77 @@ def periodic_contacts(cdr_records):
     return sorted(out, key=lambda x: x["regularity_cv"])
 
 
+# --- C2. Temporal / behavioral (Phase 3) -----------------------------------------
+
+def subject_baseline(events):
+    """Per-subject daily-volume baseline, or None when history is too thin to judge.
+    Lets later flags be expressed relative to a subject's own normal rather than a fixed
+    threshold."""
+    days = Counter(e["time"].date() for e in events if e["time"])
+    if sum(days.values()) < BASELINE_MIN_EVENTS or len(days) < 2:
+        return None
+    counts = list(days.values())
+    span = (max(days) - min(days)).days + 1
+    return {"active_days": len(days), "span_days": span,
+            "daily_mean": round(statistics.mean(counts), 2),
+            "daily_std": round(statistics.pstdev(counts), 2),
+            "peak_day": str(max(days, key=days.get)), "peak": max(counts)}
+
+
+def escalation(events):
+    """Sustained rise in daily activity: the recent half's mean is well above the earlier
+    half (a trend, not a single spike — which `activity_bursts` already covers). None when
+    history is too short to establish a trend."""
+    per_day = sorted(Counter(e["time"].date() for e in events if e["time"]).items())
+    if len(per_day) < ESCALATION_MIN_DAYS:
+        return None
+    counts = [c for _, c in per_day]
+    half = len(counts) // 2
+    # Median halves so a single isolated spike (which activity_bursts already catches) can't
+    # masquerade as a sustained upward trend.
+    base_med = statistics.median(counts[:half]) if counts[:half] else 0.0
+    recent_med = statistics.median(counts[half:])
+    if base_med <= 0:
+        return None
+    factor = recent_med / base_med
+    if recent_med >= ESCALATION_MIN_RECENT and factor >= ESCALATION_FACTOR:
+        return {"baseline": round(base_med, 2), "recent": round(recent_med, 2),
+                "factor": round(factor, 2), "from_day": str(per_day[0][0]), "to_day": str(per_day[-1][0])}
+    return None
+
+
+def dormancy_reactivation(events):
+    """A long silence followed by renewed activity — possible re-tasking or a burner cycle."""
+    times = sorted(e["time"] for e in events if e["time"])
+    if len(times) < 4:
+        return None
+    best = None
+    for i in range(1, len(times)):
+        gap = (times[i] - times[i - 1]).days
+        if gap >= DORMANCY_MIN_GAP_DAYS and (best is None or gap > best["dormant_days"]):
+            best = {"dormant_days": gap, "went_quiet": str(times[i - 1].date()),
+                    "resumed": str(times[i].date()),
+                    "events_after": sum(1 for t in times if t >= times[i])}
+    return best
+
+
+def first_contacts(cdr_records):
+    """Earliest-ever interaction per pair; the most RECENT first-contacts are newly forming
+    ties (a new number being introduced into the network)."""
+    earliest: dict[tuple, datetime] = {}
+    for r in cdr_records:
+        a, b, t = _subject(r), getattr(r, "b_party_number", None), getattr(r, "start_time", None)
+        if not a or not b or a == b or not t:
+            continue
+        key = tuple(sorted((a, b)))
+        if key not in earliest or t < earliest[key]:
+            earliest[key] = t
+    rows = [{"subject_a": k[0], "subject_b": k[1], "first_contact": v.isoformat()}
+            for k, v in earliest.items()]
+    rows.sort(key=lambda x: x["first_contact"], reverse=True)
+    return rows[:FIRST_CONTACT_TOPN]
+
+
 # --- D. Identity & device --------------------------------------------------------
 
 def device_anomalies(records):
@@ -524,6 +604,8 @@ RISK_WEIGHTS = {
     "odd_hours": 7,
     "broker": 10,             # high-betweenness connector in the call graph
     "cut_point": 8,           # articulation point (removal splits the network)
+    "escalation": 9,          # sustained surge in activity vs the subject's own baseline
+    "reactivation": 7,        # long dormancy then renewed activity
     "tor_proxy": 18,          # IPDR: Tor/proxy port usage
     "vpn": 12,                # IPDR: VPN tunnel port usage
 }
@@ -626,6 +708,15 @@ def risk_scores(report):
         factors_by_subj[a["subject"]].append({"name": "Network cut-point", "weight": RISK_WEIGHTS["cut_point"],
             "detail": f"removing this number splits the network (degree {a['degree']})"})
 
+    # Temporal/behavioral shifts (Phase 3).
+    temporal = cdr.get("temporal", {})
+    for subj, e in temporal.get("escalation", {}).items():
+        factors_by_subj[subj].append({"name": "Escalating activity", "weight": RISK_WEIGHTS["escalation"],
+            "detail": f"recent daily volume {e['factor']}x the earlier baseline"})
+    for subj, d in temporal.get("dormancy", {}).items():
+        factors_by_subj[subj].append({"name": "Dormant then reactivated", "weight": RISK_WEIGHTS["reactivation"],
+            "detail": f"{d['dormant_days']}d silent, resumed {d['resumed']}"})
+
     cdr_scores = []
     for subj, factors in factors_by_subj.items():
         ev = movement.get(subj, {}).get("total_events", 0)
@@ -677,11 +768,18 @@ def run_all(cdr_records, ipdr_records):
     impossible = [{"subject": s, **m["impossible_travel"][0]}
                   for s, m in movement.items() if m["impossible_travel"]]
     behavioral = {}
+    temporal_esc, temporal_dorm = {}, {}
     for s, ev in streams.items():
         odd = odd_hours_profile(ev)
         bursts = activity_bursts(ev)
         if (odd and odd["flag"]) or bursts:
             behavioral[s] = {"odd_hours": odd, "bursts": bursts}
+        esc = escalation(ev)
+        if esc:
+            temporal_esc[s] = esc
+        dorm = dormancy_reactivation(ev)
+        if dorm:
+            temporal_dorm[s] = dorm
 
     devices = device_anomalies(cdr_records)
     report = {
@@ -692,6 +790,8 @@ def run_all(cdr_records, ipdr_records):
             "co_presence": co_presence(streams, call_pairs),
             "network": network_structure(cdr_records),
             "behavioral": behavioral,
+            "temporal": {"escalation": temporal_esc, "dormancy": temporal_dorm,
+                         "first_contacts": first_contacts(cdr_records)},
             "periodic_contacts": periodic_contacts(cdr_records),
             "devices": devices,
             "clone_corroboration": clone_corroboration(streams, devices),
@@ -734,4 +834,7 @@ def subject_timeline_db(db, subject: str, limit: int = 5000, case_id=None):
     events = streams.get(subject, [])
     return {"subject": subject, "event_count": len(events),
             "movement": subject_movement(events) if events else None,
+            "baseline": subject_baseline(events) if events else None,
+            "escalation": escalation(events) if events else None,
+            "dormancy": dormancy_reactivation(events) if events else None,
             "events": events}

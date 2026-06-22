@@ -281,5 +281,49 @@ class NetworkStructureTests(unittest.TestCase):
         self.assertTrue("Network broker" in names or "Network cut-point" in names)
 
 
+class TemporalTests(unittest.TestCase):
+    def _events(self, daycounts, start=datetime(2026, 1, 1, 10, 0)):
+        recs = []
+        for day, count in enumerate(daycounts):
+            for k in range(count):
+                recs.append(cdr("S", "P", start + timedelta(days=day, minutes=k), "T", 13.0, 80.0))
+        return inf.build_subject_streams(recs)["S"]
+
+    def test_escalation_trend_not_single_spike(self):
+        # rising trend: 1,1,2,2 -> 5,6,7,8  (recent half well above earlier half)
+        self.assertIsNotNone(inf.escalation(self._events([1, 1, 2, 2, 5, 6, 7, 8])))
+        # one isolated spike on otherwise-flat activity is NOT escalation
+        self.assertIsNone(inf.escalation(self._events([1, 1, 1, 1, 1, 9])))
+        # too little history
+        self.assertIsNone(inf.escalation(self._events([5, 6])))
+
+    def test_dormancy_reactivation(self):
+        base = datetime(2026, 1, 1, 10, 0)
+        recs = [cdr("S", "P", base, "T", 13.0, 80.0),
+                cdr("S", "P", base + timedelta(hours=1), "T", 13.0, 80.0),
+                cdr("S", "P", base + timedelta(days=30), "T", 13.0, 80.0),
+                cdr("S", "P", base + timedelta(days=30, hours=1), "T", 13.0, 80.0)]
+        d = inf.dormancy_reactivation(inf.build_subject_streams(recs)["S"])
+        self.assertIsNotNone(d)
+        self.assertGreaterEqual(d["dormant_days"], 14)
+
+    def test_first_contacts_ranked_recent_first(self):
+        base = datetime(2026, 1, 1, 10, 0)
+        recs = [cdr("A", "B", base, "T", 13.0, 80.0),
+                cdr("C", "D", base + timedelta(days=10), "T", 13.0, 80.0)]
+        fc = inf.first_contacts(recs)
+        self.assertEqual((fc[0]["subject_a"], fc[0]["subject_b"]), ("C", "D"))  # most recent first
+
+    def test_escalation_feeds_risk(self):
+        base = datetime(2026, 1, 1, 10, 0)
+        recs = []
+        for day, count in enumerate([1, 1, 2, 2, 6, 7, 8, 9]):
+            for k in range(count):
+                recs.append(cdr("S", "P", base + timedelta(days=day, minutes=k), "T", 13.0, 80.0))
+        risk = {r["subject"]: r for r in inf.run_all(recs, [])["cdr"]["risk"]}
+        self.assertIn("S", risk)
+        self.assertIn("Escalating activity", [f["name"] for f in risk["S"]["factors"]])
+
+
 if __name__ == "__main__":
     unittest.main()

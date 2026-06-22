@@ -2975,9 +2975,25 @@ function buildInferenceHtml(rep){
     theme+=card('Movement &amp; anchors','top '+movers.length,'var(--accent)','info',
       'Each subject&rsquo;s likely <b>home and work cells</b> and how mobile they are &mdash; context for the flags above.',rows);
   }
+  const temp=C.temporal||{};
+  const escE=Object.entries(temp.escalation||{}), dormE=Object.entries(temp.dormancy||{}), fc=temp.first_contacts||[];
+  if(escE.length||dormE.length||fc.length){
+    let rows='';
+    if(escE.length)
+      rows+='<div class="inf-row"><div class="top"><strong>Escalating activity</strong>'+_infChip('vs own baseline','var(--warn)')+'</div><div class="meta">'
+        +escE.slice(0,8).map(([s,e])=>_infSubj(s)+' <span style="color:var(--muted)">('+e.factor+'&times;, '+e.baseline+'&rarr;'+e.recent+'/day)</span>').join(' · ')+'</div></div>';
+    if(dormE.length)
+      rows+='<div class="inf-row"><div class="top"><strong>Dormant &rarr; reactivated</strong>'+_infChip('went quiet, resurfaced','var(--accent)')+'</div><div class="meta">'
+        +dormE.slice(0,8).map(([s,d])=>_infSubj(s)+' <span style="color:var(--muted)">('+d.dormant_days+'d silent, resumed '+esc(d.resumed)+')</span>').join(' · ')+'</div></div>';
+    if(fc.length)
+      rows+='<div class="inf-row"><div class="top"><strong>Newest first-contacts</strong>'+_infChip('new ties forming','var(--accent)')+'</div><div class="meta">'
+        +fc.slice(0,8).map(p=>_infSubj(p.subject_a)+' ~ '+esc(p.subject_b)+' <span style="color:var(--muted)">('+esc((p.first_contact||'').slice(0,10))+')</span>').join(' · ')+'</div></div>';
+    theme+=card('Behavioural shifts',(escE.length+dormE.length)+' flagged','var(--accent)','info',
+      '<b>Escalation</b> is a sustained surge in a subject&rsquo;s activity vs their own baseline (not a one-day spike). <b>Dormant&rarr;reactivated</b> is a long silence then renewed activity. <b>First-contacts</b> are the most recently-formed ties &mdash; new numbers entering the network.',rows);
+  }
   if(theme){h+='<div class="inf-theme">CDR · Movement &amp; behaviour</div>'+theme;}
 
-  if(critN+highN+odd.length+periodic.length+movers.length===0){
+  if(critN+highN+odd.length+periodic.length+movers.length+escE.length+dormE.length+(net.brokers||[]).length+(net.articulation_points||[]).length===0){
     h+='<div class="inf-blurb" style="padding:8px 0">No CDR (call) patterns flagged for the '+n(subjects)+' phone subjects.</div>';
   }
 
