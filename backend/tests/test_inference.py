@@ -369,5 +369,47 @@ class IpdrAnalyticsTests(unittest.TestCase):
         self.assertIn("Beaconing", [f["name"] for f in risk["10.0.0.9"]["factors"]])
 
 
+class GeospatialTests(unittest.TestCase):
+    def test_tower_dwell_and_mobility(self):
+        base = datetime(2026, 5, 1, 8, 0)
+        # 3h at T_CHN, then move to T_DEL
+        recs = [cdr("S", "x", base, "T_CHN", *CHENNAI),
+                cdr("S", "x", base + timedelta(hours=3), "T_CHN", *CHENNAI),
+                cdr("S", "x", base + timedelta(hours=4), "T_DEL", *DELHI)]
+        ev = inf.build_subject_streams(recs)["S"]
+        dwell = inf.tower_dwell(ev)
+        self.assertEqual(dwell[0]["tower_id"], "T_CHN")
+        self.assertGreaterEqual(dwell[0]["dwell_hours"], 3.0)
+        self.assertEqual(inf.mobility_class(ev)["class"], "highly mobile")  # Chennai->Delhi leg
+
+    def test_stationary_classification(self):
+        base = datetime(2026, 5, 1, 8, 0)
+        recs = [cdr("S", "x", base + timedelta(hours=i), "T_ONE", *CHENNAI) for i in range(4)]
+        self.assertEqual(inf.mobility_class(inf.build_subject_streams(recs)["S"])["class"], "stationary")
+
+    def test_shared_routes_detected(self):
+        base = datetime(2026, 5, 1, 8, 0)
+        seq = ["T1", "T2", "T3", "T4"]
+        coords = {"T1": CHENNAI, "T2": DELHI, "T3": MUMBAI_T, "T4": CHENNAI}
+        recs = []
+        for who in ("A", "B"):
+            for i, tw in enumerate(seq):
+                recs.append(cdr(who, "x", base + timedelta(hours=i), tw, *coords[tw]))
+        streams = inf.build_subject_streams(recs)
+        routes = inf.shared_routes(streams)
+        self.assertTrue(any({r["subject_a"], r["subject_b"]} == {"A", "B"} for r in routes))
+
+    def test_shared_route_feeds_risk(self):
+        base = datetime(2026, 5, 1, 8, 0)
+        seq = ["T1", "T2", "T3", "T4"]
+        coords = {"T1": CHENNAI, "T2": DELHI, "T3": MUMBAI_T, "T4": CHENNAI}
+        recs = []
+        for who in ("A", "B"):
+            for i, tw in enumerate(seq):
+                recs.append(cdr(who, "x", base + timedelta(hours=i), tw, *coords[tw]))
+        risk = {r["subject"]: r for r in inf.run_all(recs, [])["cdr"]["risk"]}
+        self.assertIn("Shared travel route", [f["name"] for f in risk["A"]["factors"]])
+
+
 if __name__ == "__main__":
     unittest.main()

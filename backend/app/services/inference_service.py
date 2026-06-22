@@ -71,6 +71,15 @@ BEACON_MIN_SPAN_H = 6            # ...over at least this long (else it's a burst
 DEST_RARE_MAX_SOURCES = 2        # a destination reached from <= this many sources is "rare"
 IPDR_TOPN = 15
 
+# Geospatial (Phase 5). Tower coordinates approximate the handset; towers with no coords are
+# skipped. Location precision is the tower point (no azimuth/range), so these are estimates.
+DWELL_TOPN = 6
+DWELL_MAX_GAP_H = 24             # ignore gaps longer than this (data holes, not real dwell)
+ROUTE_NGRAM = 3                  # length of the tower-sequence shingle
+ROUTE_MIN_SHARED = 2            # pairs sharing >= this many route segments = shared route
+ROUTE_COMMON_SUBS = 30         # a segment shared by more subjects than this is a common corridor (skip)
+ROUTE_MAX_SUBJECTS = 1500       # cap subjects shingled to bound cost
+
 # Tunnel/anonymisation destination ports, shared by going-dark and VPN/proxy detection.
 VPN_PORTS = {500, 1194, 1195, 1701, 1723, 4500, 51820, 51821}
 PROXY_TOR_PORTS = {1080, 3128, 8118, 9001, 9030, 9050, 9051}
@@ -219,7 +228,78 @@ def subject_movement(events):
         "modes": dict(modes),
         "max_leg_km": max_leg["distance_km"] if max_leg else 0,
         "impossible_travel": impossible_travel(events),
+        "dwell": tower_dwell(events),
+        "mobility": mobility_class(events),
     }
+
+
+def tower_dwell(events):
+    """Approximate time spent at each cell (attribute each inter-event gap to the tower the
+    subject was at when it started). Towers without coordinates still count for dwell but are
+    reported with null coords; implausibly long gaps (data holes) are ignored."""
+    located = [e for e in events if e.get("tower_id") and e.get("time")]
+    if len(located) < 2:
+        return []
+    dwell: dict[str, float] = defaultdict(float)
+    visits: Counter = Counter()
+    coords: dict[str, tuple] = {}
+    for i in range(len(located) - 1):
+        e, nxt = located[i], located[i + 1]
+        gap = (nxt["time"] - e["time"]).total_seconds() / 3600.0
+        if 0 < gap <= DWELL_MAX_GAP_H:
+            dwell[e["tower_id"]] += gap
+        visits[e["tower_id"]] += 1
+        if e.get("lat") is not None:
+            coords[e["tower_id"]] = (e["lat"], e["lon"])
+    visits[located[-1]["tower_id"]] += 1
+    rows = [{"tower_id": t, "dwell_hours": round(h, 1), "visits": visits[t],
+             "latitude": coords.get(t, (None, None))[0], "longitude": coords.get(t, (None, None))[1]}
+            for t, h in dwell.items()]
+    return sorted(rows, key=lambda x: -x["dwell_hours"])[:DWELL_TOPN]
+
+
+def mobility_class(events):
+    """Stationary vs mobile classification from the movement footprint (tower count + legs)."""
+    towers = {e["tower_id"] for e in events if e.get("tower_id")}
+    legs = [e["move"] for e in events if e.get("move")]
+    total_km = round(sum(l["distance_km"] for l in legs), 1)
+    max_km = max((l["distance_km"] for l in legs), default=0)
+    if len(towers) <= 1:
+        cls = "stationary"
+    elif len(towers) <= 3 and max_km < 25:
+        cls = "local"
+    elif max_km >= 100 or len(towers) >= 8:
+        cls = "highly mobile"
+    else:
+        cls = "mobile"
+    return {"class": cls, "distinct_towers": len(towers), "total_km": total_km, "max_leg_km": max_km}
+
+
+def shared_routes(streams):
+    """Pairs of subjects who repeatedly traverse the SAME ordered tower sequence — the path
+    analogue of point co-presence. Tower-sequence shingles keep it near-linear; very common
+    corridors (shared by many subjects) are dropped as non-distinctive."""
+    items = list(streams.items())[:ROUTE_MAX_SUBJECTS]
+    ngram_subs: dict[tuple, set] = defaultdict(set)
+    for subj, events in items:
+        seq = []
+        for e in events:
+            t = e.get("tower_id")
+            if t and (not seq or seq[-1] != t):  # dedup consecutive — ignore same-tower jitter
+                seq.append(t)
+        for i in range(len(seq) - ROUTE_NGRAM + 1):
+            ngram_subs[tuple(seq[i:i + ROUTE_NGRAM])].add(subj)
+    pair_shared: dict[tuple, set] = defaultdict(set)
+    for ng, subs in ngram_subs.items():
+        if len(subs) < 2 or len(subs) > ROUTE_COMMON_SUBS:
+            continue
+        ordered = sorted(subs)
+        for i in range(len(ordered)):
+            for j in range(i + 1, len(ordered)):
+                pair_shared[(ordered[i], ordered[j])].add(ng)
+    out = [{"subject_a": a, "subject_b": b, "shared_segments": len(ngs)}
+           for (a, b), ngs in pair_shared.items() if len(ngs) >= ROUTE_MIN_SHARED]
+    return sorted(out, key=lambda x: -x["shared_segments"])[:15]
 
 
 # --- B. Co-presence & network ----------------------------------------------------
@@ -724,6 +804,7 @@ RISK_WEIGHTS = {
     "cut_point": 8,           # articulation point (removal splits the network)
     "escalation": 9,          # sustained surge in activity vs the subject's own baseline
     "reactivation": 7,        # long dormancy then renewed activity
+    "shared_route": 8,        # repeatedly travels the same tower path as another subject
     "tor_proxy": 18,          # IPDR: Tor/proxy port usage
     "vpn": 12,                # IPDR: VPN tunnel port usage
     "exfil": 16,              # IPDR: asymmetric upload (exfiltration-shaped)
@@ -837,6 +918,15 @@ def risk_scores(report):
         factors_by_subj[subj].append({"name": "Dormant then reactivated", "weight": RISK_WEIGHTS["reactivation"],
             "detail": f"{d['dormant_days']}d silent, resumed {d['resumed']}"})
 
+    # Shared travel routes (Phase 5) — counted once per subject (most-shared partner).
+    route_partner: dict[str, int] = defaultdict(int)
+    for r in cdr.get("shared_routes", []):
+        route_partner[r["subject_a"]] = max(route_partner[r["subject_a"]], r["shared_segments"])
+        route_partner[r["subject_b"]] = max(route_partner[r["subject_b"]], r["shared_segments"])
+    for subj, seg in route_partner.items():
+        factors_by_subj[subj].append({"name": "Shared travel route", "weight": RISK_WEIGHTS["shared_route"],
+            "detail": f"repeats the same tower path as another subject ({seg} segment(s))"})
+
     cdr_scores = []
     for subj, factors in factors_by_subj.items():
         ev = movement.get(subj, {}).get("total_events", 0)
@@ -921,6 +1011,7 @@ def run_all(cdr_records, ipdr_records):
             "movement": movement,
             "impossible_travel": impossible,
             "co_presence": co_presence(streams, call_pairs),
+            "shared_routes": shared_routes(streams),
             "network": network_structure(cdr_records),
             "behavioral": behavioral,
             "temporal": {"escalation": temporal_esc, "dormancy": temporal_dorm,

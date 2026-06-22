@@ -2971,9 +2971,16 @@ function buildInferenceHtml(rep){
   const movers=Object.entries(C.movement||{}).map(e=>Object.assign({s:e[0]},e[1])).filter(m=>m.distinct_towers>1).sort((a,b)=>b.distinct_towers-a.distinct_towers).slice(0,8);
   if(movers.length){
     const rows=movers.map(m=>{const home=m.anchors&&m.anchors.home?m.anchors.home.tower_id:'?';const work=m.anchors&&m.anchors.work?m.anchors.work.tower_id:'?';
-      return '<div class="inf-row" style="padding:5px 0"><div class="top"><strong>'+_infSubj(m.s)+'</strong><span style="font-size:0.7rem;color:var(--muted)">'+m.distinct_towers+' towers · home '+esc(home)+' / work '+esc(work)+'</span></div></div>';}).join('');
+      const mob=m.mobility?m.mobility.class:'';const dwell=(m.dwell&&m.dwell.length)?' · longest dwell '+esc(m.dwell[0].tower_id)+' ('+m.dwell[0].dwell_hours+'h)':'';
+      return '<div class="inf-row" style="padding:5px 0"><div class="top"><strong>'+_infSubj(m.s)+'</strong>'+(mob?_infChip(mob,'var(--accent)'):'')+'<span style="font-size:0.7rem;color:var(--muted)">'+m.distinct_towers+' towers · home '+esc(home)+' / work '+esc(work)+dwell+'</span></div></div>';}).join('');
     theme+=card('Movement &amp; anchors','top '+movers.length,'var(--accent)','info',
-      'Each subject&rsquo;s likely <b>home and work cells</b> and how mobile they are &mdash; context for the flags above.',rows);
+      'Each subject&rsquo;s likely <b>home and work cells</b>, how mobile they are (stationary&rarr;highly&nbsp;mobile) and where they <b>dwell longest</b> &mdash; context for the flags above.',rows);
+  }
+  const routes=C.shared_routes||[];
+  if(routes.length){
+    const rows=routes.slice(0,10).map(r=>'<div class="inf-row" style="padding:5px 0"><div class="top">'+_infSubj(r.subject_a)+'<span style="color:var(--muted)">&amp;</span>'+_infSubj(r.subject_b)+_infChip(r.shared_segments+' shared segments','var(--warn)')+'</div></div>').join('');
+    theme+=card('Shared travel routes',routes.length,'var(--warn)','high',
+      'Pairs who repeatedly travel the <b>same ordered sequence of towers</b> &mdash; the path version of co-location (they move together, not just meet at a point). Common corridors everyone uses are filtered out.',rows);
   }
   const temp=C.temporal||{};
   const escE=Object.entries(temp.escalation||{}), dormE=Object.entries(temp.dormancy||{}), fc=temp.first_contacts||[];
@@ -2993,7 +3000,7 @@ function buildInferenceHtml(rep){
   }
   if(theme){h+='<div class="inf-theme">CDR · Movement &amp; behaviour</div>'+theme;}
 
-  if(critN+highN+odd.length+periodic.length+movers.length+escE.length+dormE.length+(net.brokers||[]).length+(net.articulation_points||[]).length===0){
+  if(critN+highN+odd.length+periodic.length+movers.length+escE.length+dormE.length+routes.length+(net.brokers||[]).length+(net.articulation_points||[]).length===0){
     h+='<div class="inf-blurb" style="padding:8px 0">No CDR (call) patterns flagged for the '+n(subjects)+' phone subjects.</div>';
   }
 
