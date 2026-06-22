@@ -1,0 +1,27 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# AI extras — run the fine-tuned TIFM model (Qwen2.5-3B-Instruct + LoRA adapter, 4-bit).
+#
+#   REQUIRES AN NVIDIA GPU WITH CUDA. The model is loaded in 4-bit via bitsandbytes,
+#   which needs CUDA — CPU-only machines cannot run it. On CPU, use the Ollama AI mode
+#   instead (no extra install).
+#
+# Install (from backend/, with the venv active):
+#   pip install -r requirements-ai.txt
+#
+# torch is pulled from the PyTorch CUDA 12.8 index below. If your CUDA/Python differs,
+# install the matching torch from https://pytorch.org/get-started/locally/ FIRST, then
+# run this file (it will skip reinstalling torch).
+#
+# The base model (Qwen/Qwen2.5-3B-Instruct, ~6 GB) downloads automatically from the
+# Hugging Face Hub on first use; the fine-tuned LoRA adapter already ships in this repo
+# under tifm_lora_output/ (Git LFS).
+# ─────────────────────────────────────────────────────────────────────────────
+
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.10.0
+transformers==5.10.2
+peft==0.19.1
+accelerate==1.13.0
+bitsandbytes==0.49.2
+safetensors==0.8.0

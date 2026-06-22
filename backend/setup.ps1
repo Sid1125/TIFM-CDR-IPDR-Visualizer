@@ -15,6 +15,11 @@ Write-Host '== 2/4  Dependencies ==' -ForegroundColor Cyan
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
+Write-Host 'Optional: the fine-tuned TIFM model (Qwen2.5-3B + LoRA) needs extra packages and an'
+Write-Host 'NVIDIA GPU. The Ollama AI mode works without them.'
+$aiDeps = Read-Host 'Install the fine-tuned-model dependencies now? (large download) [y/N]'
+if ($aiDeps -match '^[Yy]') { pip install -r requirements-ai.txt }
+
 Write-Host '== 3/4  Database configuration ==' -ForegroundColor Cyan
 if (Test-Path .env) {
   Write-Host 'backend\.env already exists - leaving it untouched.'

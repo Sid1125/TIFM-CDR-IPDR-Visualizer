@@ -21,6 +21,7 @@ spatiotemporal inference engine that surfaces investigative leads — all organi
 - [Database](#database)
 - [Running the app](#running-the-app)
 - [Usage guide](#usage-guide)
+- [AI & the fine-tuned model](#ai--the-fine-tuned-model)
 - [Input CSV formats](#input-csv-formats)
 - [Scripts](#scripts)
 - [Testing](#testing)
@@ -211,6 +212,31 @@ uvicorn app.main:app --reload          # add --port 8000 to be explicit
 
 > A case needs **both CDR and IPDR** for full coverage — CDR drives calls/movement/network,
 > IPDR drives internet-session attribution and VPN/proxy detection.
+
+---
+
+## AI & the fine-tuned model
+
+The **AI Insights** tab has two backends:
+
+- **Ollama (default, optional)** — point it at a local [Ollama](https://ollama.com) server.
+  No Python extras needed.
+- **Fine-tuned TIFM model** — a Qwen2.5-3B-Instruct model with a project-specific **LoRA
+  adapter** that ships in this repo (`backend/tifm_lora_output/`, via Git LFS). To enable it:
+
+  ```bash
+  cd backend
+  pip install -r requirements-ai.txt          # or answer "y" during setup.ps1 / setup.sh
+  ```
+
+  Then start the app and select **"FINE-TUNED TIFM"** in the AI tab. On first use the base
+  model (~6 GB) downloads automatically from the Hugging Face Hub; the LoRA adapter is already
+  present from the clone, so the model is ready to answer.
+
+  **Requires an NVIDIA GPU with CUDA** — the model loads in 4-bit (bitsandbytes). On CPU-only
+  machines use the Ollama mode instead. `requirements-ai.txt` pins the exact versions and the
+  PyTorch CUDA index; if your CUDA differs, install the matching `torch` from
+  [pytorch.org](https://pytorch.org/get-started/locally/) first.
 
 ---
 

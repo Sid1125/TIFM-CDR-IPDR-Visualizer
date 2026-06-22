@@ -19,6 +19,13 @@ echo "== 2/4  Dependencies =="
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
+echo "Optional: the fine-tuned TIFM model (Qwen2.5-3B + LoRA) needs extra packages and an"
+echo "NVIDIA GPU. The Ollama AI mode works without them."
+read -rp "Install the fine-tuned-model dependencies now? (large download) [y/N]: " AIDEPS
+if [[ "${AIDEPS:-N}" =~ ^[Yy] ]]; then
+  pip install -r requirements-ai.txt
+fi
+
 echo "== 3/4  Database configuration =="
 if [ -f .env ]; then
   echo "backend/.env already exists — leaving it untouched."
