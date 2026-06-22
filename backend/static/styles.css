@@ -611,11 +611,14 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 
 /* ===================== DASHBOARD REDESIGN ===================== */
 .dash-hero{display:flex;gap:20px;flex-wrap:wrap;align-items:center;justify-content:space-between;
-  background:linear-gradient(135deg,var(--accent-light),transparent 55%),var(--surface);
-  border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-bottom:16px}
+  background:linear-gradient(120deg,var(--accent-light) 0%,transparent 46%),var(--surface);
+  border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:18px;
+  box-shadow:0 1px 3px rgba(0,0,0,.05)}
 .dash-hero-info{min-width:240px;flex:1}
-.dash-hero-eyebrow{font-size:0.64rem;text-transform:uppercase;letter-spacing:0.09em;color:var(--accent);font-weight:700}
-.dash-hero-info h2{font-size:1.55rem;font-weight:700;margin:3px 0 5px;color:var(--text);line-height:1.1}
+.dash-hero-eyebrow{font-size:0.64rem;text-transform:uppercase;letter-spacing:0.09em;color:var(--accent);font-weight:700;
+  display:inline-flex;align-items:center;gap:6px}
+.dash-hero-eyebrow::before{content:'';width:14px;height:2px;background:var(--accent);border-radius:2px}
+.dash-hero-info h2{font-size:1.7rem;font-weight:700;margin:4px 0 6px;color:var(--text);line-height:1.1}
 .dash-hero-info p{font-size:0.84rem;color:var(--muted);line-height:1.55;max-width:600px}
 .dash-upload{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
 .up-card{position:relative;display:flex;flex-direction:column;justify-content:center;gap:1px;padding:10px 18px;
@@ -628,8 +631,8 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 .up-reset{border-color:var(--danger);color:var(--danger);background:none}
 
 .dash-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:11px;margin-bottom:16px}
-.dash-card{position:relative;background:var(--card-bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px 14px 18px;overflow:hidden;box-shadow:none}
-.dash-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:.8}
+.dash-card{position:relative;background:var(--card-bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px 14px 18px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.dash-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent);opacity:.85;border-radius:12px 0 0 12px}
 .dash-card.alert::before{background:var(--danger)}
 .dash-card.warn::before{background:var(--warn)}
 .dash-card.alert .dash-value{color:var(--danger)}
@@ -637,7 +640,8 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 .dash-value{font-size:1.5rem;font-weight:700;color:var(--text);line-height:1.1;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dash-detail{font-size:0.71rem;color:var(--muted)}
 
-.dash-grid .card{box-shadow:none}
+.dash-grid .card{box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .15s,border-color .15s}
+.dash-grid .card:hover{box-shadow:0 6px 18px rgba(0,0,0,.07);border-color:var(--accent-light)}
 .card-h{display:flex;align-items:center;gap:8px;font-size:0.72rem;font-weight:700;color:var(--text);
   text-transform:uppercase;letter-spacing:0.04em;margin-bottom:10px;flex-shrink:0}
 .card-h::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}

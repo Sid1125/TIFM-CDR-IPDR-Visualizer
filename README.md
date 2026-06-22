@@ -1,5 +1,8 @@
-# Project ARGUS
-### Advanced Records & Geospatial Unified Surveillance
+<div align="center">
+  <img src="backend/static/logo.png" alt="Project ARGUS" width="300"/>
+</div>
+
+<h1 align="center">Project ARGUS</h1>
 
 A full-stack telecom forensics platform for analysing **Call Detail Records (CDR)**, **IP
 Data Records (IPDR)** and **cell-tower locations**. It reconstructs communication and
