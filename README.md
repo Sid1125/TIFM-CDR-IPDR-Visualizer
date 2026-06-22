@@ -49,7 +49,7 @@ spatiotemporal inference engine that surfaces investigative leads — all organi
 | Layer | Technology |
 |-------|-----------|
 | Backend | Python 3.10+, FastAPI, SQLAlchemy, Pandas, NetworkX |
-| Database | PostgreSQL (recommended) — automatic SQLite fallback if it can't connect |
+| Database | PostgreSQL (primary) — automatic SQLite fallback only if unreachable |
 | Frontend | Vanilla-JS SPA served by FastAPI (no build step) |
 | Visualisation | D3.js v7, Chart.js 4, Leaflet 1.9 (+ draw, heat), Turf.js |
 | Auth | Session cookies, PBKDF2-SHA256 (210k iterations) |
@@ -60,8 +60,9 @@ spatiotemporal inference engine that surfaces investigative leads — all organi
 ## Prerequisites
 
 - **Python 3.10 or newer** (developed on 3.14). Check: `python --version`.
-- **PostgreSQL 13+** — *recommended*. If unavailable, the app automatically falls back to a
-  local SQLite file, so Postgres is **optional** for a quick trial.
+- **PostgreSQL 13+** — the primary database. Install and start it before setup
+  (the setup script creates the `cdrdb` database for you). SQLite is only an automatic
+  fallback/backup if Postgres can't be reached — not the intended way to run.
 - **Git** (to clone).
 - **Ollama** *(optional)* — only for the AI Insights tab. See <https://ollama.com>.
 
@@ -71,7 +72,7 @@ No Node.js/npm is required — the frontend is plain static files served by the 
 
 ## Quick start (setup script)
 
-From the **`backend/`** directory:
+With **PostgreSQL installed and running**, from the **`backend/`** directory:
 
 **Windows (PowerShell)**
 ```powershell
@@ -86,10 +87,17 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-The script creates a virtual environment, installs dependencies, copies `.env.example` →
-`.env`, and creates the Postgres database (if you configured one). It then prints the
-command to start the app. **Edit `backend/.env`** when prompted (database URL + admin
-password), then run the app as shown below.
+The script creates the virtual environment, installs dependencies, **prompts for your
+PostgreSQL connection** (host / port / user / password / database), writes it to
+`backend/.env`, and **creates the `cdrdb` database**. Then just run the dashboard:
+
+```bash
+uvicorn app.main:app --reload     # http://127.0.0.1:8000  (login: admin / admin12345)
+```
+
+On first run the tables and the default admin user are created automatically. That's the
+whole flow: **clone → run setup → run the dashboard.** (Leaving the password blank during
+setup falls back to SQLite — handy for a quick look, but Postgres is the intended database.)
 
 ---
 
@@ -123,13 +131,13 @@ python scripts/init_db.py
 
 `backend/.env` (created from `.env.example`):
 
-```env
-# PostgreSQL (recommended). If this connection fails the app falls back to SQLite.
-DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/cdrdb
-# Or, for the simplest no-Postgres start:
-# DATABASE_URL=sqlite:///./cdrdb.sqlite3
+The setup script writes this for you; you normally won't edit it by hand.
 
-APP_NAME=CDR/IPDR Investigation Visualizer
+```env
+# PRIMARY database — PostgreSQL.
+DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/cdrdb
+
+APP_NAME=Project ARGUS — Advanced Records & Geospatial Unified Surveillance
 
 AUTH_SESSION_COOKIE_NAME=gpcssi_session
 AUTH_SESSION_TTL_HOURS=168
@@ -143,22 +151,23 @@ AUTH_BOOTSTRAP_ROLE=admin
 # ASN_RANGES_CSV=data/asn_ranges.csv
 ```
 
-If you don't create a `.env` at all, the app still runs — it defaults to a local SQLite
-file (`backend/cdrdb.sqlite3`). Create `.env` to use PostgreSQL or change the admin password.
+SQLite is **only a fallback**: if no `.env` exists or Postgres can't be reached, the app
+quietly uses a local `backend/cdrdb.sqlite3` so it never hard-crashes — but the intended
+database is PostgreSQL.
 
 ---
 
 ## Database
 
-**PostgreSQL (recommended)**
-1. Ensure the server is running and you have a user/password.
-2. Put the connection string in `DATABASE_URL`.
+**PostgreSQL (primary)** — the setup script does steps 2–3 for you:
+1. Install & start PostgreSQL; have a user/password ready.
+2. Set `DATABASE_URL` in `backend/.env`.
 3. `python scripts/init_db.py` creates the `cdrdb` database if missing.
-4. On first app start, tables and the default admin user are created automatically.
+4. On first app start, the tables and default admin user are created automatically.
 
-**SQLite (zero-config)** — set `DATABASE_URL=sqlite:///./cdrdb.sqlite3` (or just let the
-automatic fallback kick in if Postgres can't connect). A `backend/cdrdb.sqlite3` file is
-created on demand.
+**SQLite (fallback/backup)** — used automatically when Postgres isn't configured/reachable,
+or explicitly via `DATABASE_URL=sqlite:///./cdrdb.sqlite3`. Created on demand at
+`backend/cdrdb.sqlite3`.
 
 **Migrating SQLite → PostgreSQL** (if you started on SQLite and want to move):
 ```bash
