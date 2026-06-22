@@ -2830,7 +2830,7 @@ function _infCard(title,count,color,body){
     +(count!=null?'<span class="count">'+count+'</span>':'')
     +'</div>'+(body||'')+'</div>';
 }
-function _infChip(t,c){return '<span class="inf-chip"'+(c?' style="color:'+c+'"':'')+'>'+esc(t)+'</span>';}
+function _infChip(t,c,title){return '<span class="inf-chip"'+(c?' style="color:'+c+'"':'')+(title?' title="'+esc(title)+'"':'')+'>'+esc(t)+'</span>';}
 function _infSubj(s){return '<a class="inf-link" onclick="showProfile(\''+esc(s)+'\')">'+esc(s)+'</a>';}
 function buildInferenceHtml(rep){
   const C=rep.cdr||{}, I=rep.ipdr||{};
@@ -2849,24 +2849,14 @@ function buildInferenceHtml(rep){
   const periodic=C.periodic_contacts||[];
   const vp=I.vpn_proxy||[];
 
-  // ----- Persons of interest (CDR phone-number subjects only) -----
-  const poi={};
-  const flag=(subj,label,sev,w)=>{
-    if(!subj)return;
-    if(!poi[subj])poi[subj]={flags:[],score:0,sev:'info'};
-    if(!poi[subj].flags.some(f=>f.label===label)){poi[subj].flags.push({label,sev});poi[subj].score+=w;}
-    const rank={info:0,high:1,crit:2};
-    if(rank[sev]>rank[poi[subj].sev])poi[subj].sev=sev;
-  };
-  imp.forEach(x=>flag(x.subject,'Impossible travel','crit',5));
-  (C.clone_corroboration||[]).forEach(c=>{if(c.number_on_multiple_handsets)flag(c.subject,'Cloned SIM','crit',5);});
-  swaps.forEach(s=>flag(s.msisdn,'Multiple handsets','crit',4));
-  burners.forEach(b=>b.msisdns.forEach(m=>flag(m,'Shared handset','high',3)));
-  hidden.forEach(c=>{flag(c.subject_a,'Covert meetings','crit',4);flag(c.subject_b,'Covert meetings','crit',4);});
-  convoys.forEach(c=>{flag(c.subject_a,'Convoy','high',3);flag(c.subject_b,'Convoy','high',3);});
-  odd.forEach(e=>flag(e[0],'Odd-hours','info',1));
-  periodic.forEach(p=>flag(p.subject,'Scheduled contact','info',1));
-  const poiList=Object.entries(poi).sort((a,b)=>b[1].score-a[1].score);
+  // ----- Persons of interest: the engine's composite risk leaderboard (CDR phone subjects) -----
+  const cdrRisk=C.risk||[];
+  const bandStyle=b=>({
+    critical:{l:'Critical',c:'var(--danger)',s:'crit'},
+    high:    {l:'High',    c:'var(--warn)',  s:'high'},
+    elevated:{l:'Elevated',c:'var(--accent)',s:'info'},
+    low:     {l:'Low',     c:'var(--muted)', s:'info'},
+  }[b]||{l:b||'—',c:'var(--muted)',s:'info'});
 
   const critN=imp.length+swaps.length+burners.length+hidden.length;
   const highN=convoys.length;
@@ -2887,15 +2877,17 @@ function buildInferenceHtml(rep){
     +'</div>';
 
   // ===================== CDR ANALYSIS (phone numbers) =====================
-  if(poiList.length){
+  if(cdrRisk.length){
     let rows='';
-    poiList.slice(0,10).forEach(([s,d])=>{
-      rows+='<div class="inf-poi-row"><span class="inf-sev '+d.sev+'">'+(d.sev==='crit'?'Critical':d.sev==='high'?'Notable':'Context')+'</span>'
-        +'<span class="who">'+_infSubj(s)+'</span>'
-        +'<span class="flags">'+d.flags.map(f=>_infChip(f.label,f.sev==='crit'?'var(--danger)':f.sev==='high'?'var(--warn)':'var(--accent)')).join('')+'</span></div>';
+    cdrRisk.slice(0,12).forEach(r=>{
+      const bs=bandStyle(r.band);
+      rows+='<div class="inf-poi-row">'
+        +'<span class="inf-sev '+bs.s+'" title="composite risk score '+r.score+'/100, from '+r.events+' event(s)">'+bs.l+' &middot; '+r.score+'</span>'
+        +'<span class="who">'+_infSubj(r.subject)+'</span>'
+        +'<span class="flags">'+(r.factors||[]).map(f=>_infChip(f.name,bs.c,f.detail+(f.weight?' (+'+f.weight+')':''))).join('')+'</span></div>';
     });
-    h+=_infCard('Persons of interest','phone subjects, ranked','var(--danger)',
-      '<div class="inf-blurb">CDR phone-number subjects sorted by the seriousness of what was flagged. Start here. Click a number to open its profile.</div>'+rows);
+    h+=_infCard('Persons of interest','phone subjects, risk-ranked','var(--danger)',
+      '<div class="inf-blurb">CDR phone-number subjects ranked by a composite <b>0&ndash;100 risk score</b>. Each chip is a contributing factor (hover to see why and its weight); correlated signals are de-duplicated and thin-evidence subjects are capped. The score is a triage aid, not proof. Click a number to open its profile.</div>'+rows);
   }
 
   const card=(title,count,color,sev,blurb,rows)=>_infCard(

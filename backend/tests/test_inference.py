@@ -205,5 +205,46 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(rep["ipdr"]["vpn_proxy"][0]["source_ip"], "203.0.113.5")
 
 
+class RiskScoreTests(unittest.TestCase):
+    def test_score_factors_cap_and_bands(self):
+        self.assertEqual(inf._score_factors([{"weight": 80}, {"weight": 80}], 10), (100, "critical"))
+        self.assertEqual(inf._score_factors([{"weight": 30}, {"weight": 25}], 10), (55, "high"))
+        self.assertEqual(inf._score_factors([{"weight": 22}], 10), (22, "low"))
+        # low-evidence: raw 55 but only 2 backing events -> capped to 49 ("elevated")
+        self.assertEqual(inf._score_factors([{"weight": 30}, {"weight": 25}], 2), (49, "elevated"))
+
+    def test_cloned_sim_dedup_and_breakdown(self):
+        base = datetime(2026, 2, 6, 14, 0)
+        recs = [
+            cdr("900", "x", base, "T_CHN", *CHENNAI, imei="A"),
+            cdr("900", "x", base + timedelta(minutes=18), "T_DEL", *DELHI, imei="B"),
+            cdr("900", "x", base + timedelta(minutes=40), "T_DEL", *DELHI, imei="B"),
+        ]
+        top = inf.run_all(recs, [])["cdr"]["risk"][0]
+        self.assertEqual(top["subject"], "900")
+        names = [f["name"] for f in top["factors"]]
+        # correlated identity signals collapse into ONE "Cloned SIM" factor (no double count)
+        self.assertIn("Cloned SIM", names)
+        self.assertNotIn("Impossible travel", names)
+        self.assertNotIn("SIM on multiple handsets", names)
+        self.assertTrue(all(f.get("detail") for f in top["factors"]))  # transparent breakdown
+
+    def test_cdr_ipdr_leaderboards_disjoint(self):
+        # Core invariant: a subject is never scored in both leaderboards.
+        base = datetime(2026, 2, 6, 14, 0)
+        recs = [
+            cdr("900", "x", base, "T_CHN", *CHENNAI, imei="A"),
+            cdr("900", "x", base + timedelta(minutes=18), "T_DEL", *DELHI, imei="B"),
+        ]
+        sessions = [ipdr("x", "5.9.1.1", base, "T", 13.0, 80.0, port=9050, proto="TCP")]
+        sessions[0].source_ip = "198.51.100.7"
+        rep = inf.run_all(recs, sessions)
+        cdr_subs = {r["subject"] for r in rep["cdr"]["risk"]}
+        ipdr_subs = {r["subject"] for r in rep["ipdr"]["risk"]}
+        self.assertTrue(cdr_subs)
+        self.assertIn("198.51.100.7", ipdr_subs)
+        self.assertEqual(cdr_subs & ipdr_subs, set())
+
+
 if __name__ == "__main__":
     unittest.main()

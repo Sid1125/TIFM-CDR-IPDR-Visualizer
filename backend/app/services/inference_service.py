@@ -379,6 +379,141 @@ def vpn_proxy_use(ipdr_records):
     return sorted(out, key=lambda x: -(x["vpn_sessions"] + x["proxy_tor_sessions"]))
 
 
+# --- Composite risk scoring ------------------------------------------------------
+# Each signal contributes POINTS; a subject's score is the (capped) sum, banded for
+# triage. Weights are deliberately explicit and the per-factor breakdown is ALWAYS
+# returned, so a human can judge the basis — the score is a triage aid, never proof.
+# Correlated identity signals (impossible-travel / cloned-SIM / multi-handset) describe
+# the same underlying event, so they are de-duplicated (only the strongest is counted).
+# CDR (phone) subjects are scored from CDR signals only and IPDR (IP) subjects from IPDR
+# signals only — the two leaderboards never mix.
+RISK_WEIGHTS = {
+    "cloned_sim": 30,         # impossible travel + number on multiple handsets (combined)
+    "impossible_travel": 22,  # impossible travel alone (no handset corroboration)
+    "sim_multi_handset": 16,  # number on multiple handsets, no impossible travel
+    "burner_handset": 14,     # number shares a handset with other numbers
+    "hidden_link": 16,        # repeated co-presence with someone never called
+    "convoy": 11,             # repeated co-movement with a known associate
+    "periodic_contact": 8,    # regular scheduled cadence
+    "activity_burst": 8,
+    "odd_hours": 7,
+    "tor_proxy": 18,          # IPDR: Tor/proxy port usage
+    "vpn": 12,                # IPDR: VPN tunnel port usage
+}
+RISK_BANDS = ((75, "critical"), (50, "high"), (25, "elevated"), (0, "low"))
+LOW_EVIDENCE_MIN = 3   # subjects backed by fewer events than this can't exceed "elevated"
+LOW_EVIDENCE_CAP = 49
+
+
+def _risk_band(score: int) -> str:
+    for threshold, name in RISK_BANDS:
+        if score >= threshold:
+            return name
+    return "low"
+
+
+def _score_factors(factors, evidence_count):
+    """Sum factor weights (capped 0-100); low-evidence subjects can't exceed 'elevated'."""
+    raw = min(100, sum(f["weight"] for f in factors))
+    if evidence_count < LOW_EVIDENCE_MIN and raw > LOW_EVIDENCE_CAP:
+        raw = LOW_EVIDENCE_CAP
+    return raw, _risk_band(raw)
+
+
+def risk_scores(report):
+    """Roll already-computed inferences into a transparent, ranked per-subject score.
+    Returns {"cdr": [...], "ipdr": [...]} — two independent leaderboards. The `factors`
+    list is intentionally open so later analytics can contribute additional factors."""
+    cdr = report.get("cdr", {})
+    ipdr = report.get("ipdr", {})
+    movement = cdr.get("movement", {})
+    factors_by_subj: dict[str, list] = defaultdict(list)
+
+    # Identity/movement family — de-duplicated: cloned-SIM > impossible-travel > multi-handset.
+    impossible_subjs = {row["subject"] for row in cdr.get("impossible_travel", [])}
+    clone = {c["subject"]: c for c in cdr.get("clone_corroboration", [])}
+    sim_swap_subjs = {s["msisdn"] for s in cdr.get("devices", {}).get("sim_swaps", [])}
+    for subj in impossible_subjs | set(clone) | sim_swap_subjs:
+        c = clone.get(subj)
+        if c and c.get("number_on_multiple_handsets"):
+            factors_by_subj[subj].append({"name": "Cloned SIM", "weight": RISK_WEIGHTS["cloned_sim"],
+                "detail": f"{c['impossible_legs']} impossible-travel leg(s) + number on multiple handsets"})
+        elif subj in impossible_subjs:
+            factors_by_subj[subj].append({"name": "Impossible travel", "weight": RISK_WEIGHTS["impossible_travel"],
+                "detail": "physically impossible movement between consecutive locations"})
+        elif subj in sim_swap_subjs:
+            factors_by_subj[subj].append({"name": "SIM on multiple handsets", "weight": RISK_WEIGHTS["sim_multi_handset"],
+                "detail": "number used across more than one IMEI"})
+
+    burner_imeis: dict[str, list] = defaultdict(list)
+    for b in cdr.get("devices", {}).get("burner_handsets", []):
+        for m in b["msisdns"]:
+            burner_imeis[m].append(b["imei"])
+    for subj, imeis in burner_imeis.items():
+        factors_by_subj[subj].append({"name": "Shared/burner handset", "weight": RISK_WEIGHTS["burner_handset"],
+            "detail": f"shares handset(s) with other numbers: {', '.join(imeis[:3])}"})
+
+    # Co-presence — convoy / hidden link, counted once per subject.
+    hidden_assoc: dict[str, set] = defaultdict(set)
+    convoy_assoc: dict[str, set] = defaultdict(set)
+    for pair in cdr.get("co_presence", []):
+        a, b = pair["subject_a"], pair["subject_b"]
+        if pair.get("hidden_link"):
+            hidden_assoc[a].add(b); hidden_assoc[b].add(a)
+        elif pair.get("convoy"):
+            convoy_assoc[a].add(b); convoy_assoc[b].add(a)
+    for subj, assoc in hidden_assoc.items():
+        factors_by_subj[subj].append({"name": "Hidden link", "weight": RISK_WEIGHTS["hidden_link"],
+            "detail": f"repeatedly co-located with {len(assoc)} subject(s) never called"})
+    for subj, assoc in convoy_assoc.items():
+        factors_by_subj[subj].append({"name": "Convoy / associate", "weight": RISK_WEIGHTS["convoy"],
+            "detail": f"repeated co-movement with {len(assoc)} associate(s)"})
+
+    # Behavioral.
+    for subj, beh in cdr.get("behavioral", {}).items():
+        odd = beh.get("odd_hours")
+        if odd and odd.get("flag"):
+            factors_by_subj[subj].append({"name": "Odd-hours activity", "weight": RISK_WEIGHTS["odd_hours"],
+                "detail": f"{int(odd['share'] * 100)}% of activity between 01:00-05:00"})
+        if beh.get("bursts"):
+            factors_by_subj[subj].append({"name": "Activity burst", "weight": RISK_WEIGHTS["activity_burst"],
+                "detail": f"{len(beh['bursts'])} day(s) of abnormally high volume"})
+
+    periodic_peers: dict[str, int] = defaultdict(int)
+    for p in cdr.get("periodic_contacts", []):
+        periodic_peers[p["subject"]] += 1
+    for subj, n in periodic_peers.items():
+        factors_by_subj[subj].append({"name": "Scheduled contact", "weight": RISK_WEIGHTS["periodic_contact"],
+            "detail": f"regular call cadence with {n} peer(s)"})
+
+    cdr_scores = []
+    for subj, factors in factors_by_subj.items():
+        ev = movement.get(subj, {}).get("total_events", 0)
+        score, band = _score_factors(factors, ev)
+        cdr_scores.append({"subject": subj, "score": score, "band": band, "events": ev,
+                           "factors": sorted(factors, key=lambda f: -f["weight"])})
+    cdr_scores.sort(key=lambda x: (-x["score"], x["subject"]))
+
+    ipdr_scores = []
+    for row in ipdr.get("vpn_proxy", []):
+        factors = []
+        if row.get("proxy_tor_sessions"):
+            factors.append({"name": "Tor/proxy", "weight": RISK_WEIGHTS["tor_proxy"],
+                            "detail": f"{row['proxy_tor_sessions']} session(s) on Tor/proxy ports"})
+        if row.get("vpn_sessions"):
+            factors.append({"name": "VPN tunnel", "weight": RISK_WEIGHTS["vpn"],
+                            "detail": f"{row['vpn_sessions']} session(s) on VPN tunnel ports"})
+        if not factors:
+            continue
+        ev = row.get("vpn_sessions", 0) + row.get("proxy_tor_sessions", 0)
+        score, band = _score_factors(factors, ev)
+        ipdr_scores.append({"subject": row["source_ip"], "score": score, "band": band,
+                            "events": ev, "factors": factors})
+    ipdr_scores.sort(key=lambda x: (-x["score"], x["subject"]))
+
+    return {"cdr": cdr_scores, "ipdr": ipdr_scores}
+
+
 # --- Orchestration ---------------------------------------------------------------
 
 def _call_pairs(cdr_records):
@@ -409,7 +544,7 @@ def run_all(cdr_records, ipdr_records):
             behavioral[s] = {"odd_hours": odd, "bursts": bursts}
 
     devices = device_anomalies(cdr_records)
-    return {
+    report = {
         "cdr": {
             "subjects": len(streams),
             "movement": movement,
@@ -425,6 +560,13 @@ def run_all(cdr_records, ipdr_records):
             "vpn_proxy": vpn_proxy_use(ipdr_records),
         },
     }
+    # Composite triage scores derived from the signals above (kept additive: the CDR and
+    # IPDR leaderboards are scored independently and never share a subject).
+    scores = risk_scores(report)
+    report["cdr"]["risk"] = scores["cdr"]
+    report["ipdr"]["risk"] = scores["ipdr"]
+    report["risk_weights"] = RISK_WEIGHTS
+    return report
 
 
 # --- DB wrappers for the API -----------------------------------------------------
