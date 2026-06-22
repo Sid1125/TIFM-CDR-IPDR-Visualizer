@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # (`pip install -r requirements.txt` then `uvicorn app.main:app`). Set DATABASE_URL
     # in .env to use PostgreSQL.
     DATABASE_URL: str = "sqlite:///./cdrdb.sqlite3"
-    APP_NAME: str = "Project ARGUS — Advanced Records & Geospatial Unified Surveillance"
+    APP_NAME: str = "Project ARGUS"
     AUTH_SESSION_COOKIE_NAME: str = "gpcssi_session"
     AUTH_SESSION_TTL_HOURS: int = 168
     AUTH_BOOTSTRAP_USERNAME: str = "admin"

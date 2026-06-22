@@ -1,4 +1,4 @@
-# Fresh-project setup for Project ARGUS (Advanced Records & Geospatial Unified Surveillance) — Windows / PowerShell.
+# Fresh-project setup for Project ARGUS — Windows / PowerShell.
 # Run from the backend/ directory:   .\setup.ps1
 #
 # PostgreSQL is the primary database (SQLite is only an automatic fallback/backup).

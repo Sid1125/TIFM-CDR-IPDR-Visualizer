@@ -138,7 +138,7 @@ The setup script writes this for you; you normally won't edit it by hand.
 # PRIMARY database — PostgreSQL.
 DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/cdrdb
 
-APP_NAME=Project ARGUS — Advanced Records & Geospatial Unified Surveillance
+APP_NAME=Project ARGUS
 
 AUTH_SESSION_COOKIE_NAME=gpcssi_session
 AUTH_SESSION_TTL_HOURS=168

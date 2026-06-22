@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fresh-project setup for Project ARGUS (Advanced Records & Geospatial Unified Surveillance) — macOS / Linux.
+# Fresh-project setup for Project ARGUS — macOS / Linux.
 # Run from the backend/ directory:   ./setup.sh
 #
 # PostgreSQL is the primary database (SQLite is only an automatic fallback/backup).
