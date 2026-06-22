@@ -46,7 +46,12 @@ def inference_report_md(db: Session = Depends(get_db), limit: int = Query(defaul
     report = run_all_db(db, limit=limit, case_id=case_id or None)
     phones, ips = _watchlist(db, case_id or None)
     apply_watchlist(report, phones, ips)
-    return report_markdown(report)
+    case_name = None
+    if case_id:
+        from app.models.case import Case
+        case = db.get(Case, int(case_id)) if str(case_id).isdigit() else None
+        case_name = case.name if case else case_id
+    return report_markdown(report, case_name=case_name)
 
 
 @router.get("/subject/{subject}")

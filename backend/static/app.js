@@ -2819,19 +2819,53 @@ function _watchlistBarHtml(rep){
     +'<div class="wl-row"><strong>Watchlist</strong>'
     +'<input id="wlInput" placeholder="phone number or IP address" onkeydown="if(event.key===\'Enter\')wlAdd()"/>'
     +'<button class="btn-sm" onclick="wlAdd()">Add</button>'
-    +'<button class="btn-sm wl-export" onclick="wlExport()">Export report (.md)</button></div>'
+    +'<button id="wlExportBtn" class="btn-sm wl-export" onclick="wlExport()" title="Download the full analysis as a Markdown case report">&#8623; Export analysis (.md)</button></div>'
     +(chips?'<div class="wl-chips">'+chips+'</div>':'<div class="wl-empty">No watchlist entries. Add a number/IP to force it to the top as Critical.</div>')
     +(hits.length?'<div class="wl-hits">&#9873; '+hits.length+' watchlist match'+(hits.length>1?'es':'')+' &mdash; forced to Critical at the top of the lists.</div>':'')
     +'</div>';
 }
 window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;try{await API.post('/watchlist',{value:v,case_id:activeCaseId||null});await loadWatchlist();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
-window.wlExport=async function(){try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';const r=await fetch('/inference/report.md'+cq,{credentials:'same-origin'});const t=await r.text();const b=new Blob([t],{type:'text/markdown'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='argus_case_report.md';a.click();URL.revokeObjectURL(u);}catch(e){alert('Export failed: '+e.message);}};
+window.wlExport=async function(){
+  const btn=$('wlExportBtn');const prev=btn?btn.innerHTML:'';if(btn){btn.innerHTML='Exporting…';btn.disabled=true;}
+  try{
+    const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+    const r=await fetch('/inference/report.md'+cq,{credentials:'same-origin'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const t=await r.text();
+    const cn=(D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex]?.text)||'case';
+    const safe=cn.replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'case';
+    const b=new Blob([t],{type:'text/markdown;charset=utf-8'});const u=URL.createObjectURL(b);
+    const a=document.createElement('a');a.href=u;a.download='argus_'+safe+'_'+new Date().toISOString().slice(0,10)+'.md';a.click();URL.revokeObjectURL(u);
+  }catch(e){alert('Export failed: '+e.message);}
+  finally{if(btn){btn.innerHTML=prev;btn.disabled=false;}}
+};
+function _scrollParent(el){while(el&&el!==document.body){const o=getComputedStyle(el).overflowY;if((o==='auto'||o==='scroll')&&el.scrollHeight>el.clientHeight)return el;el=el.parentElement;}return window;}
+let _infSpyCleanup=null;
+function _decorateInferences(box){
+  if(_infSpyCleanup){_infSpyCleanup();_infSpyCleanup=null;}
+  const wrap=box.querySelector('.inf-wrap');if(!wrap)return;
+  const secs=[];
+  const poi=wrap.querySelector(':scope > .inf-card');
+  if(poi){poi.id='infsec-poi';secs.push({id:'infsec-poi',label:'Persons of interest'});}
+  wrap.querySelectorAll('.inf-theme').forEach((el,i)=>{el.id='infsec-'+i;secs.push({id:'infsec-'+i,label:el.textContent.trim()});});
+  if(secs.length<3)return;  // short page — no nav needed
+  const nav=document.createElement('div');nav.className='inf-nav';
+  nav.innerHTML='<span class="inf-nav-label">On this page</span>'+secs.map(s=>'<a data-t="'+s.id+'">'+esc(s.label)+'</a>').join('');
+  wrap.insertBefore(nav,wrap.firstChild);
+  const links=[...nav.querySelectorAll('a')];
+  links.forEach(a=>a.onclick=()=>{const t=document.getElementById(a.dataset.t);if(t)t.scrollIntoView({behavior:'smooth',block:'start'});});
+  const sp=_scrollParent(box),tgt=sp===window?window:sp;
+  const spy=()=>{let cur=secs[0].id;for(const s of secs){const el=document.getElementById(s.id);if(el&&el.getBoundingClientRect().top<=150)cur=s.id;}links.forEach(a=>a.classList.toggle('active',a.dataset.t===cur));};
+  tgt.addEventListener('scroll',spy,{passive:true});window.addEventListener('scroll',spy,{passive:true});
+  _infSpyCleanup=()=>{tgt.removeEventListener('scroll',spy);window.removeEventListener('scroll',spy);};
+  spy();
+}
 async function renderInferences(force){
   const box=$('infResults'),status=$('infStatus'),btn=$('infRefreshBtn');
   if(!box)return;
   if(btn&&!btn._bound){btn._bound=true;btn.onclick=()=>{_infCache=null;_infReport=null;renderInferences(true);};}
-  if(_infCache&&!force){box.innerHTML=_infCache;return;}
+  if(_infCache&&!force){box.innerHTML=_infCache;_decorateInferences(box);return;}
   status.textContent='Analyzing...';
   box.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Running inference engine...</div>';
   let rep;
@@ -2840,6 +2874,7 @@ async function renderInferences(force){
   await loadWatchlist();
   _infCache=_watchlistBarHtml(rep)+buildInferenceHtml(rep);
   box.innerHTML=_infCache;
+  _decorateInferences(box);
   status.textContent=n((rep.cdr&&rep.cdr.subjects)||0)+' phone subjects · '+n((rep.ipdr&&rep.ipdr.sessions)||0)+' IPDR sessions';
 }
 function _infCard(title,count,color,body){
@@ -4036,14 +4071,18 @@ D.adminCreateBtn.addEventListener('click',()=>{
 });
 
 // ====== EVIDENCE EXPORT ======
-D.exportBtn.addEventListener('click',()=>{
+D.exportBtn.addEventListener('click',async ()=>{
+  const prevTxt=D.exportBtn.textContent;D.exportBtn.textContent='Exporting…';D.exportBtn.disabled=true;
   const now=new Date().toISOString().slice(0,19).replace('T',' ');
+  const caseName=(D.caseSelector.options[D.caseSelector.selectedIndex]?.text||'None');
+  // Pull the full analytics report (risk leaderboards + all inferences) to lead the file.
+  let analytics='';
+  try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';const ar=await fetch('/inference/report.md'+cq,{credentials:'same-origin'});if(ar.ok)analytics=await ar.text();}catch(e){}
   let report='';
-  report+='=== CDR/IPDR Investigation Report ===\n';
-  report+='Generated: '+now+'\n';
-  report+='User: '+(state.auth.user?state.auth.user.username:'Unknown')+'\n';
-  report+='Case: '+(D.caseSelector.options[D.caseSelector.selectedIndex]?.text||'None')+'\n';
-  report+='\n--- Summary ---\n';
+  report+='# ARGUS — Case Evidence Report\n\n';
+  report+='**Generated:** '+now+'  \n**User:** '+(state.auth.user?state.auth.user.username:'Unknown')+'  \n**Case:** '+caseName+'\n';
+  if(analytics){report+='\n'+analytics+'\n\n---\n\n# Raw evidence & sessions\n';}
+  report+='\n## Summary\n';
   report+='Total Records: '+allRows.length+'\n';
   report+='CDR: '+state.cdr.length+', IPDR: '+state.ipdr.length+'\n';
   report+='Towers: '+state.towers.length+'\n';
@@ -4204,12 +4243,14 @@ D.exportBtn.addEventListener('click',()=>{
     if(allMeetingsReport.length>30)report+='  ... and '+(allMeetingsReport.length-30)+' more\n';
   }
 
-  report+='\n--- End of Report ---\n';
+  report+='\n_End of report._\n';
 
-  const blob=new Blob([report],{type:'text/plain;charset=utf-8'});
+  const safe=(caseName||'case').replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'case';
+  const blob=new Blob([report],{type:'text/markdown;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='investigation_report_'+now.replace(/[:\s]/g,'_')+'.txt';
+  a.download='argus_'+safe+'_'+now.slice(0,10)+'.md';
   a.click();URL.revokeObjectURL(a.href);
+  D.exportBtn.textContent=prevTxt;D.exportBtn.disabled=false;
 });
 
 // ====== SERVICE ATTRIBUTION TAB ======

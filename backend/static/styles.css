@@ -668,3 +668,13 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 .wl-chip a{cursor:pointer;color:var(--danger);font-weight:700;text-decoration:none}
 .wl-empty{margin-top:8px;font-size:0.74rem;color:var(--muted)}
 .wl-hits{margin-top:9px;font-size:0.78rem;font-weight:600;color:var(--danger);background:rgba(193,74,68,0.08);border-radius:7px;padding:6px 10px}
+
+/* ===================== INFERENCES IN-PAGE NAV ===================== */
+.inf-nav{position:sticky;top:0;z-index:6;display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+  background:var(--bg);border-bottom:1px solid var(--line);padding:9px 2px;margin:0 0 14px;
+  box-shadow:0 6px 10px -8px rgba(0,0,0,.18)}
+.inf-nav-label{font-size:0.66rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-weight:700;margin-right:4px}
+.inf-nav a{font-size:0.73rem;color:var(--muted);cursor:pointer;padding:3px 10px;border-radius:14px;
+  border:1px solid transparent;white-space:nowrap;transition:all .12s}
+.inf-nav a:hover{color:var(--accent);background:var(--accent-light)}
+.inf-nav a.active{color:var(--accent);border-color:var(--accent-light);background:var(--accent-light);font-weight:600}

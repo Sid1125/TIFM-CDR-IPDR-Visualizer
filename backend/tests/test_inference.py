@@ -450,10 +450,10 @@ class CrossCuttingTests(unittest.TestCase):
 
     def test_report_markdown_sections(self):
         rep = inf.run_all([cdr("900", "x", datetime(2026, 6, 1, 9, 0), "T", 13.0, 80.0)], [])
-        md = inf.report_markdown(rep)
-        self.assertIn("# ARGUS", md)
-        self.assertIn("Persons of interest", md)
-        self.assertIn("Flagged IP addresses", md)
+        md = inf.report_markdown(rep, case_name="Operation Falcon")
+        for needle in ("# ARGUS", "Operation Falcon", "Persons of interest",
+                       "Flagged IP addresses", "## CDR findings", "## IPDR findings"):
+            self.assertIn(needle, md)
 
 
 if __name__ == "__main__":
