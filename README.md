@@ -1,187 +1,302 @@
-# CDR/IPDR Investigation Visualizer
+# Project ARGUS
+### Advanced Records & Geospatial Unified Surveillance
 
-A full-stack telecom investigation platform for analyzing Call Detail Records (CDRs), IP Data Records (IPDRs), and mobile tower locations. Built for law enforcement and forensic investigators to visualize communication patterns, reconstruct sessions, map geo-spatial activity, and generate AI-powered investigation reports.
+A full-stack telecom forensics platform for analysing **Call Detail Records (CDR)**, **IP
+Data Records (IPDR)** and **cell-tower locations**. It reconstructs communication and
+internet sessions, maps movement, attributes traffic to services/providers, and runs a
+spatiotemporal inference engine that surfaces investigative leads — all organised per case.
+
+> **CDR and IPDR are analysed separately.** A CDR subject is a **phone number**; an IPDR
+> subject is an **IP address**. The two streams are never cross-attributed.
+
+---
+
+## Table of contents
+- [Features](#features)
+- [Tech stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Quick start (setup script)](#quick-start-setup-script)
+- [Manual setup](#manual-setup)
+- [Configuration (.env)](#configuration-env)
+- [Database](#database)
+- [Running the app](#running-the-app)
+- [Usage guide](#usage-guide)
+- [Input CSV formats](#input-csv-formats)
+- [Scripts](#scripts)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Project structure](#project-structure)
+- [Documentation](#documentation)
+
+---
 
 ## Features
 
-- **Dashboard** — Summary KPIs, service distribution, hourly activity, top contacts, mini network graph
-- **Network Graph** — D3.js force-directed graph showing entity relationships with centrality metrics and community detection
-- **Tower Map** — Leaflet-based geo-spatial visualization with 5 modes: movement paths, heatmap, operational zones, co-location detection, meeting points
-- **Entity Timeline** — Session-reconstructed timeline with collapsible entity cards, Gantt-style session bars, density strips, and service-colored activity indicators
-- **Charts** — Service usage pie, hourly activity bar, top contacts, service timeline
-- **Records Table** — Full 24-column searchable table with type/service filters and infinite scroll pagination
-- **AI Insights** — Local LLM (Ollama) generated investigation reports from collected data, plus follow-up Q&A with investigator notes
-- **Session Management** — PBKDF2-authenticated sessions with AFK auto-logout, health checks, and multi-session tracking
+- **Dashboard** — case hero summary, key metrics, network/service/activity panels.
+- **Network Graph** — D3 force-directed contact graph with centrality & community detection.
+- **Tower Map** — Leaflet map: movement path (with per-leg distance / time / speed / travel-mode hover), heatmap, operational zones, co-location, meetings, **inference overlays** (impossible travel, convoys, home/work anchors) and an interactive **geofence**.
+- **Timeline** — session-reconstructed, entity-grouped timeline.
+- **Charts / Services / Correlation / Records** — service distribution, behavioural charts, cross-subject correlation, and a full searchable record table.
+- **Inferences** — automated **spatiotemporal analysis**, split into:
+  - **CDR (phone subjects):** impossible-travel / SIM-clone, SIM-swap & burner handsets, convoys & "met but never called" hidden links, scheduled-contact cadence, home/work anchors, odd-hours activity — with a ranked **Persons of Interest** list.
+  - **IPDR (IP subjects):** VPN / proxy connections by source IP, with the destination server and provider.
+- **Service / app attribution** — two-layer engine (provider IP-range match + port classification) with longest-prefix matching, an indexed lookup that scales to ~100k rows, and pluggable live provider-range feeds.
+- **AI Insights** — optional local LLM (Ollama) report generation and Q&A.
+- **Cases & Auth** — multi-case workspaces; PBKDF2-authenticated sessions with sliding expiry.
 
-## Tech Stack
+## Tech stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.8+, FastAPI, SQLAlchemy, Pandas, NetworkX |
-| Database | PostgreSQL (primary) with SQLite fallback |
-| Frontend | Vanilla JavaScript SPA, HTML5, CSS3 (custom properties) |
-| Visualizations | D3.js v7 (force graph), Chart.js 4.4.7 (charts), Leaflet 1.9.4 (maps) |
-| AI | Local Ollama API (default: Gemma 4 E4B, 128K context) |
-| Auth | Session-based with PBKDF2-SHA256 password hashing |
+| Backend | Python 3.10+, FastAPI, SQLAlchemy, Pandas, NetworkX |
+| Database | PostgreSQL (recommended) — automatic SQLite fallback if it can't connect |
+| Frontend | Vanilla-JS SPA served by FastAPI (no build step) |
+| Visualisation | D3.js v7, Chart.js 4, Leaflet 1.9 (+ draw, heat), Turf.js |
+| Auth | Session cookies, PBKDF2-SHA256 (210k iterations) |
+| AI (optional) | Local Ollama API |
 
-## Getting Started
+---
 
-### Prerequisites
+## Prerequisites
 
-- Python 3.8+
-- PostgreSQL (optional — SQLite fallback works out of the box)
-- [Ollama](https://ollama.ai/) (optional — for AI Insights tab)
+- **Python 3.10 or newer** (developed on 3.14). Check: `python --version`.
+- **PostgreSQL 13+** — *recommended*. If unavailable, the app automatically falls back to a
+  local SQLite file, so Postgres is **optional** for a quick trial.
+- **Git** (to clone).
+- **Ollama** *(optional)* — only for the AI Insights tab. See <https://ollama.com>.
 
-### Installation
+No Node.js/npm is required — the frontend is plain static files served by the backend.
 
-```bash
-# Clone the repository
-git clone <repo-url>
-cd cdripdr-investigation-visualizer
+---
 
-# Create and activate virtual environment
-python -m venv backend/.venv
-# Windows:
-.\backend\.venv\Scripts\Activate.ps1
-# macOS/Linux:
-source backend/.venv/bin/activate
+## Quick start (setup script)
 
-# Install dependencies
-pip install -r backend/requirements.txt
+From the **`backend/`** directory:
+
+**Windows (PowerShell)**
+```powershell
+cd backend
+.\setup.ps1
 ```
 
-### Configuration
+**macOS / Linux**
+```bash
+cd backend
+chmod +x setup.sh
+./setup.sh
+```
 
-Copy `backend/.env` and adjust as needed:
+The script creates a virtual environment, installs dependencies, copies `.env.example` →
+`.env`, and creates the Postgres database (if you configured one). It then prints the
+command to start the app. **Edit `backend/.env`** when prompted (database URL + admin
+password), then run the app as shown below.
+
+---
+
+## Manual setup
+
+```bash
+# 1. Clone
+git clone <repo-url>
+cd <repo>/backend
+
+# 2. Virtual environment
+python -m venv .venv
+# Windows:        .\.venv\Scripts\Activate.ps1
+# macOS/Linux:    source .venv/bin/activate
+
+# 3. Dependencies
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+# 4. Environment file
+cp .env.example .env          # Windows: copy .env.example .env
+#   …then edit .env (see Configuration below)
+
+# 5. Database (Postgres only — no-op for SQLite)
+python scripts/init_db.py
+```
+
+---
+
+## Configuration (.env)
+
+`backend/.env` (created from `.env.example`):
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/cdrdb
+# PostgreSQL (recommended). If this connection fails the app falls back to SQLite.
+DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/cdrdb
+# Or, for the simplest no-Postgres start:
+# DATABASE_URL=sqlite:///./cdrdb.sqlite3
+
+APP_NAME=CDR/IPDR Investigation Visualizer
+
 AUTH_SESSION_COOKIE_NAME=gpcssi_session
 AUTH_SESSION_TTL_HOURS=168
+
+# Default admin, created on first startup. CHANGE THE PASSWORD (min 8 chars).
 AUTH_BOOTSTRAP_USERNAME=admin
-AUTH_BOOTSTRAP_PASSWORD=admin12345
+AUTH_BOOTSTRAP_PASSWORD=change-this-password
 AUTH_BOOTSTRAP_ROLE=admin
+
+# Optional: external ASN/CIDR CSV (network,provider,is_isp) to extend attribution.
+# ASN_RANGES_CSV=data/asn_ranges.csv
 ```
 
-If PostgreSQL is unavailable, the app automatically falls back to SQLite (`backend/cdrdb.sqlite3`).
+`DATABASE_URL` is **required** — the app won't start without it.
 
-### Running
+---
+
+## Database
+
+**PostgreSQL (recommended)**
+1. Ensure the server is running and you have a user/password.
+2. Put the connection string in `DATABASE_URL`.
+3. `python scripts/init_db.py` creates the `cdrdb` database if missing.
+4. On first app start, tables and the default admin user are created automatically.
+
+**SQLite (zero-config)** — set `DATABASE_URL=sqlite:///./cdrdb.sqlite3` (or just let the
+automatic fallback kick in if Postgres can't connect). A `backend/cdrdb.sqlite3` file is
+created on demand.
+
+**Migrating SQLite → PostgreSQL** (if you started on SQLite and want to move):
+```bash
+python scripts/migrate_sqlite_to_postgres.py \
+  --sqlite cdrdb.sqlite3 \
+  --pg postgresql://USER:PASSWORD@localhost:5432/cdrdb
+```
+This creates the database + schema and copies every table (preserving ids).
+
+---
+
+## Running the app
 
 ```bash
 cd backend
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload          # add --port 8000 to be explicit
 ```
 
-- **Web UI:** http://127.0.0.1:8000
-- **API Docs:** http://127.0.0.1:8000/docs
-- **Default Login:** `admin` / `admin12345`
+- **Web UI:** <http://127.0.0.1:8000>
+- **API docs (Swagger):** <http://127.0.0.1:8000/docs>
+- **Login:** `admin` / the password from your `.env`
 
-### Generating Sample Data
+`.env` is read at **startup** — restart `uvicorn` after changing it.
+
+---
+
+## Usage guide
+
+1. **Sign in** with the admin credentials.
+2. **Pick or create a case** from the case selector (top bar). A "Default Case" is created
+   automatically the first time. Your selected case is remembered across refreshes.
+3. **Upload data** on the Dashboard — drop **CDR**, **IPDR** and (optionally) **Tower** CSVs.
+   - Records are attached to the **currently selected case**. Re-uploading the same type
+     **replaces** that type for the case (it is not appended).
+4. **Explore the tabs:** Dashboard → Network Graph → Tower Map → Timeline → Charts →
+   Services → Correlation → **Inferences** → Records → AI Insights.
+5. **Inferences** is the analyst's starting point: it ranks Persons of Interest and groups
+   leads (identity fraud, covert coordination, evasion) for CDR, and VPN/proxy activity for
+   IPDR. Click a subject to open its profile; use the **Tower Map** inference overlays and
+   geofence to see leads on the map.
+
+> A case needs **both CDR and IPDR** for full coverage — CDR drives calls/movement/network,
+> IPDR drives internet-session attribution and VPN/proxy detection.
+
+---
+
+## Input CSV formats
+
+Headers are matched by name; extra columns are ignored. Timestamps are `YYYY-MM-DD HH:MM:SS`.
+
+**CDR** — required: `a_party_number, b_party_number, start_time, end_time, duration_seconds`.
+Recommended: `msisdn, imsi, imei, call_type, direction, tower_id, cell_id, lac, latitude, longitude, technology`.
+
+**IPDR** — required: `start_time, end_time, source_ip, destination_ip`.
+Recommended: `msisdn, imsi, imei, source_port, destination_port, protocol, bytes_uploaded, bytes_downloaded, tower_id, cell_id, lac, latitude, longitude, apn, rat`.
+
+**Towers** — required: `tower_id`. Recommended: `latitude, longitude, city, state`.
+
+Need test data? See [Scripts](#scripts) → `generate_sample_data.py`.
+
+---
+
+## Scripts
+
+Run from `backend/` with the venv active:
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/init_db.py` | Create the Postgres database named in `DATABASE_URL` (no-op for SQLite). |
+| `scripts/generate_sample_data.py` | Generate sample CDR/IPDR/Tower CSVs into `sample_data/`. |
+| `scripts/migrate_sqlite_to_postgres.py` | Migrate an existing SQLite DB into PostgreSQL. |
+| `scripts/fetch_provider_ranges.py` | Refresh provider IP ranges from official feeds (AWS/Google/Cloudflare/Fastly/GitHub) into `data/asn_ranges.csv`. |
+| `scripts/gen_attribution_js.py` | Regenerate the frontend attribution data from `app/data/attribution_data.json`. |
+
+---
+
+## Testing
 
 ```bash
 cd backend
-python scripts/generate_sample_data.py
+python -m unittest tests.test_inference tests.test_attribution tests.test_provider_ranges tests.test_ai
 ```
 
-Generates 60 towers, 1200 CDR records, and 1800 IPDR records in `backend/sample_data/`.
+The suites cover the inference engine, the service-attribution metrics harness, the
+provider-range fetcher, and the AI dataset utilities.
 
-## Project Structure
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|--------|-----|
+| **`password authentication failed`** / app silently uses SQLite | The Postgres credentials in `DATABASE_URL` are wrong, so the app fell back to SQLite. Fix the user/password; run `python scripts/init_db.py`; restart. |
+| **`database "cdrdb" does not exist`** | Run `python scripts/init_db.py` (creates it). |
+| **App won't start — settings error** | `.env` is missing or `DATABASE_URL` isn't set. Copy `.env.example` → `.env`. |
+| **Port 8000 already in use** | `uvicorn app.main:app --reload --port 8001`. |
+| **Changed `.env` but nothing changed** | `.env` is read at startup — restart `uvicorn`. |
+| **AI Insights does nothing** | Ollama isn't running/configured — optional; everything else works without it. |
+| **Uploaded a CSV but the case is empty** | Make sure a case is selected before uploading; records attach to the active case. |
+
+---
+
+## Project structure
 
 ```
 backend/
 ├── app/
-│   ├── main.py                  # FastAPI entry point, static serving
-│   ├── api/                     # REST API route handlers
-│   │   ├── auth.py              # Authentication endpoints
-│   │   ├── geo.py               # Geo-spatial endpoints
-│   │   ├── graph.py             # Network graph endpoints
-│   │   ├── investigation.py     # Unified timeline & services
-│   │   ├── records.py           # CDR/IPDR record queries
-│   │   ├── stats.py             # Statistics endpoints
-│   │   ├── timeline.py          # Timeline events
-│   │   ├── towers.py            # Tower management
-│   │   └── upload.py            # CSV data upload
-│   ├── core/
-│   │   ├── config.py            # Pydantic Settings (env vars)
-│   │   └── database.py          # SQLAlchemy engine & session
-│   ├── models/                  # SQLAlchemy ORM models
-│   │   ├── auth.py              # User & AuthSession
-│   │   ├── cdr.py               # CDRRecord
-│   │   ├── ipdr.py              # IPDRRecord
-│   │   └── tower.py             # Tower
-│   ├── schemas/                 # Pydantic request/response schemas
-│   │   ├── auth.py, cdr.py, ipdr.py, query.py, tower.py, upload.py
-│   ├── services/                # Business logic layer
-│   │   ├── auth_service.py      # Password hashing, session management
-│   │   ├── csv_parser.py        # CSV loading utility
-│   │   ├── graph_service.py     # NetworkX graph building & metrics
-│   │   ├── investigation_service.py # Unified timeline builder
-│   │   ├── records_service.py   # Record filtering & pagination
-│   │   ├── service_attribution_service.py # Port-to-service classification
-│   │   ├── stats_service.py     # CDR & IPDR aggregations
-│   │   ├── timeline_service.py  # Timeline event construction
-│   │   └── tower_service.py     # Tower activity & colocation
-│   ├── utils/
-│   │   └── validators.py        # Column validation & datetime parsing
-│   └── scripts/
-│       └── generate_sample_data.py  # Mock data generator
-├── sample_data/                 # Generated sample CSV files
-├── static/                      # Frontend SPA
-│   ├── index.html               # Main application HTML
-│   ├── styles.css               # Application stylesheet
-│   └── app.js                   # Core JavaScript (~930 lines)
-├── .env                         # Environment configuration
-├── requirements.txt             # Python dependencies
-└── cdrdb.sqlite3                # SQLite fallback database
+│   ├── main.py                 # FastAPI entry point + static serving
+│   ├── api/                    # REST routers (auth, upload, records, geo, graph,
+│   │                           #   timeline, stats, investigation, inference, cases,
+│   │                           #   annotations, towers, ai)
+│   ├── core/                   # config.py (env), database.py (engine + SQLite fallback)
+│   ├── models/                 # SQLAlchemy models (cdr, ipdr, tower, case, annotation, auth)
+│   ├── schemas/                # Pydantic request/response schemas
+│   ├── services/
+│   │   ├── service_attribution_service.py  # IP-range + port attribution engine
+│   │   ├── inference_service.py            # spatiotemporal inference (CDR vs IPDR)
+│   │   ├── geo.py                          # haversine + travel-mode helpers
+│   │   ├── investigation_service.py, records_service.py, graph_service.py,
+│   │   ├── stats_service.py, tower_service.py, auth_service.py
+│   ├── data/attribution_data.json          # shared attribution knowledge base
+│   └── ai/                     # optional LLM investigator / dataset tooling
+├── static/                     # frontend SPA (index.html, app.js, styles.css)
+├── scripts/                    # setup & maintenance scripts (see above)
+├── tests/                      # unittest suites
+├── requirements.txt
+├── .env.example
+├── setup.ps1 / setup.sh        # fresh-setup scripts
+└── cdrdb.sqlite3               # SQLite DB (only if used; git-ignored)
 ```
 
-## API Overview
-
-All endpoints except `/auth/login`, `/health`, `/`, and `/static/*` require authentication via HttpOnly session cookie.
-
-| Router | Endpoints | Description |
-|--------|-----------|-------------|
-| `/auth` | 7 endpoints | Login, logout, session management, password change |
-| `/geo` | 3 endpoints | Geo-tagged records, subjects, tower locations |
-| `/upload` | 3 endpoints | CDR, IPDR, Tower CSV upload (replace-on-upload for records) |
-| `/records` | 3 endpoints | List CDR/IPDR records with filters, reset all data |
-| `/towers` | 2 endpoints | List and upload towers |
-| `/investigation` | 4 endpoints | Unified timeline, service summary, tower activity, colocation |
-| `/graph` | 2 endpoints | Network graph nodes/edges, centrality/community metrics |
-| `/timeline` | 1 endpoint | Sorted timeline events |
-| `/stats` | 3 endpoints | Top contacts, CDR stats, IPDR stats |
-
-Full API documentation: [docs/api.md](docs/api.md) or visit `/docs` when running.
-
-## Frontend Overview
-
-The SPA has 7 tabs accessible from the top navigation bar:
-
-| Tab | Libraries | Features |
-|-----|-----------|----------|
-| Dashboard | Chart.js, D3.js | 4 KPI cards, mini network graph, service pie, daily activity, top contacts |
-| Network Graph | D3.js v7 | Force-directed graph with search, zoom, subject filter, node details sidebar |
-| Tower Map | Leaflet + heat plugin | 5 map modes: Movement Path, Heatmap, Operational Zones, Co-location, Meetings |
-| Timeline | Custom JS | Entity-grouped collapsible cards, Gantt session bars, density strips, activity events |
-| Charts | Chart.js | Service usage pie, hourly activity, top contacts, service timeline |
-| Records | Custom JS | 24-column table, type/service filters, search, infinite scroll |
-| AI Insights | Ollama API | LLM config, Generate Report, investigator notes + Ask AI, markdown rendering |
-
-## AI Insights
-
-The AI tab connects to a local Ollama instance to generate investigation reports:
-
-1. **Generate Report** — Sends a compact data summary plus raw CSV records to the LLM
-2. **Investigator Notes** — Textarea for entering observations, hunches, or specific questions
-3. **Ask AI** — Sends the follow-up query along with the original data package for context-aware answers
-4. **Data Package Preview** — Shows the raw data being sent to the LLM
-
-Default model: `gemma4:e4b` (128K context). Configurable endpoint and model name via UI.
+---
 
 ## Documentation
 
-- [API Reference](docs/api.md) — All endpoints with request/response examples
-- [Architecture](docs/architecture.md) — System design, data flow, component interaction
-- [Frontend Guide](docs/frontend.md) — Tab walkthrough, customization, state management
-- [Deployment](docs/deployment.md) — Docker, production configuration, reverse proxy
-- [Development](docs/development.md) — Contributing guidelines, code style, testing
+- [docs/architecture.md](docs/architecture.md) — system design & data flow
+- [docs/api.md](docs/api.md) — endpoint reference (also live at `/docs`)
+- [docs/frontend.md](docs/frontend.md) — tab walkthrough & state
+- [docs/features.md](docs/features.md) — detailed feature catalogue
+- [docs/ATTRIBUTION_EXPANSION.md](docs/ATTRIBUTION_EXPANSION.md) — attribution & inference engine notes
+- [docs/deployment.md](docs/deployment.md) — production / reverse-proxy
+- [docs/development.md](docs/development.md) — contributing & code style

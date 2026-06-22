@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover - pydantic v1 fallback
 
 class Settings(BaseSettings):
     DATABASE_URL: str
-    APP_NAME: str = "CDR/IPDR Investigation Visualizer"
+    APP_NAME: str = "Project ARGUS — Advanced Records & Geospatial Unified Surveillance"
     AUTH_SESSION_COOKIE_NAME: str = "gpcssi_session"
     AUTH_SESSION_TTL_HOURS: int = 168
     AUTH_BOOTSTRAP_USERNAME: str = "admin"
