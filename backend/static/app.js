@@ -2937,6 +2937,30 @@ function buildInferenceHtml(rep){
   }
   if(theme){h+='<div class="inf-theme">CDR · Covert &amp; structured coordination</div>'+theme;}
 
+  // -- Network structure --
+  const net=C.network||{};
+  if((net.brokers||[]).length||(net.articulation_points||[]).length||(net.reciprocity||[]).length||(net.relay_chains||[]).length||(net.predicted_links||[]).length){
+    let rows='';
+    if((net.brokers||[]).length)
+      rows+='<div class="inf-row"><div class="top"><strong>Brokers</strong>'+_infChip('connect separate groups','var(--warn)')+'</div><div class="meta">'
+        +net.brokers.map(b=>_infSubj(b.subject)+' <span style="color:var(--muted)">(betw '+b.betweenness+')</span>').join(' · ')+'</div></div>';
+    if((net.articulation_points||[]).length)
+      rows+='<div class="inf-row"><div class="top"><strong>Cut-points</strong>'+_infChip('removal splits network','var(--warn)')+'</div><div class="meta">'
+        +net.articulation_points.map(a=>_infSubj(a.subject)+' <span style="color:var(--muted)">(deg '+a.degree+')</span>').join(' · ')+'</div></div>';
+    if((net.reciprocity||[]).length)
+      rows+='<div class="inf-row"><div class="top"><strong>One-way ties</strong>'+_infChip('caller never called back','var(--accent)')+'</div><div class="meta">'
+        +net.reciprocity.slice(0,8).map(r=>_infSubj(r.caller)+' &rarr; '+esc(r.callee)+' ('+r.calls+')').join(' · ')+'</div></div>';
+    if((net.relay_chains||[]).length)
+      rows+='<div class="inf-row"><div class="top"><strong>Relay chains</strong>'+_infChip('A&rarr;B&rarr;C','var(--accent)')+'</div><div class="meta">'
+        +net.relay_chains.slice(0,8).map(c=>_infSubj(c.a)+'&rarr;'+esc(c.b)+'&rarr;'+esc(c.c)+' <span style="color:var(--muted)">('+c.gap_min+'m)</span>').join(' · ')+'</div></div>';
+    if((net.predicted_links||[]).length)
+      rows+='<div class="inf-row"><div class="top"><strong>Likely hidden links</strong>'+_infChip('shared contacts, no call','var(--accent)')+'</div><div class="meta">'
+        +net.predicted_links.slice(0,8).map(p=>_infSubj(p.subject_a)+' ~ '+esc(p.subject_b)+' <span style="color:var(--muted)">('+p.common_contacts+' shared)</span>').join(' · ')+'</div></div>';
+    h+='<div class="inf-theme">CDR · Network structure</div>';
+    h+=card('Call-graph roles',(net.brokers||[]).length+' broker(s)','var(--accent)','high',
+      '<b>Brokers</b> sit between groups (high betweenness) and <b>cut-points</b> hold the network together &mdash; both are often coordinators. <b>One-way ties</b>, <b>relay chains</b> (A calls B, B calls C shortly after) and <b>likely hidden links</b> (shared contacts but no call) round out the structure.',rows);
+  }
+
   // -- Movement & behaviour --
   theme='';
   if(odd.length){

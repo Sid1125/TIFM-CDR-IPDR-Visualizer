@@ -246,5 +246,40 @@ class RiskScoreTests(unittest.TestCase):
         self.assertEqual(cdr_subs & ipdr_subs, set())
 
 
+class NetworkStructureTests(unittest.TestCase):
+    def _bridge(self):
+        # Two triangles joined only through hub 'H' — H is the cut-vertex/broker.
+        base = datetime(2026, 3, 1, 9, 0)
+        c = lambda a, b: cdr(a, b, base, "T", 13.0, 80.0)
+        return [c("A", "B"), c("B", "C"), c("A", "C"),
+                c("D", "E"), c("E", "F"), c("D", "F"),
+                c("C", "H"), c("H", "D")]
+
+    def test_articulation_and_broker(self):
+        net = inf.network_structure(self._bridge())
+        self.assertIn("H", {a["subject"] for a in net["articulation_points"]})
+        self.assertIn("H", {b["subject"] for b in net["brokers"]})
+
+    def test_relay_chain_detected(self):
+        base = datetime(2026, 3, 1, 9, 0)
+        recs = [cdr("A", "B", base, "T", 13.0, 80.0),
+                cdr("B", "C", base + timedelta(minutes=5), "T", 13.0, 80.0)]
+        chains = {(c["a"], c["b"], c["c"]) for c in inf.network_structure(recs)["relay_chains"]}
+        self.assertIn(("A", "B", "C"), chains)
+
+    def test_reciprocity_one_way(self):
+        base = datetime(2026, 3, 1, 9, 0)
+        recs = [cdr("A", "B", base + timedelta(minutes=i), "T", 13.0, 80.0) for i in range(4)]
+        ow = {(r["caller"], r["callee"]) for r in inf.network_structure(recs)["reciprocity"]}
+        self.assertIn(("A", "B"), ow)
+
+    def test_broker_becomes_risk_factor(self):
+        rep = inf.run_all(self._bridge(), [])
+        risk = {r["subject"]: r for r in rep["cdr"]["risk"]}
+        self.assertIn("H", risk)
+        names = [f["name"] for f in risk["H"]["factors"]]
+        self.assertTrue("Network broker" in names or "Network cut-point" in names)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,6 +22,8 @@ import statistics
 from collections import Counter, defaultdict
 from datetime import datetime
 
+import networkx as nx
+
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.services.geo import IMPOSSIBLE_KMH, classify_speed, haversine_km
@@ -39,6 +41,16 @@ BURST_Z = 2.0              # daily activity z-score above which a day is a "burs
 PERIODIC_MIN_CALLS = 4     # need at least this many calls to judge a cadence
 PERIODIC_CV_MAX = 0.35     # coefficient of variation of intervals below which it's "regular"
 PERIODIC_MIN_SPAN_H = 12   # calls must span at least this long, else it's a burst not a cadence
+
+# Call-graph structure (Phase 2). Expensive measures are bounded so a 50k-row case stays responsive.
+NET_BROKER_TOPN = 8
+NET_BETWEENNESS_SAMPLE_OVER = 1200  # above this many nodes, sample betweenness (k) to bound O(V*E) cost
+NET_PREDICT_MAX_NODES = 3000        # skip link prediction above this many nodes
+NET_PREDICT_HUB_DEG = 200           # don't expand candidate links around hubs this large (they predict everything)
+NET_PREDICT_TOPN = 10
+NET_RELAY_WINDOW_MIN = 30           # A->B then B->C within this window = onward relay
+NET_RELAY_MAX = 30
+NET_RECIPROCITY_MIN = 3             # min calls on the dominant side to report a one-way tie
 
 # Tunnel/anonymisation destination ports, shared by going-dark and VPN/proxy detection.
 VPN_PORTS = {500, 1194, 1195, 1701, 1723, 4500, 51820, 51821}
@@ -239,6 +251,119 @@ def co_presence(streams, call_pairs=None):
     return sorted(out, key=lambda x: (x["convoy"], x["occurrences"]), reverse=True)
 
 
+# --- B2. Call-graph structure ----------------------------------------------------
+
+def network_structure(cdr_records):
+    """Structural roles in the CDR call graph (phone-number nodes only):
+      - brokers           : high-betweenness connectors between otherwise separate groups
+      - articulation pts  : cut-vertices whose removal splits the network
+      - reciprocity       : strongly one-way ties (caller never called back)
+      - relay_chains      : A->B then B->C within a short window (onward forwarding)
+      - predicted_links   : likely-missing edges (shared contacts), hubs down-weighted
+
+    Numbers are used as-is (consistent with the rest of the engine) so broker subjects line
+    up with the risk leaderboard's keys. Self-calls (a==b) and missing parties are skipped.
+    """
+    directed: Counter = Counter()
+    undirected_w: Counter = Counter()
+    out_calls: dict[str, list] = defaultdict(list)
+    for r in cdr_records:
+        a = getattr(r, "a_party_number", None) or _subject(r)
+        b = getattr(r, "b_party_number", None)
+        if not a or not b or a == b:
+            continue
+        directed[(a, b)] += 1
+        undirected_w[tuple(sorted((a, b)))] += 1
+        t = getattr(r, "start_time", None)
+        if t:
+            out_calls[a].append((t, b))
+
+    graph = nx.Graph()
+    for (a, b), w in undirected_w.items():
+        graph.add_edge(a, b, weight=w)
+    n = graph.number_of_nodes()
+    if n == 0:
+        return {"nodes": 0, "edges": 0, "brokers": [], "articulation_points": [],
+                "reciprocity": [], "relay_chains": [], "predicted_links": [], "notes": []}
+    notes = []
+
+    # Brokers — betweenness (sampled on large graphs to bound cost).
+    if n > NET_BETWEENNESS_SAMPLE_OVER:
+        bc = nx.betweenness_centrality(graph, k=min(500, n), seed=42)
+        notes.append(f"betweenness sampled (k=500) over {n} nodes")
+    else:
+        bc = nx.betweenness_centrality(graph)
+    brokers = [{"subject": s, "betweenness": round(v, 4), "degree": graph.degree(s)}
+               for s, v in sorted(bc.items(), key=lambda kv: -kv[1])[:NET_BROKER_TOPN] if v > 0]
+
+    # Articulation points (cut-vertices) — linear, safe on any size.
+    arts = sorted(nx.articulation_points(graph), key=lambda s: -graph.degree(s))[:NET_BROKER_TOPN]
+    articulation = [{"subject": s, "degree": graph.degree(s)} for s in arts]
+
+    # Reciprocity — strongly one-way ties (caller never called back).
+    recip, seen = [], set()
+    for (a, b), ab in directed.items():
+        key = tuple(sorted((a, b)))
+        if key in seen:
+            continue
+        seen.add(key)
+        ba = directed.get((b, a), 0)
+        if max(ab, ba) >= NET_RECIPROCITY_MIN and min(ab, ba) == 0:
+            caller, callee = (a, b) if ab >= ba else (b, a)
+            recip.append({"caller": caller, "callee": callee, "calls": max(ab, ba)})
+    recip = sorted(recip, key=lambda x: -x["calls"])[:12]
+
+    # Relay chains A->B->C within the window (B forwards onward shortly after hearing from A).
+    for c in out_calls:
+        out_calls[c].sort(key=lambda x: x[0])
+    relay, seen_chain, win = [], set(), NET_RELAY_WINDOW_MIN * 60
+    for a in out_calls:
+        if len(relay) >= NET_RELAY_MAX:
+            break
+        for (t1, b) in out_calls[a]:
+            for (t2, c) in out_calls.get(b, ()):
+                dt = (t2 - t1).total_seconds()
+                if dt <= 0:
+                    continue
+                if dt > win:
+                    break  # out_calls[b] is time-sorted, so everything after is also out of window
+                if c == a or c == b:
+                    continue
+                ch = (a, b, c)
+                if ch in seen_chain:
+                    continue
+                seen_chain.add(ch)
+                relay.append({"a": a, "b": b, "c": c, "gap_min": round(dt / 60, 1)})
+                if len(relay) >= NET_RELAY_MAX:
+                    break
+            if len(relay) >= NET_RELAY_MAX:
+                break
+
+    # Predicted (likely-missing) links — candidate non-edges among pairs sharing a contact.
+    predicted = []
+    if n <= NET_PREDICT_MAX_NODES and graph.number_of_edges() > 0:
+        cand = set()
+        for node in graph:
+            nbrs = list(graph.neighbors(node))
+            if len(nbrs) > NET_PREDICT_HUB_DEG:   # skip hubs — they'd "predict" everything
+                continue
+            for i in range(len(nbrs)):
+                for j in range(i + 1, len(nbrs)):
+                    u, v = nbrs[i], nbrs[j]
+                    if not graph.has_edge(u, v):
+                        cand.add(tuple(sorted((u, v))))
+        for u, v, score in nx.adamic_adar_index(graph, cand):
+            predicted.append({"subject_a": u, "subject_b": v, "score": round(score, 3),
+                              "common_contacts": sum(1 for _ in nx.common_neighbors(graph, u, v))})
+        predicted = sorted(predicted, key=lambda x: -x["score"])[:NET_PREDICT_TOPN]
+    elif n > NET_PREDICT_MAX_NODES:
+        notes.append(f"link prediction skipped — {n} nodes over cap")
+
+    return {"nodes": n, "edges": graph.number_of_edges(), "brokers": brokers,
+            "articulation_points": articulation, "reciprocity": recip,
+            "relay_chains": relay, "predicted_links": predicted, "notes": notes}
+
+
 # --- C. Behavioral ---------------------------------------------------------------
 
 def activity_bursts(events):
@@ -397,6 +522,8 @@ RISK_WEIGHTS = {
     "periodic_contact": 8,    # regular scheduled cadence
     "activity_burst": 8,
     "odd_hours": 7,
+    "broker": 10,             # high-betweenness connector in the call graph
+    "cut_point": 8,           # articulation point (removal splits the network)
     "tor_proxy": 18,          # IPDR: Tor/proxy port usage
     "vpn": 12,                # IPDR: VPN tunnel port usage
 }
@@ -486,6 +613,19 @@ def risk_scores(report):
         factors_by_subj[subj].append({"name": "Scheduled contact", "weight": RISK_WEIGHTS["periodic_contact"],
             "detail": f"regular call cadence with {n} peer(s)"})
 
+    # Structural roles in the call graph (Phase 2). Broker and cut-point describe the same
+    # "structurally important" idea, so a node that is both is counted once (broker wins).
+    net = cdr.get("network", {})
+    broker_subjs = {b["subject"] for b in net.get("brokers", [])}
+    for b in net.get("brokers", []):
+        factors_by_subj[b["subject"]].append({"name": "Network broker", "weight": RISK_WEIGHTS["broker"],
+            "detail": f"high betweenness ({b['betweenness']}) — connects otherwise separate groups"})
+    for a in net.get("articulation_points", []):
+        if a["subject"] in broker_subjs:
+            continue
+        factors_by_subj[a["subject"]].append({"name": "Network cut-point", "weight": RISK_WEIGHTS["cut_point"],
+            "detail": f"removing this number splits the network (degree {a['degree']})"})
+
     cdr_scores = []
     for subj, factors in factors_by_subj.items():
         ev = movement.get(subj, {}).get("total_events", 0)
@@ -550,6 +690,7 @@ def run_all(cdr_records, ipdr_records):
             "movement": movement,
             "impossible_travel": impossible,
             "co_presence": co_presence(streams, call_pairs),
+            "network": network_structure(cdr_records),
             "behavioral": behavioral,
             "periodic_contacts": periodic_contacts(cdr_records),
             "devices": devices,
