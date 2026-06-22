@@ -226,12 +226,16 @@ The **AI Insights** tab has two backends:
 
   ```bash
   cd backend
-  pip install -r requirements-ai.txt          # or answer "y" during setup.ps1 / setup.sh
+  pip install -r requirements-ai.txt
   ```
 
-  Then start the app and select **"FINE-TUNED TIFM"** in the AI tab. On first use the base
-  model (~6 GB) downloads automatically from the Hugging Face Hub; the LoRA adapter is already
-  present from the clone, so the model is ready to answer.
+  Easiest: just answer **"y"** to the *"Install the fine-tuned-model dependencies?"* prompt in
+  `setup.ps1` / `setup.sh` — the setup then installs these deps **and pre-downloads + verifies
+  the model loads**, so it's ready before you even start the dashboard.
+
+  Either way, start the app and select **"FINE-TUNED TIFM"** in the AI tab. The base model
+  (~6 GB) is fetched from the Hugging Face Hub (during setup if you used the prompt, otherwise
+  on first query); the LoRA adapter already ships in the clone — so the model answers.
 
   **Requires an NVIDIA GPU with CUDA** — the model loads in 4-bit (bitsandbytes). On CPU-only
   machines use the Ollama mode instead. `requirements-ai.txt` pins the exact versions and the

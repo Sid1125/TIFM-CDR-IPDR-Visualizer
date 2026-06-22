@@ -24,6 +24,9 @@ echo "NVIDIA GPU. The Ollama AI mode works without them."
 read -rp "Install the fine-tuned-model dependencies now? (large download) [y/N]: " AIDEPS
 if [[ "${AIDEPS:-N}" =~ ^[Yy] ]]; then
   pip install -r requirements-ai.txt
+  echo "Verifying the fine-tuned model loads (downloads the ~6 GB base model on first run)..."
+  PYTHONPATH=. python -c "import app.ai.inference as i; i.load_model(); print('  Fine-tuned model ready.' if i._adapter_loaded else '  WARNING: model did not load - an NVIDIA GPU with CUDA is required.')" \
+    || echo "  WARNING: could not verify the fine-tuned model (it needs an NVIDIA GPU with CUDA). The Ollama AI mode still works."
 fi
 
 echo "== 3/4  Database configuration =="

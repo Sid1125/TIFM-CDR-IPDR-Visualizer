@@ -18,7 +18,13 @@ pip install -r requirements.txt
 Write-Host 'Optional: the fine-tuned TIFM model (Qwen2.5-3B + LoRA) needs extra packages and an'
 Write-Host 'NVIDIA GPU. The Ollama AI mode works without them.'
 $aiDeps = Read-Host 'Install the fine-tuned-model dependencies now? (large download) [y/N]'
-if ($aiDeps -match '^[Yy]') { pip install -r requirements-ai.txt }
+if ($aiDeps -match '^[Yy]') {
+  pip install -r requirements-ai.txt
+  Write-Host 'Verifying the fine-tuned model loads (downloads the ~6 GB base model on first run)...'
+  $env:PYTHONPATH = '.'
+  python -c "import app.ai.inference as i; i.load_model(); print('  Fine-tuned model ready.' if i._adapter_loaded else '  WARNING: model did not load - an NVIDIA GPU with CUDA is required.')"
+  if ($LASTEXITCODE -ne 0) { Write-Host '  WARNING: could not verify the fine-tuned model (needs an NVIDIA GPU with CUDA). The Ollama AI mode still works.' -ForegroundColor Yellow }
+}
 
 Write-Host '== 3/4  Database configuration ==' -ForegroundColor Cyan
 if (Test-Path .env) {
