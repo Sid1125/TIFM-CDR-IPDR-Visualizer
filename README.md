@@ -143,7 +143,8 @@ AUTH_BOOTSTRAP_ROLE=admin
 # ASN_RANGES_CSV=data/asn_ranges.csv
 ```
 
-`DATABASE_URL` is **required** — the app won't start without it.
+If you don't create a `.env` at all, the app still runs — it defaults to a local SQLite
+file (`backend/cdrdb.sqlite3`). Create `.env` to use PostgreSQL or change the admin password.
 
 ---
 
@@ -262,30 +263,45 @@ provider-range fetcher, and the AI dataset utilities.
 
 ## Project structure
 
+Key paths only. The optional AI fine-tuning tooling under `backend/`
+(`pipeline_tifm_finetune.py`, `train_qwen_tifm.py`, `*.ipynb`) is omitted here for brevity;
+its generated model weights/outputs (`llm_models/`, `tifm_lora_output/`, `tifm_merged/`) are
+git-ignored.
+
 ```
 backend/
 ├── app/
 │   ├── main.py                 # FastAPI entry point + static serving
-│   ├── api/                    # REST routers (auth, upload, records, geo, graph,
+│   ├── api/                    # REST routers: auth, upload, records, geo, graph,
 │   │                           #   timeline, stats, investigation, inference, cases,
-│   │                           #   annotations, towers, ai)
-│   ├── core/                   # config.py (env), database.py (engine + SQLite fallback)
-│   ├── models/                 # SQLAlchemy models (cdr, ipdr, tower, case, annotation, auth)
-│   ├── schemas/                # Pydantic request/response schemas
+│   │                           #   annotations, towers, ai
+│   ├── core/
+│   │   ├── config.py           # Pydantic settings (.env)
+│   │   └── database.py         # SQLAlchemy engine + automatic SQLite fallback
+│   ├── models/                 # SQLAlchemy models: cdr, ipdr, tower, case, annotation, auth
+│   ├── schemas/                # Pydantic schemas: cdr, ipdr, tower, case, annotation, query, upload, auth
 │   ├── services/
 │   │   ├── service_attribution_service.py  # IP-range + port attribution engine
 │   │   ├── inference_service.py            # spatiotemporal inference (CDR vs IPDR)
 │   │   ├── geo.py                          # haversine + travel-mode helpers
-│   │   ├── investigation_service.py, records_service.py, graph_service.py,
-│   │   ├── stats_service.py, tower_service.py, auth_service.py
+│   │   ├── investigation_service.py        # unified-timeline builder
+│   │   ├── records_service.py  graph_service.py  stats_service.py
+│   │   ├── tower_service.py    timeline_service.py  csv_parser.py
+│   │   └── auth_service.py     # password hashing + session management
+│   ├── utils/validators.py     # CSV column / datetime validation
 │   ├── data/attribution_data.json          # shared attribution knowledge base
 │   └── ai/                     # optional LLM investigator / dataset tooling
-├── static/                     # frontend SPA (index.html, app.js, styles.css)
-├── scripts/                    # setup & maintenance scripts (see above)
-├── tests/                      # unittest suites
+├── static/
+│   ├── index.html  app.js  styles.css      # frontend SPA (no build step)
+│   └── attribution_data.js                 # generated from app/data/attribution_data.json
+├── scripts/
+│   ├── init_db.py  generate_sample_data.py  migrate_sqlite_to_postgres.py
+│   ├── fetch_provider_ranges.py  gen_attribution_js.py
+│   └── extract_attribution_data.js  seed_triangulation.py   # one-off helpers
+├── tests/                      # test_inference, test_attribution, test_provider_ranges, test_ai
 ├── requirements.txt
 ├── .env.example
-├── setup.ps1 / setup.sh        # fresh-setup scripts
+├── setup.ps1  setup.sh         # fresh-setup scripts
 └── cdrdb.sqlite3               # SQLite DB (only if used; git-ignored)
 ```
 
@@ -297,6 +313,5 @@ backend/
 - [docs/api.md](docs/api.md) — endpoint reference (also live at `/docs`)
 - [docs/frontend.md](docs/frontend.md) — tab walkthrough & state
 - [docs/features.md](docs/features.md) — detailed feature catalogue
-- [docs/ATTRIBUTION_EXPANSION.md](docs/ATTRIBUTION_EXPANSION.md) — attribution & inference engine notes
 - [docs/deployment.md](docs/deployment.md) — production / reverse-proxy
 - [docs/development.md](docs/development.md) — contributing & code style

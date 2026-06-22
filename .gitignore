@@ -78,3 +78,9 @@ desktop.ini
 
 # ─────────────────────── Claude Code local ───────────────────────
 .claude/settings.local.json
+
+# Work-progress / planning trackers (kept locally, not part of the shipped repo)
+PROJECT_REVIEW.md
+implementation_plan.md
+task.md
+docs/ATTRIBUTION_EXPANSION.md

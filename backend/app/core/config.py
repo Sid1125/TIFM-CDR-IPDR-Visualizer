@@ -9,7 +9,10 @@ except ImportError:  # pragma: no cover - pydantic v1 fallback
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
+    # Defaults to a local SQLite file so a fresh clone runs with zero config
+    # (`pip install -r requirements.txt` then `uvicorn app.main:app`). Set DATABASE_URL
+    # in .env to use PostgreSQL.
+    DATABASE_URL: str = "sqlite:///./cdrdb.sqlite3"
     APP_NAME: str = "Project ARGUS — Advanced Records & Geospatial Unified Surveillance"
     AUTH_SESSION_COOKIE_NAME: str = "gpcssi_session"
     AUTH_SESSION_TTL_HOURS: int = 168
