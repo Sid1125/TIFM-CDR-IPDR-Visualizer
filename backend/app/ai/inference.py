@@ -21,8 +21,12 @@ from transformers import (
 
 logger = logging.getLogger(__name__)
 
-BASE_MODEL_ID = "./llm_models/Qwen2.5-3B-Instruct"
 ADAPTER_PATH = Path(__file__).parents[2] / "tifm_lora_output"
+# Prefer a local copy of the base model if present (avoids re-downloading the 7 GB
+# weights); otherwise pull it from the Hugging Face Hub so a fresh clone works with just
+# the LoRA adapter that ships in this repo (under tifm_lora_output/, via Git LFS).
+_LOCAL_BASE = Path(__file__).parents[2] / "llm_models" / "Qwen2.5-3B-Instruct"
+BASE_MODEL_ID = str(_LOCAL_BASE) if _LOCAL_BASE.exists() else "Qwen/Qwen2.5-3B-Instruct"
 
 _model = None
 _tokenizer = None

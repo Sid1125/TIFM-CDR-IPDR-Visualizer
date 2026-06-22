@@ -35,15 +35,28 @@ backend/cdrdb.sqlite3
 
 # ──────────── ML models / training artifacts (large) ──────────────
 backend/llm_models/
-backend/tifm_lora_output/
 backend/tifm_merged/
 backend/wandb/
+# tifm_lora_output: ship ONLY the deployable LoRA adapter (via Git LFS), not the
+# training checkpoints/optimizer state. Ignore the dir contents, then re-include the
+# specific adapter files below (these negations come after the *.safetensors/*.bin
+# globals so they win).
+backend/tifm_lora_output/*
+backend/tifm_lora_output/checkpoint-*/
 *.bin
 *.safetensors
 *.gguf
 *.pt
 *.pth
 *.ckpt
+# Re-include the deployable LoRA adapter (kept in Git LFS):
+!backend/tifm_lora_output/adapter_config.json
+!backend/tifm_lora_output/adapter_model.safetensors
+!backend/tifm_lora_output/tokenizer.json
+!backend/tifm_lora_output/tokenizer_config.json
+!backend/tifm_lora_output/chat_template.jinja
+!backend/tifm_lora_output/training_args.bin
+!backend/tifm_lora_output/README.md
 *.onnx
 
 # ───────────────── Generated / runtime data ──────────────────────
