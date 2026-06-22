@@ -354,11 +354,26 @@ class IpdrAnalyticsTests(unittest.TestCase):
         base = datetime(2026, 4, 1, 10, 0)
         recs = [self._ips("10.0.0.1", "8.8.8.8", base), self._ips("10.0.0.2", "8.8.8.8", base),
                 self._ips("10.0.0.3", "8.8.8.8", base),   # 8.8.8.8 common (3 sources)
-                self._ips("10.0.0.1", "5.5.5.5", base)]   # 5.5.5.5 rare (1 source)
+                # 5.5.5.5 unique to 10.0.0.1 AND visited repeatedly (>=3) -> a real lead
+                self._ips("10.0.0.1", "5.5.5.5", base),
+                self._ips("10.0.0.1", "5.5.5.5", base + timedelta(hours=1)),
+                self._ips("10.0.0.1", "5.5.5.5", base + timedelta(hours=2)),
+                # 9.9.9.9 unique but visited ONCE -> normal browsing, must NOT be flagged
+                self._ips("10.0.0.1", "9.9.9.9", base)]
         by = {x["source_ip"]: x for x in inf.destination_profile(recs)}
         rare = {r["destination_ip"] for r in by["10.0.0.1"]["rare"]}
         self.assertIn("5.5.5.5", rare)
-        self.assertNotIn("8.8.8.8", rare)
+        self.assertNotIn("8.8.8.8", rare)   # common destination
+        self.assertNotIn("9.9.9.9", rare)   # unique but one-off (would be a false positive)
+
+    def test_web_port_beacon_not_in_risk(self):
+        # A regular cadence to a web port (443) is usually benign app sync — detected for
+        # review, but it must NOT inflate the risk score (false-positive guard).
+        base = datetime(2026, 4, 1, 0, 0)
+        recs = [self._ips("10.0.0.11", "9.9.9.9", base + timedelta(hours=2 * i), port=443) for i in range(6)]
+        rep = inf.run_all([], recs)
+        self.assertTrue(any(b["source_ip"] == "10.0.0.11" for b in rep["ipdr"]["beaconing"]))  # shown
+        self.assertNotIn("10.0.0.11", {r["subject"] for r in rep["ipdr"]["risk"]})              # not scored
 
     def test_exfil_and_beacon_feed_ipdr_risk(self):
         base = datetime(2026, 4, 1, 0, 0)
@@ -389,8 +404,8 @@ class GeospatialTests(unittest.TestCase):
 
     def test_shared_routes_detected(self):
         base = datetime(2026, 5, 1, 8, 0)
-        seq = ["T1", "T2", "T3", "T4"]
-        coords = {"T1": CHENNAI, "T2": DELHI, "T3": MUMBAI_T, "T4": CHENNAI}
+        seq = ["T1", "T2", "T3", "T4", "T5"]  # 3 shared tower-triples (>= ROUTE_MIN_SHARED)
+        coords = {"T1": CHENNAI, "T2": DELHI, "T3": MUMBAI_T, "T4": CHENNAI, "T5": DELHI}
         recs = []
         for who in ("A", "B"):
             for i, tw in enumerate(seq):
@@ -401,8 +416,8 @@ class GeospatialTests(unittest.TestCase):
 
     def test_shared_route_feeds_risk(self):
         base = datetime(2026, 5, 1, 8, 0)
-        seq = ["T1", "T2", "T3", "T4"]
-        coords = {"T1": CHENNAI, "T2": DELHI, "T3": MUMBAI_T, "T4": CHENNAI}
+        seq = ["T1", "T2", "T3", "T4", "T5"]  # 3 shared tower-triples (>= ROUTE_MIN_SHARED)
+        coords = {"T1": CHENNAI, "T2": DELHI, "T3": MUMBAI_T, "T4": CHENNAI, "T5": DELHI}
         recs = []
         for who in ("A", "B"):
             for i, tw in enumerate(seq):

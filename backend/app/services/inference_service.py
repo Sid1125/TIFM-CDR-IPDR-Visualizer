@@ -48,7 +48,8 @@ NET_BETWEENNESS_SAMPLE_OVER = 1200  # above this many nodes, sample betweenness 
 NET_PREDICT_MAX_NODES = 3000        # skip link prediction above this many nodes
 NET_PREDICT_HUB_DEG = 200           # don't expand candidate links around hubs this large (they predict everything)
 NET_PREDICT_TOPN = 10
-NET_RELAY_WINDOW_MIN = 30           # A->B then B->C within this window = onward relay
+NET_RELAY_WINDOW_MIN = 15           # A->B then B->C within this TIGHT window = onward relay (a
+                                    # wider window catches coincidental, unrelated B->C calls)
 NET_RELAY_MAX = 30
 NET_RECIPROCITY_MIN = 3             # min calls on the dominant side to report a one-way tie
 
@@ -68,7 +69,9 @@ EXFIL_UP_DOWN_RATIO = 3.0        # upload >= ratio * download = asymmetric (exfi
 BEACON_MIN_SESSIONS = 4
 BEACON_CV_MAX = 0.25             # inter-session gap CV below this = regular/automated cadence
 BEACON_MIN_SPAN_H = 6            # ...over at least this long (else it's a burst, not a beacon)
-DEST_RARE_MAX_SOURCES = 2        # a destination reached from <= this many sources is "rare"
+DEST_RARE_MAX_SOURCES = 2        # a destination reached from <= this many sources is "rare"...
+DEST_RARE_MIN_SESSIONS = 3       # ...AND reached repeatedly by the subject (one-off browsing to a
+                                 # unique endpoint is normal in sparse data — this avoids that FP)
 IPDR_TOPN = 15
 
 # Geospatial (Phase 5). Tower coordinates approximate the handset; towers with no coords are
@@ -76,7 +79,8 @@ IPDR_TOPN = 15
 DWELL_TOPN = 6
 DWELL_MAX_GAP_H = 24             # ignore gaps longer than this (data holes, not real dwell)
 ROUTE_NGRAM = 3                  # length of the tower-sequence shingle
-ROUTE_MIN_SHARED = 2            # pairs sharing >= this many route segments = shared route
+ROUTE_MIN_SHARED = 3            # pairs sharing >= this many ordered tower-triples = shared route
+                               # (2 was weak — same-neighbourhood commuters can share one segment)
 ROUTE_COMMON_SUBS = 30         # a segment shared by more subjects than this is a common corridor (skip)
 ROUTE_MAX_SUBJECTS = 1500       # cap subjects shingled to bound cost
 
@@ -873,7 +877,7 @@ def destination_profile(ipdr_records):
     for src, dsts in src_dsts.items():
         rare = []
         for dst, cnt in dsts.most_common():
-            if len(dst_sources[dst]) <= DEST_RARE_MAX_SOURCES:
+            if len(dst_sources[dst]) <= DEST_RARE_MAX_SOURCES and cnt >= DEST_RARE_MIN_SESSIONS:
                 m = _match_ip(dst)
                 rare.append({"destination_ip": dst, "sessions": cnt,
                              "provider": (m[0] if m else None),
@@ -1056,8 +1060,13 @@ def risk_scores(report):
                 "detail": f"{v['up_mb']} MB up vs {v['down_mb']} MB down (asymmetric)"})
             ip_events[v["source_ip"]] = max(ip_events[v["source_ip"]], v.get("sessions", 0))
     for b in ipdr.get("beaconing", []):
+        # Only a non-web-port beacon feeds the score — a regular cadence to 80/443 is usually
+        # benign app sync (email/push) and would be a false positive. Web-port beacons still
+        # appear in the beaconing card for review, just without inflating risk.
+        if not b.get("non_web_port"):
+            continue
         ip_factors[b["source_ip"]].append({"name": "Beaconing", "weight": RISK_WEIGHTS["beaconing"],
-            "detail": f"regular {b['mean_interval_hours']}h cadence to {b['destination_ip']} ({b['sessions']} sessions)"})
+            "detail": f"regular {b['mean_interval_hours']}h cadence to {b['destination_ip']}:{b.get('port')} ({b['sessions']} sessions)"})
         ip_events[b["source_ip"]] = max(ip_events[b["source_ip"]], b.get("sessions", 0))
 
     ipdr_scores = []
