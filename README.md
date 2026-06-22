@@ -41,9 +41,11 @@ spatiotemporal inference engine that surfaces investigative leads — all organi
 - **Tower Map** — Leaflet map: movement path (with per-leg distance / time / speed / travel-mode hover), heatmap, operational zones, co-location, meetings, **inference overlays** (impossible travel, convoys, home/work anchors) and an interactive **geofence**.
 - **Timeline** — session-reconstructed, entity-grouped timeline.
 - **Charts / Services / Correlation / Records** — service distribution, behavioural charts, cross-subject correlation, and a full searchable record table.
-- **Inferences** — automated **spatiotemporal analysis**, split into:
-  - **CDR (phone subjects):** impossible-travel / SIM-clone, SIM-swap & burner handsets, convoys & "met but never called" hidden links, scheduled-contact cadence, home/work anchors, odd-hours activity — with a ranked **Persons of Interest** list.
-  - **IPDR (IP subjects):** VPN / proxy connections by source IP, with the destination server and provider.
+- **Inferences** — automated **spatiotemporal + network analytics**, all on one tab, CDR and IPDR kept strictly separate:
+  - **Composite risk scoring** — every CDR phone subject and IPDR IP subject ranked **0–100** with banding (low → critical) and a transparent, hover-able **factor breakdown**; two independent leaderboards that never share a subject.
+  - **CDR (phone subjects):** impossible-travel / SIM-clone, SIM-swap & burner handsets, **multi-SIM identity resolution**, convoys & "met but never called" hidden links, **call-graph structure** (brokers, cut-points, one-way ties, relay chains, predicted hidden links), **behavioural shifts** (escalation, dormancy → reactivation, newest first-contacts), scheduled-contact cadence, odd-hours, **movement** (home/work anchors, mobility class, longest dwell) and **shared travel routes**.
+  - **IPDR (IP subjects):** VPN / proxy, **data volume & exfiltration**, **beaconing** (automated check-ins), and **rare destinations** — with the destination server and provider.
+  - **Watchlist** (flag numbers/IPs → forced to Critical) and one-click **Markdown case-report export**.
 - **Service / app attribution** — two-layer engine (provider IP-range match + port classification) with longest-prefix matching, an indexed lookup that scales to ~100k rows, and pluggable live provider-range feeds.
 - **AI Insights** — optional local LLM (Ollama) report generation and Q&A.
 - **Cases & Auth** — multi-case workspaces; PBKDF2-authenticated sessions with sliding expiry.
