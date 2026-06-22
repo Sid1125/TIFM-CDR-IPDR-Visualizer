@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="backend/static/logo.png" alt="Project ARGUS" width="300"/>
+  <img src="backend/static/logo-readme.png" alt="Project ARGUS" width="320"/>
 </div>
 
 <h1 align="center">Project ARGUS</h1>

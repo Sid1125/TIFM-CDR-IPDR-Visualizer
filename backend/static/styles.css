@@ -1,20 +1,21 @@
-:root{--bg:#f0ebe4;--surface:#fff;--text:#1f2330;--muted:#78716c;--fg:#1f2330;--line:#e5ddd4;--accent:#2c6f79;--accent-light:rgba(44,111,121,0.12);--danger:#b94a48;--warn:#d4a017;--success:#3a7d5a;--shadow:0 2px 12px rgba(0,0,0,0.06);--card-bg:#fff}
-.dark{--bg:#1a1c21;--surface:#262830;--text:#e0ddd8;--muted:#8a8a8a;--fg:#e0ddd8;--line:#373a40;--accent:#49a0ae;--accent-light:rgba(73,160,174,0.15);--danger:#d35d5b;--warn:#c9a23b;--success:#5a9f7e;--shadow:0 2px 12px rgba(0,0,0,0.25);--card-bg:#2a2c34}
+/* Cool navy / slate palette aligned to the ARGUS logo. */
+:root{--bg:#eceff4;--surface:#ffffff;--text:#1b2433;--muted:#67738a;--fg:#1b2433;--line:#dbe1ea;--accent:#2c5a8f;--accent-light:rgba(44,90,143,0.10);--danger:#c14a44;--warn:#bf8b1c;--success:#2f8a5b;--shadow:0 2px 12px rgba(20,35,60,0.07);--card-bg:#ffffff}
+.dark{--bg:#0f1521;--surface:#19212f;--text:#dde4ee;--muted:#8693a8;--fg:#dde4ee;--line:#2a3445;--accent:#5b95d6;--accent-light:rgba(91,149,214,0.16);--danger:#d9655f;--warn:#d3a93d;--success:#5aa980;--shadow:0 2px 14px rgba(0,0,0,0.4);--card-bg:#1d2636}
 .dark select{color-scheme:dark}
-.dark select option{background:#262830;color:#e0ddd8}
+.dark select option{background:#19212f;color:#dde4ee}
 .dark .data-table th{background:var(--surface)}
-.dark .map-stage{background:#20222a}
+.dark .map-stage{background:#0f1521}
 .dark .tl-gantt-bar{opacity:0.85}
-.dark .gantt-tooltip{background:#1a1c21;color:#e0ddd8}
+.dark .gantt-tooltip{background:#19212f;color:#dde4ee}
 .dark .gantt-tooltip .tt-label{color:var(--muted)}
 .dark .gantt-tooltip .tt-ev,.dark .gantt-tooltip .tt-tree-leaf{color:var(--text)}
 .dark .tl-entity-body{background:rgba(38,40,48,0.5)}
 .dark .tl-gantt{background:rgba(38,40,48,0.4)}
 .dark .tl-ev{border-bottom-color:rgba(55,58,64,0.5)}
-.graph-label{fill:#2c2418;font-family:system-ui,sans-serif}
-.dark .graph-label{fill:#e0ddd8}
+.graph-label{fill:#1b2433;font-family:inherit}
+.dark .graph-label{fill:#dde4ee}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
+html,body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:15.5px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 body{padding:0}
 input,select,button,textarea{font:inherit;color:inherit;background:var(--surface)}
 a{color:var(--accent);text-decoration:none}
@@ -31,7 +32,7 @@ a{color:var(--accent);text-decoration:none}
 
 /* TOPBAR */
 #topbar{display:flex;align-items:center;padding:0 16px;height:52px;background:var(--surface);border-bottom:1px solid var(--line);gap:16px;flex-shrink:0}
-.topbar-left h1{font-size:1rem;font-weight:700;color:var(--accent);line-height:1.2}
+.topbar-left h1{font-size:1.05rem;font-weight:800;color:var(--text);line-height:1.2;letter-spacing:0.16em}
 .topbar-sub{font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em}
 .topbar-center{display:flex;gap:2px;margin-left:24px;flex:1;overflow-x:auto;scrollbar-width:thin}
 .topbar-center::-webkit-scrollbar{height:4px}
@@ -102,7 +103,7 @@ a{color:var(--accent);text-decoration:none}
 .map-toolbar select,.map-toolbar input{padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:0.82rem}
 .map-toolbar input#mapSubject{min-width:210px}
 .map-main{display:flex;gap:12px;height:calc(100vh - 132px)}
-.map-stage{flex:1;background:#f8f8f0;border-radius:12px;border:1px solid var(--line);z-index:1}
+.map-stage{flex:1;background:#e8edf3;border-radius:12px;border:1px solid var(--line);z-index:1}
 .map-sidebar{width:280px;background:var(--surface);border-radius:12px;border:1px solid var(--line);padding:14px;overflow-y:auto;font-size:0.85rem}
 .map-sidebar h3{font-size:0.82rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em}
 .map-sidebar .stat-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line);font-size:0.82rem}
