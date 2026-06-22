@@ -655,3 +655,16 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 .topbar-logo{height:34px;width:34px;object-fit:contain;flex-shrink:0;
   background:#fff;border:1px solid var(--line);border-radius:8px;padding:3px}
 .auth-logo{display:block;width:170px;max-width:70%;margin:0 auto 14px}
+
+/* ===================== WATCHLIST BAR ===================== */
+.wl-bar{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;box-shadow:var(--shadow)}
+.wl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wl-row strong{font-size:0.78rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted)}
+.wl-row input{flex:1;min-width:160px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--text);font-size:0.82rem}
+.wl-export{margin-left:auto;border-color:var(--accent);color:var(--accent)}
+.wl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.wl-chip{display:inline-flex;align-items:center;gap:5px;background:var(--accent-light);border:1px solid var(--line);border-radius:20px;padding:2px 10px;font-size:0.76rem;font-family:monospace}
+.wl-chip .k{opacity:.6;font-family:inherit;font-size:0.66rem;text-transform:uppercase}
+.wl-chip a{cursor:pointer;color:var(--danger);font-weight:700;text-decoration:none}
+.wl-empty{margin-top:8px;font-size:0.74rem;color:var(--muted)}
+.wl-hits{margin-top:9px;font-size:0.78rem;font-weight:600;color:var(--danger);background:rgba(193,74,68,0.08);border-radius:7px;padding:6px 10px}

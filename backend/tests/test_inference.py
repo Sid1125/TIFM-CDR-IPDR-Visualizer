@@ -411,5 +411,35 @@ class GeospatialTests(unittest.TestCase):
         self.assertIn("Shared travel route", [f["name"] for f in risk["A"]["factors"]])
 
 
+class CrossCuttingTests(unittest.TestCase):
+    def test_entity_resolution_transitive(self):
+        base = datetime(2026, 6, 1, 9, 0)
+        # A&B share IMEI1; B&C share IMEI2 -> one transitive actor {A,B,C}
+        recs = [cdr("A", "x", base, "T", 13.0, 80.0, imei="IMEI1"),
+                cdr("B", "x", base, "T", 13.0, 80.0, imei="IMEI1"),
+                cdr("B", "x", base, "T", 13.0, 80.0, imei="IMEI2"),
+                cdr("C", "x", base, "T", 13.0, 80.0, imei="IMEI2")]
+        ents = inf.resolve_entities(recs)
+        self.assertTrue(any(set(e["numbers"]) == {"A", "B", "C"} for e in ents))
+
+    def test_apply_watchlist_forces_critical(self):
+        report = {"cdr": {"risk": [{"subject": "900", "score": 20, "band": "low", "events": 5, "factors": []}]},
+                  "ipdr": {"risk": [{"subject": "1.2.3.4", "score": 12, "band": "low", "events": 3, "factors": []}]}}
+        hits = inf.apply_watchlist(report, phones=["900"], ips=["1.2.3.4"])
+        self.assertEqual(len(hits), 2)
+        top = report["cdr"]["risk"][0]
+        self.assertEqual((top["band"], top["score"]), ("critical", 100))
+        self.assertEqual(top["factors"][0]["name"], "Watchlist match")
+        # CDR phone never matches the IP watchlist and vice-versa
+        self.assertEqual(report["ipdr"]["risk"][0]["band"], "critical")
+
+    def test_report_markdown_sections(self):
+        rep = inf.run_all([cdr("900", "x", datetime(2026, 6, 1, 9, 0), "T", 13.0, 80.0)], [])
+        md = inf.report_markdown(rep)
+        self.assertIn("# ARGUS", md)
+        self.assertIn("Persons of interest", md)
+        self.assertIn("Flagged IP addresses", md)
+
+
 if __name__ == "__main__":
     unittest.main()

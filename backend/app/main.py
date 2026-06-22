@@ -11,6 +11,7 @@ from app.api.geo import router as geo_router
 from app.api.graph import router as graph_router
 from app.api.inference import router as inference_router
 from app.api.investigation import router as investigation_router
+from app.api.watchlist import router as watchlist_router
 from app.api.records import router as records_router
 from app.api.stats import router as stats_router
 from app.api.timeline import router as timeline_router
@@ -65,6 +66,7 @@ app.include_router(records_router, prefix="/records", tags=["Records"], dependen
 app.include_router(towers_router, prefix="/towers", tags=["Towers"], dependencies=[Depends(get_current_user)])
 app.include_router(investigation_router, prefix="/investigation", tags=["Investigation"], dependencies=[Depends(get_current_user)])
 app.include_router(inference_router, prefix="/inference", tags=["Inference"], dependencies=[Depends(get_current_user)])
+app.include_router(watchlist_router, prefix="/watchlist", tags=["Watchlist"], dependencies=[Depends(get_current_user)])
 app.include_router(graph_router, prefix="/graph", tags=["Graph"], dependencies=[Depends(get_current_user)])
 app.include_router(timeline_router, prefix="/timeline", tags=["Timeline"], dependencies=[Depends(get_current_user)])
 app.include_router(stats_router, prefix="/stats", tags=["Statistics"], dependencies=[Depends(get_current_user)])

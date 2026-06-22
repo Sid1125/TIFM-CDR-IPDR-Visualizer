@@ -3,22 +3,50 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.watchlist import WatchlistEntry
+from app.services.inference_service import apply_watchlist
+from app.services.inference_service import report_markdown
 from app.services.inference_service import run_all_db
 from app.services.inference_service import subject_timeline_db
 
 router = APIRouter()
 
 
+def _watchlist(db, case_id):
+    q = db.query(WatchlistEntry)
+    if case_id:
+        q = q.filter(WatchlistEntry.case_id == case_id)
+    entries = q.all()
+    phones = [e.value for e in entries if e.kind == "phone"]
+    ips = [e.value for e in entries if e.kind == "ip"]
+    return phones, ips
+
+
 @router.get("/report")
 def inference_report(db: Session = Depends(get_db), limit: int = Query(default=5000, ge=1, le=50000),
                      case_id: str = Query(default="")):
     """Full spatiotemporal inference report: movement, impossible-travel, co-presence,
-    behavioral flags, periodic contacts and device/identity anomalies. Scoped to the
-    given case when provided (matching the rest of the app)."""
-    return run_all_db(db, limit=limit, case_id=case_id or None)
+    network structure, temporal/behavioral shifts, IPDR volume/beaconing, geospatial roles,
+    risk scores, entity resolution — plus any investigator watchlist hits. Scoped to the
+    given case when provided."""
+    report = run_all_db(db, limit=limit, case_id=case_id or None)
+    phones, ips = _watchlist(db, case_id or None)
+    apply_watchlist(report, phones, ips)
+    return report
+
+
+@router.get("/report.md", response_class=PlainTextResponse)
+def inference_report_md(db: Session = Depends(get_db), limit: int = Query(default=5000, ge=1, le=50000),
+                        case_id: str = Query(default="")):
+    """The same report rendered as a downloadable Markdown case summary."""
+    report = run_all_db(db, limit=limit, case_id=case_id or None)
+    phones, ips = _watchlist(db, case_id or None)
+    apply_watchlist(report, phones, ips)
+    return report_markdown(report)
 
 
 @router.get("/subject/{subject}")

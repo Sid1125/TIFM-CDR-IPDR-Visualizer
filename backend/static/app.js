@@ -2810,6 +2810,23 @@ async function getInfReport(force){
   _infReport=await API.get('/inference/report'+cq);
   return _infReport;
 }
+let _wl=[];
+async function loadWatchlist(){try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';_wl=await API.get('/watchlist'+cq);}catch(e){_wl=[];}}
+function _watchlistBarHtml(rep){
+  const hits=(rep&&rep.watchlist_hits)||[];
+  const chips=(_wl||[]).map(e=>'<span class="wl-chip">'+esc(e.value)+' <span class="k">'+esc(e.kind)+'</span> <a onclick="wlRemove('+e.id+')" title="remove">&times;</a></span>').join('');
+  return '<div class="wl-bar">'
+    +'<div class="wl-row"><strong>Watchlist</strong>'
+    +'<input id="wlInput" placeholder="phone number or IP address" onkeydown="if(event.key===\'Enter\')wlAdd()"/>'
+    +'<button class="btn-sm" onclick="wlAdd()">Add</button>'
+    +'<button class="btn-sm wl-export" onclick="wlExport()">Export report (.md)</button></div>'
+    +(chips?'<div class="wl-chips">'+chips+'</div>':'<div class="wl-empty">No watchlist entries. Add a number/IP to force it to the top as Critical.</div>')
+    +(hits.length?'<div class="wl-hits">&#9873; '+hits.length+' watchlist match'+(hits.length>1?'es':'')+' &mdash; forced to Critical at the top of the lists.</div>':'')
+    +'</div>';
+}
+window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;try{await API.post('/watchlist',{value:v,case_id:activeCaseId||null});await loadWatchlist();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+window.wlExport=async function(){try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';const r=await fetch('/inference/report.md'+cq,{credentials:'same-origin'});const t=await r.text();const b=new Blob([t],{type:'text/markdown'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='argus_case_report.md';a.click();URL.revokeObjectURL(u);}catch(e){alert('Export failed: '+e.message);}};
 async function renderInferences(force){
   const box=$('infResults'),status=$('infStatus'),btn=$('infRefreshBtn');
   if(!box)return;
@@ -2820,7 +2837,8 @@ async function renderInferences(force){
   let rep;
   try{rep=await getInfReport(force);}
   catch(e){status.textContent='Error';box.innerHTML='<div style="padding:40px;text-align:center;color:var(--danger)">Failed: '+esc(e.message)+'</div>';return;}
-  _infCache=buildInferenceHtml(rep);
+  await loadWatchlist();
+  _infCache=_watchlistBarHtml(rep)+buildInferenceHtml(rep);
   box.innerHTML=_infCache;
   status.textContent=n((rep.cdr&&rep.cdr.subjects)||0)+' phone subjects · '+n((rep.ipdr&&rep.ipdr.sessions)||0)+' IPDR sessions';
 }
@@ -2913,6 +2931,14 @@ function buildInferenceHtml(rep){
     burners.forEach(b=>{rows+='<div class="inf-row"><div class="top"><strong>'+esc(b.imei)+'</strong>'+_infChip(b.msisdns.length+' numbers','var(--warn)')+'</div><div class="meta">Numbers: '+b.msisdns.map(_infSubj).join(', ')+'</div></div>';});
     theme+=card('SIM swaps &amp; burner handsets',swaps.length+burners.length,'var(--danger)','crit',
       'One number seen on several handsets (possible <b>SIM swap/clone</b>), or one handset cycling several numbers (a <b>burner</b>).',rows);
+  }
+  const entities=(C.entities||[]).filter(e=>e.size>1);
+  if(entities.length){
+    const rows=entities.slice(0,12).map(e=>'<div class="inf-row"><div class="top"><strong>'+e.numbers.map(_infSubj).join(' = ')+'</strong>'
+      +_infChip(e.confidence+' confidence',e.confidence==='high'?'var(--danger)':'var(--warn)')+'</div>'
+      +'<div class="meta">'+e.size+' numbers sharing handset(s) &mdash; likely one person</div></div>').join('');
+    theme+=card('Multi-SIM identities',entities.length,'var(--warn)','high',
+      'Phone numbers grouped into a <b>single likely actor</b> because they share handsets (transitively). CDR-only &mdash; an IP is never part of a phone identity. Treat as a lead; shared/family devices can group numbers too.',rows);
   }
   if(theme){h+='<div class="inf-theme">CDR · Identity &amp; device fraud</div>'+theme;}
 
