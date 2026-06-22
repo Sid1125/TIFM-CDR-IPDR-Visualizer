@@ -61,6 +61,16 @@ ESCALATION_FACTOR = 2.0           # ...and be >= this multiple of the earlier ba
 DORMANCY_MIN_GAP_DAYS = 14        # silence >= this then renewed activity = reactivation
 FIRST_CONTACT_TOPN = 12
 
+# IPDR analytics (Phase 4). Subject = source IP. bytes_* are nullable, so coverage is reported.
+MB = 1024 * 1024
+EXFIL_MIN_UP_MB = 50              # only sizable uploads are exfiltration candidates
+EXFIL_UP_DOWN_RATIO = 3.0        # upload >= ratio * download = asymmetric (exfil-shaped)
+BEACON_MIN_SESSIONS = 4
+BEACON_CV_MAX = 0.25             # inter-session gap CV below this = regular/automated cadence
+BEACON_MIN_SPAN_H = 6            # ...over at least this long (else it's a burst, not a beacon)
+DEST_RARE_MAX_SOURCES = 2        # a destination reached from <= this many sources is "rare"
+IPDR_TOPN = 15
+
 # Tunnel/anonymisation destination ports, shared by going-dark and VPN/proxy detection.
 VPN_PORTS = {500, 1194, 1195, 1701, 1723, 4500, 51820, 51821}
 PROXY_TOR_PORTS = {1080, 3128, 8118, 9001, 9030, 9050, 9051}
@@ -584,6 +594,114 @@ def vpn_proxy_use(ipdr_records):
     return sorted(out, key=lambda x: -(x["vpn_sessions"] + x["proxy_tor_sessions"]))
 
 
+def _int_or_none(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def ipdr_volume(ipdr_records):
+    """IPDR-only. Per source IP: total bytes up/down and an asymmetric-upload
+    (exfiltration-shaped) flag. Rows without byte counts are skipped and coverage reported,
+    so the analyst knows how much data backed the result. Exfil is a 'review' lead, not proof
+    — symmetric high-volume transfers (video) and cloud backups can look similar."""
+    agg: dict[str, dict] = {}
+    total = 0
+    for r in ipdr_records:
+        src = getattr(r, "source_ip", None)
+        if not src:
+            continue
+        total += 1
+        d = agg.setdefault(src, {"up": 0, "down": 0, "sessions": 0, "with_bytes": 0})
+        d["sessions"] += 1
+        up = _int_or_none(getattr(r, "bytes_uploaded", None))
+        down = _int_or_none(getattr(r, "bytes_downloaded", None))
+        if up is not None or down is not None:
+            d["with_bytes"] += 1
+            d["up"] += up or 0
+            d["down"] += down or 0
+    subjects = []
+    for src, d in agg.items():
+        if d["with_bytes"] == 0:
+            continue
+        up, down = d["up"], d["down"]
+        exfil = up >= EXFIL_MIN_UP_MB * MB and (down == 0 or up >= EXFIL_UP_DOWN_RATIO * down)
+        subjects.append({"source_ip": src, "bytes_up": up, "bytes_down": down,
+                         "up_mb": round(up / MB, 1), "down_mb": round(down / MB, 1),
+                         "sessions": d["sessions"], "exfil_suspected": exfil})
+    subjects.sort(key=lambda x: -x["bytes_up"])
+    covered = sum(a["with_bytes"] for a in agg.values())
+    return {"subjects": subjects[:IPDR_TOPN],
+            "byte_coverage": round(covered / total, 2) if total else 0.0}
+
+
+def beaconing(ipdr_records):
+    """IPDR-only. Per (source IP -> destination): a regular, low-jitter session cadence =
+    automated 'beaconing' (agent/C2 check-ins), distinct from bursty human browsing. False
+    positives (email/push/NTP sync) are reduced by requiring a real span and session count;
+    a non-web destination port raises confidence."""
+    pair_times: dict[tuple, list] = defaultdict(list)
+    pair_port: dict[tuple, int] = {}
+    for r in ipdr_records:
+        src = getattr(r, "source_ip", None)
+        dst = getattr(r, "destination_ip", None)
+        t = getattr(r, "start_time", None)
+        if not src or not dst or not t:
+            continue
+        pair_times[(src, dst)].append(t)
+        p = _int_or_none(getattr(r, "destination_port", None))
+        if p is not None:
+            pair_port[(src, dst)] = p
+    out = []
+    for (src, dst), times in pair_times.items():
+        if len(times) < BEACON_MIN_SESSIONS:
+            continue
+        times.sort()
+        if (times[-1] - times[0]).total_seconds() / 3600.0 < BEACON_MIN_SPAN_H:
+            continue
+        gaps = [(times[i + 1] - times[i]).total_seconds() / 3600.0 for i in range(len(times) - 1)]
+        mean = statistics.mean(gaps)
+        if mean <= 0:
+            continue
+        cv = statistics.pstdev(gaps) / mean
+        if cv <= BEACON_CV_MAX:
+            port = pair_port.get((src, dst))
+            out.append({"source_ip": src, "destination_ip": dst, "sessions": len(times),
+                        "mean_interval_hours": round(mean, 2), "regularity_cv": round(cv, 2),
+                        "port": port, "non_web_port": (port not in (80, 443)) if port is not None else None})
+    return sorted(out, key=lambda x: x["regularity_cv"])[:IPDR_TOPN]
+
+
+def destination_profile(ipdr_records):
+    """IPDR-only. Per source IP: rare destinations (reached from few sources) with the
+    destination's provider via attribution. Concentrated, rarely-seen destinations are leads;
+    widely-shared destinations are filtered out by the 'rare' threshold."""
+    dst_sources: dict[str, set] = defaultdict(set)
+    src_dsts: dict[str, Counter] = defaultdict(Counter)
+    for r in ipdr_records:
+        src = getattr(r, "source_ip", None)
+        dst = getattr(r, "destination_ip", None)
+        if not src or not dst:
+            continue
+        dst_sources[dst].add(src)
+        src_dsts[src][dst] += 1
+    out = []
+    for src, dsts in src_dsts.items():
+        rare = []
+        for dst, cnt in dsts.most_common():
+            if len(dst_sources[dst]) <= DEST_RARE_MAX_SOURCES:
+                m = _match_ip(dst)
+                rare.append({"destination_ip": dst, "sessions": cnt,
+                             "provider": (m[0] if m else None),
+                             "seen_from_sources": len(dst_sources[dst])})
+            if len(rare) >= 5:
+                break
+        if rare:
+            out.append({"source_ip": src, "distinct_destinations": len(dsts), "rare": rare})
+    return sorted(out, key=lambda x: -len(x["rare"]))[:IPDR_TOPN]
+
+
 # --- Composite risk scoring ------------------------------------------------------
 # Each signal contributes POINTS; a subject's score is the (capped) sum, banded for
 # triage. Weights are deliberately explicit and the per-factor breakdown is ALWAYS
@@ -608,6 +726,8 @@ RISK_WEIGHTS = {
     "reactivation": 7,        # long dormancy then renewed activity
     "tor_proxy": 18,          # IPDR: Tor/proxy port usage
     "vpn": 12,                # IPDR: VPN tunnel port usage
+    "exfil": 16,              # IPDR: asymmetric upload (exfiltration-shaped)
+    "beaconing": 16,          # IPDR: regular automated check-ins (C2-shaped)
 }
 RISK_BANDS = ((75, "critical"), (50, "high"), (25, "elevated"), (0, "low"))
 LOW_EVIDENCE_MIN = 3   # subjects backed by fewer events than this can't exceed "elevated"
@@ -725,21 +845,34 @@ def risk_scores(report):
                            "factors": sorted(factors, key=lambda f: -f["weight"])})
     cdr_scores.sort(key=lambda x: (-x["score"], x["subject"]))
 
-    ipdr_scores = []
+    # IPDR (IP subjects) — aggregate anonymisation, exfiltration and beaconing per source IP.
+    ip_factors: dict[str, list] = defaultdict(list)
+    ip_events: dict[str, int] = defaultdict(int)
     for row in ipdr.get("vpn_proxy", []):
-        factors = []
+        ip = row["source_ip"]
         if row.get("proxy_tor_sessions"):
-            factors.append({"name": "Tor/proxy", "weight": RISK_WEIGHTS["tor_proxy"],
-                            "detail": f"{row['proxy_tor_sessions']} session(s) on Tor/proxy ports"})
+            ip_factors[ip].append({"name": "Tor/proxy", "weight": RISK_WEIGHTS["tor_proxy"],
+                                   "detail": f"{row['proxy_tor_sessions']} session(s) on Tor/proxy ports"})
         if row.get("vpn_sessions"):
-            factors.append({"name": "VPN tunnel", "weight": RISK_WEIGHTS["vpn"],
-                            "detail": f"{row['vpn_sessions']} session(s) on VPN tunnel ports"})
-        if not factors:
-            continue
-        ev = row.get("vpn_sessions", 0) + row.get("proxy_tor_sessions", 0)
+            ip_factors[ip].append({"name": "VPN tunnel", "weight": RISK_WEIGHTS["vpn"],
+                                   "detail": f"{row['vpn_sessions']} session(s) on VPN tunnel ports"})
+        ip_events[ip] = max(ip_events[ip], row.get("vpn_sessions", 0) + row.get("proxy_tor_sessions", 0))
+    for v in ipdr.get("volume", {}).get("subjects", []):
+        if v.get("exfil_suspected"):
+            ip_factors[v["source_ip"]].append({"name": "Possible exfiltration", "weight": RISK_WEIGHTS["exfil"],
+                "detail": f"{v['up_mb']} MB up vs {v['down_mb']} MB down (asymmetric)"})
+            ip_events[v["source_ip"]] = max(ip_events[v["source_ip"]], v.get("sessions", 0))
+    for b in ipdr.get("beaconing", []):
+        ip_factors[b["source_ip"]].append({"name": "Beaconing", "weight": RISK_WEIGHTS["beaconing"],
+            "detail": f"regular {b['mean_interval_hours']}h cadence to {b['destination_ip']} ({b['sessions']} sessions)"})
+        ip_events[b["source_ip"]] = max(ip_events[b["source_ip"]], b.get("sessions", 0))
+
+    ipdr_scores = []
+    for ip, factors in ip_factors.items():
+        ev = ip_events.get(ip, len(factors))
         score, band = _score_factors(factors, ev)
-        ipdr_scores.append({"subject": row["source_ip"], "score": score, "band": band,
-                            "events": ev, "factors": factors})
+        ipdr_scores.append({"subject": ip, "score": score, "band": band, "events": ev,
+                            "factors": sorted(factors, key=lambda f: -f["weight"])})
     ipdr_scores.sort(key=lambda x: (-x["score"], x["subject"]))
 
     return {"cdr": cdr_scores, "ipdr": ipdr_scores}
@@ -799,6 +932,9 @@ def run_all(cdr_records, ipdr_records):
         "ipdr": {
             "sessions": len(ipdr_records),
             "vpn_proxy": vpn_proxy_use(ipdr_records),
+            "volume": ipdr_volume(ipdr_records),
+            "beaconing": beaconing(ipdr_records),
+            "destinations": destination_profile(ipdr_records),
         },
     }
     # Composite triage scores derived from the signals above (kept additive: the CDR and

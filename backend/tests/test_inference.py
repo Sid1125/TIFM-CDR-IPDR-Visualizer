@@ -325,5 +325,49 @@ class TemporalTests(unittest.TestCase):
         self.assertIn("Escalating activity", [f["name"] for f in risk["S"]["factors"]])
 
 
+class IpdrAnalyticsTests(unittest.TestCase):
+    MB = 1024 * 1024
+
+    def _ips(self, src, dst, when, port=443, up=1000, down=2000):
+        r = ipdr("x", dst, when, "T", 13.0, 80.0, port=port, up=up, down=down)
+        r.source_ip = src
+        return r
+
+    def test_volume_exfil_asymmetry(self):
+        base = datetime(2026, 4, 1, 10, 0)
+        recs = [self._ips("10.0.0.5", "8.8.8.8", base, up=80 * self.MB, down=1 * self.MB),   # exfil-shaped
+                self._ips("10.0.0.6", "8.8.8.8", base, up=1 * self.MB, down=80 * self.MB)]   # download-heavy
+        by = {s["source_ip"]: s for s in inf.ipdr_volume(recs)["subjects"]}
+        self.assertTrue(by["10.0.0.5"]["exfil_suspected"])
+        self.assertFalse(by["10.0.0.6"]["exfil_suspected"])
+        self.assertEqual(inf.ipdr_volume(recs)["byte_coverage"], 1.0)
+
+    def test_beaconing_regular_vs_irregular(self):
+        base = datetime(2026, 4, 1, 0, 0)
+        regular = [self._ips("10.0.0.9", "5.5.5.5", base + timedelta(hours=2 * i), port=4444) for i in range(6)]
+        b = inf.beaconing(regular)
+        self.assertTrue(any(x["source_ip"] == "10.0.0.9" and x["non_web_port"] for x in b))
+        irregular = [self._ips("10.0.0.10", "6.6.6.6", base + timedelta(hours=h)) for h in (0, 0.1, 5, 5.05, 30)]
+        self.assertFalse(any(x["source_ip"] == "10.0.0.10" for x in inf.beaconing(irregular)))
+
+    def test_rare_destination(self):
+        base = datetime(2026, 4, 1, 10, 0)
+        recs = [self._ips("10.0.0.1", "8.8.8.8", base), self._ips("10.0.0.2", "8.8.8.8", base),
+                self._ips("10.0.0.3", "8.8.8.8", base),   # 8.8.8.8 common (3 sources)
+                self._ips("10.0.0.1", "5.5.5.5", base)]   # 5.5.5.5 rare (1 source)
+        by = {x["source_ip"]: x for x in inf.destination_profile(recs)}
+        rare = {r["destination_ip"] for r in by["10.0.0.1"]["rare"]}
+        self.assertIn("5.5.5.5", rare)
+        self.assertNotIn("8.8.8.8", rare)
+
+    def test_exfil_and_beacon_feed_ipdr_risk(self):
+        base = datetime(2026, 4, 1, 0, 0)
+        recs = [self._ips("10.0.0.5", "8.8.8.8", base + timedelta(minutes=1), up=80 * self.MB, down=1 * self.MB)]
+        recs += [self._ips("10.0.0.9", "5.5.5.5", base + timedelta(hours=2 * i), port=4444) for i in range(6)]
+        risk = {r["subject"]: r for r in inf.run_all([], recs)["ipdr"]["risk"]}
+        self.assertIn("Possible exfiltration", [f["name"] for f in risk["10.0.0.5"]["factors"]])
+        self.assertIn("Beaconing", [f["name"] for f in risk["10.0.0.9"]["factors"]])
+
+
 if __name__ == "__main__":
     unittest.main()

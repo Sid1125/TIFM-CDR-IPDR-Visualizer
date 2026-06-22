@@ -2998,6 +2998,25 @@ function buildInferenceHtml(rep){
   }
 
   // ===================== IPDR ANALYSIS (IP addresses) =====================
+  const ipdrRisk=I.risk||[], vol=(I.volume&&I.volume.subjects)||[], beac=I.beaconing||[], dests=I.destinations||[];
+  const volCov=I.volume?I.volume.byte_coverage:null;
+  if(ipdrRisk.length||vp.length||vol.length||beac.length||dests.length)
+    h+='<div class="inf-theme">IPDR · Internet sessions (IP subjects)</div>';
+
+  // Flagged IPs — risk leaderboard (mirrors the CDR persons-of-interest, IP subjects only)
+  if(ipdrRisk.length){
+    let rows='';
+    ipdrRisk.slice(0,12).forEach(r=>{
+      const bs=bandStyle(r.band);
+      rows+='<div class="inf-poi-row">'
+        +'<span class="inf-sev '+bs.s+'" title="composite risk score '+r.score+'/100">'+bs.l+' &middot; '+r.score+'</span>'
+        +'<span class="who" style="font-family:monospace">'+esc(r.subject)+'</span>'
+        +'<span class="flags">'+(r.factors||[]).map(f=>_infChip(f.name,bs.c,f.detail+(f.weight?' (+'+f.weight+')':''))).join('')+'</span></div>';
+    });
+    h+=_infCard('Flagged IP addresses','IP subjects, risk-ranked','var(--accent)',
+      '<div class="inf-blurb"><b>IP addresses</b> (never phone numbers) ranked by a composite risk score over anonymisation, exfiltration and beaconing. Hover a chip for the reason.</div>'+rows);
+  }
+
   if(vp.length){
     const rows=vp.slice(0,30).map(v=>{
       return '<div class="inf-row"><div class="top"><strong style="font-family:monospace">'+esc(v.source_ip)+'</strong>'
@@ -3008,9 +3027,36 @@ function buildInferenceHtml(rep){
         +(v.servers&&v.servers.length?'<br>Servers: '+esc(v.servers.join(', ')):'')
         +' · ports '+esc((v.ports||[]).join(', '))+'</div></div>';
     }).join('');
-    h+='<div class="inf-theme">IPDR · Internet sessions</div>';
     h+=card('VPN / proxy connections',vp.length+' source IP'+(vp.length===1?'':'s'),'var(--warn)','high',
-      'IPDR <b>data sessions</b> opened to VPN/Tor tunnel ports. Subjects here are <b>source IP addresses</b> (the IPDR record subject) &mdash; not linked to any phone number. The destination is the server reached.',rows);
+      'IPDR <b>data sessions</b> opened to VPN/Tor tunnel ports. Subjects here are <b>source IP addresses</b> &mdash; not linked to any phone number. The destination is the server reached.',rows);
+  }
+
+  // Data volume / exfiltration
+  const exf=vol.filter(v=>v.exfil_suspected);
+  if(vol.length){
+    const rows=vol.slice(0,12).map(v=>'<div class="inf-row"><div class="top"><strong style="font-family:monospace">'+esc(v.source_ip)+'</strong>'
+      +(v.exfil_suspected?_infChip('asymmetric upload','var(--danger)'):'')+'</div>'
+      +'<div class="meta">&uarr; '+n(v.up_mb)+' MB up &middot; &darr; '+n(v.down_mb)+' MB down &middot; '+v.sessions+' session(s)</div></div>').join('');
+    h+=card('Data volume &amp; exfiltration',exf.length+' flagged','var(--danger)',exf.length?'crit':'info',
+      'Per source IP, bytes uploaded vs downloaded. A large, <b>upload-heavy asymmetry</b> is exfiltration-shaped &mdash; a lead to review (cloud backup/video can look similar)'+(volCov!=null?'. Byte coverage: '+Math.round(volCov*100)+'% of sessions':'')+'.',rows);
+  }
+
+  // Beaconing
+  if(beac.length){
+    const rows=beac.slice(0,12).map(b=>'<div class="inf-row"><div class="top"><strong style="font-family:monospace">'+esc(b.source_ip)+'</strong> &rarr; <span style="font-family:monospace">'+esc(b.destination_ip)+'</span>'
+      +(b.non_web_port?_infChip('port '+b.port,'var(--warn)'):(b.port!=null?_infChip('port '+b.port,'var(--muted)'):''))+'</div>'
+      +'<div class="meta">'+b.sessions+' sessions every ~'+b.mean_interval_hours+'h (very regular, cv '+b.regularity_cv+')</div></div>').join('');
+    h+=card('Beaconing (automated check-ins)',beac.length,'var(--warn)','high',
+      'A source IP connecting to the <b>same destination on a regular, low-jitter cadence</b> &mdash; automated rather than human (agent/C2-shaped). Non-web destination ports raise confidence.',rows);
+  }
+
+  // Rare destinations
+  if(dests.length){
+    const rows=dests.slice(0,10).map(d=>'<div class="inf-row"><div class="top"><strong style="font-family:monospace">'+esc(d.source_ip)+'</strong>'
+      +_infChip(d.rare.length+' rare dest','var(--accent)')+'<span style="font-size:0.66rem;color:var(--muted)">of '+d.distinct_destinations+' total</span></div>'
+      +'<div class="meta">'+d.rare.slice(0,4).map(x=>esc(x.destination_ip)+(x.provider?' ('+esc(x.provider)+')':'')+' ×'+x.sessions).join(' · ')+'</div></div>').join('');
+    h+=card('Rare destinations',dests.length,'var(--accent)','info',
+      'Destinations reached from <b>very few source IPs</b> &mdash; uncommon endpoints worth a look (labelled with the destination provider where known).',rows);
   }
 
   h+='</div>';
