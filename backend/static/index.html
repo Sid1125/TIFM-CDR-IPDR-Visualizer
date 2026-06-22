@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Project ARGUS</title>
+<link rel="icon" type="image/png" href="/static/logo-mark.png"/>
 <link rel="stylesheet" href="/static/styles.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
@@ -15,6 +16,7 @@
 <body>
 <div id="authOverlay" class="auth-overlay">
   <div class="auth-panel">
+    <img src="/static/logo.png" alt="ARGUS" class="auth-logo"/>
     <h2>Sign in</h2>
     <p>Session-based investigation workspace.</p>
     <form id="loginForm">
@@ -29,8 +31,11 @@
 <div id="shell" style="display:none">
   <header id="topbar">
     <div class="topbar-left">
-      <h1>Project ARGUS</h1>
-      <span class="topbar-sub">Advanced Records &amp; Geospatial Unified Surveillance</span>
+      <img src="/static/logo-mark.png" alt="ARGUS" class="topbar-logo"/>
+      <div class="topbar-titles">
+        <h1>ARGUS</h1>
+        <span class="topbar-sub">Advanced Records &amp; Geospatial Unified Surveillance</span>
+      </div>
     </div>
     <div class="topbar-center">
       <select id="caseSelector" style="padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);font-size:0.78rem;margin-right:12px;max-width:180px"><option value="">No case</option></select>
