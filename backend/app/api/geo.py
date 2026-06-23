@@ -112,31 +112,28 @@ def get_geo_records(subject: str = "", case_id: str = "", db: Session = Depends(
 
 @router.get("/subjects")
 def get_subjects(case_id: str = "", db: Session = Depends(get_db)):
+    # Only subjects that appear in geo-TAGGED records (lat/lon present), so this list stays
+    # consistent with /geo/records — otherwise the map subject picker shows people with no
+    # mappable records and every map mode comes up empty.
     subjects = set()
-    cdr_q = db.query(CDRRecord.a_party_number)
+    cdr_q = db.query(CDRRecord.a_party_number, CDRRecord.b_party_number).filter(
+        CDRRecord.latitude.isnot(None), CDRRecord.longitude.isnot(None))
     if case_id:
         cdr_q = cdr_q.filter(CDRRecord.case_id == case_id)
-    for r in cdr_q.all():
-        if r[0]:
-            subjects.add(r[0])
-    cdr_q2 = db.query(CDRRecord.b_party_number)
-    if case_id:
-        cdr_q2 = cdr_q2.filter(CDRRecord.case_id == case_id)
-    for r in cdr_q2.all():
-        if r[0]:
-            subjects.add(r[0])
-    ipdr_q = db.query(IPDRRecord.source_ip)
+    for a, b in cdr_q.all():
+        if a:
+            subjects.add(a)
+        if b:
+            subjects.add(b)
+    ipdr_q = db.query(IPDRRecord.source_ip, IPDRRecord.destination_ip).filter(
+        IPDRRecord.latitude.isnot(None), IPDRRecord.longitude.isnot(None))
     if case_id:
         ipdr_q = ipdr_q.filter(IPDRRecord.case_id == case_id)
-    for r in ipdr_q.all():
-        if r[0]:
-            subjects.add(r[0])
-    ipdr_q2 = db.query(IPDRRecord.destination_ip)
-    if case_id:
-        ipdr_q2 = ipdr_q2.filter(IPDRRecord.case_id == case_id)
-    for r in ipdr_q2.all():
-        if r[0]:
-            subjects.add(r[0])
+    for s, d in ipdr_q.all():
+        if s:
+            subjects.add(s)
+        if d:
+            subjects.add(d)
     return sorted(subjects)
 
 

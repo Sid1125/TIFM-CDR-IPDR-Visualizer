@@ -837,8 +837,8 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 
 ## 17. UI/UX Features
 
-### Tab-Based Navigation (10 Tabs)
-- **Description:** 10 top-level tabs (Dashboard, Network Graph, Tower Map, Timeline, Charts, Services, Correlation, Records, AI Insights, Admin) with active tab highlighting and content switching. Admin tab is visible only for users with `role=admin`.
+### Tab-Based Navigation (11 Tabs)
+- **Description:** 11 top-level tabs (Dashboard, Network Graph, Tower Map, Timeline, Charts, Services, Correlation, Inferences, Records, AI Insights, Admin) with active tab highlighting and content switching. Admin tab is visible only for users with `role=admin`.
 - **Tech:** `.topbar-tab` buttons with `data-tab` attributes, `.tab-content` sections, `switchTab()` function, admin role check `state.auth.user?.role === 'admin'`
 
 ### Dark Mode

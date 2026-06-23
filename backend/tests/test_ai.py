@@ -537,5 +537,37 @@ class TestPoliceInvestigator(unittest.TestCase):
             self.assertGreater(r["sessions"]["total_sessions"], 0, f"{scenario} sessions empty")
 
 
+class AnomalyThresholdTests(unittest.TestCase):
+    """QA finding #2: normal commuter/social churn must not be flagged High (which would put
+    it on the high-priority leads list); only a large, dominant surge is High."""
+
+    def _records(self, n_new):
+        from datetime import datetime, timedelta
+        base = datetime(2026, 1, 1, 8, 0)
+        recs, stable = [], ["c1", "c2", "c3"]
+        for i in range(18):  # steady baseline so Activity-Level-Change doesn't interfere
+            recs.append({"subject": "S", "counterpart": stable[i % 3],
+                         "timestamp": (base + timedelta(hours=i)).isoformat()})
+        new = [f"n{k}" for k in range(n_new)]
+        for i in range(12):
+            recs.append({"subject": "S", "counterpart": new[i] if i < len(new) else "c1",
+                         "timestamp": (base + timedelta(hours=18 + i)).isoformat()})
+        return recs
+
+    def _surge(self, recs):
+        res = AnomalyDetector().analyze(recs)
+        return next((a for a in res["anomalies"] if a["type"] == "New Contact Surge"), None)
+
+    def test_moderate_churn_is_medium_not_high(self):
+        s = self._surge(self._records(6))   # 6 new contacts, not dominant enough
+        self.assertIsNotNone(s)
+        self.assertEqual(s["severity"], "Medium")
+
+    def test_large_dominant_surge_is_high(self):
+        s = self._surge(self._records(12))  # 12 new contacts dominating recent activity
+        self.assertIsNotNone(s)
+        self.assertEqual(s["severity"], "High")
+
+
 if __name__ == "__main__":
     unittest.main()

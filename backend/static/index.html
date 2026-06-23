@@ -9,12 +9,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/static/styles.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<!-- Vendored locally (static/vendor) so maps/charts/graphs work in air-gapped/offline environments -->
+<link rel="stylesheet" href="/static/vendor/leaflet.css"/>
+<link rel="stylesheet" href="/static/vendor/leaflet.draw.css"/>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/vendor/d3.v7.min.js"></script>
+<script src="/static/vendor/leaflet.js"></script>
+<script src="/static/vendor/leaflet.draw.js"></script>
 </head>
 <body>
 <div id="authOverlay" class="auth-overlay">
@@ -156,7 +157,7 @@
       <button id="mapGoBtn" class="btn">Go</button>
       <button id="mapFitBtn" class="btn">Fit</button>
       <button id="geoFenceBtn" class="btn-sm" style="border-color:var(--danger);color:var(--danger)">Geofence</button>
-      <div id="mapTimelineBar" style="display:none;flex:1;display:flex;align-items:center;gap:8px;">
+      <div id="mapTimelineBar" style="display:none;flex:1;align-items:center;gap:8px;">
         <span id="mapTimeLabel" style="font-size:0.75rem;color:var(--muted)">--:--</span>
         <input type="range" id="mapTimeSlider" style="flex:1;max-width:200px" min="0" max="100" value="0"/>
         <button id="mapTimePlay" class="btn-sm">Play</button>
@@ -467,8 +468,8 @@
   <div id="ganttTooltip" class="gantt-tooltip"></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+<script src="/static/vendor/leaflet-heat.js"></script>
+<script src="/static/vendor/turf.min.js"></script>
 <script src="/static/attribution_data.js"></script>
 <script src="/static/app.js"></script>
 </body>

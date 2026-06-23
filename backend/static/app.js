@@ -1218,11 +1218,12 @@ function renderDashBar(contactCounts){
 // -- Tower Sequence Similarity (Movement Pattern Analysis) --
 // Compares the time-ordered tower visits of two subjects using
 // a greedy longest-common-subsequence ratio. Returns 0..1.
+const SEQ_SIM_CAP=500; // bound the O(m*n) LCS: compare the most-recent CAP tower visits each
 function towerSequenceSimilarity(subA,subB){
   const rowsA=allRows.filter(r=>(r.sub===subA||r.cnt===subA)&&r.tow&&r.ts).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
   const rowsB=allRows.filter(r=>(r.sub===subB||r.cnt===subB)&&r.tow&&r.ts).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
   if(!rowsA.length||!rowsB.length)return 0;
-  const seqA=rowsA.map(r=>r.tow),seqB=rowsB.map(r=>r.tow);
+  const seqA=rowsA.slice(-SEQ_SIM_CAP).map(r=>r.tow),seqB=rowsB.slice(-SEQ_SIM_CAP).map(r=>r.tow);
   const m=seqA.length,n=seqB.length;
   // Space-optimized LCS (two rows, O(n) memory)
   let prev=new Uint16Array(n+1),curr=new Uint16Array(n+1);
@@ -1310,11 +1311,15 @@ function detectMeetings(opts){
   pairSets.forEach(({a,b,rowsA,rowsB})=>{
     const pairKey=[a,b].sort().join('::');
     let encCount=0;
+    // Index B's located rows by tower so each A row only scans same-tower candidates,
+    // turning the meeting scan from O(|A|*|B|) into ~O(|A| + matches).
+    const bByTower=new Map();
+    rowsB.forEach(r2=>{if(r2.ts&&r2.tow){let arr=bByTower.get(r2.tow);if(!arr){arr=[];bByTower.set(r2.tow,arr);}arr.push(r2);}});
     rowsA.forEach(r1=>{
       if(!r1.ts||!r1.tow)return;
       const t1=new Date(r1.ts).getTime();
-      rowsB.forEach(r2=>{
-        if(r2.tow!==r1.tow||!r2.ts)return;
+      const cands=bByTower.get(r1.tow);if(!cands)return;
+      cands.forEach(r2=>{
         const t2=new Date(r2.ts).getTime();
         const gap=Math.abs(t2-t1);
         if(gap>=gapMax)return;
@@ -4648,7 +4653,11 @@ async function bootstrap(){
 }
 
 async function resetCase(){
-  if(!confirm('Reset all case data? This will delete all CDR, IPDR, and Tower records.'))return;
+  const caseName=(D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex]?.text)||'';
+  const msg=activeCaseId
+    ? 'Reset case "'+caseName+'"? This deletes its CDR & IPDR records. Shared tower locations are kept.'
+    : 'Reset ALL data? This deletes every CDR & IPDR record across all cases. Tower locations are kept.';
+  if(!confirm(msg))return;
   D.importStatus.textContent='Resetting case data...';
   const q=activeCaseId?'?case_id='+activeCaseId:'';
   try{await API.del('/records/reset'+q);D.importStatus.textContent='Case reset. Reloading...';await loadCaseData();D.importStatus.textContent='Case reset. Upload files to begin.'}catch(e){D.importStatus.textContent='Reset failed: '+e.message;console.error(e)}

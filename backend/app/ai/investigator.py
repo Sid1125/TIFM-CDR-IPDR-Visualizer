@@ -949,14 +949,17 @@ class AnomalyDetector:
             second_rate = len(second) / max((_ts_ord(second[-1].get("timestamp", "")) - _ts_ord(second[0].get("timestamp", ""))) / 3600, 1)
             activity_change = round((second_rate / max(first_rate, 0.001) - 1) * 100, 1) if first_rate > 0 else 0
 
-            if abs(activity_change) > 50:
+            # Day-to-day activity naturally swings ~50% for normal subjects (commuters,
+            # call-centres), so only a large sustained change is reported, and "High" needs a
+            # dramatic shift — this keeps negative/commuter datasets off the high-priority list.
+            if abs(activity_change) > 75:
                 anomalies.append({
                     "subject": sub,
                     "type": "Activity Level Change",
                     "detail": f"Activity {'increased' if activity_change > 0 else 'decreased'} by {abs(activity_change)}%",
                     "first_half_rate": round(first_rate, 2),
                     "second_half_rate": round(second_rate, 2),
-                    "severity": "High" if abs(activity_change) > 100 else "Medium",
+                    "severity": "High" if abs(activity_change) > 200 else "Medium",
                 })
 
             # 2. Contact change (new contacts in second half)
@@ -971,13 +974,17 @@ class AnomalyDetector:
             new_contacts = second_contacts - first_contacts
             dropped_contacts = first_contacts - second_contacts
 
-            if len(new_contacts) >= 3:
+            # Meeting a few new people over time is normal churn; only report a real surge,
+            # and reserve "High" for many new contacts that also DOMINATE recent activity (a
+            # genuine network shift) — so commuters/social subjects don't dominate the leads.
+            if len(new_contacts) >= 5:
+                surge_dominant = len(new_contacts) >= 0.5 * max(len(second_contacts), 1)
                 anomalies.append({
                     "subject": sub,
                     "type": "New Contact Surge",
                     "detail": f"{len(new_contacts)} new contact(s) appeared in recent activity",
                     "new_contacts": _safe_list(new_contacts),
-                    "severity": "High" if len(new_contacts) > 5 else "Medium",
+                    "severity": "High" if (len(new_contacts) >= 10 and surge_dominant) else "Medium",
                 })
             if len(dropped_contacts) >= 3:
                 anomalies.append({
