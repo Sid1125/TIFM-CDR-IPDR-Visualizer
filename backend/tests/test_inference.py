@@ -448,6 +448,16 @@ class CrossCuttingTests(unittest.TestCase):
         # CDR phone never matches the IP watchlist and vice-versa
         self.assertEqual(report["ipdr"]["risk"][0]["band"], "critical")
 
+    def test_export_ref_and_control_block(self):
+        self.assertTrue(inf.make_export_ref("analysis").startswith("ARGUS-ANL-"))
+        self.assertTrue(inf.make_export_ref("evidence").startswith("ARGUS-EVD-"))
+        rep = inf.run_all([cdr("900", "x", datetime(2026, 6, 1, 9, 0), "T", 13.0, 80.0)], [])
+        self.assertIn("cdr_subjects", inf.export_manifest(rep))
+        md = inf.report_markdown(rep, case_name="Op X", ref_id="ARGUS-ANL-20260101-000000-ABCD",
+                                 source="analysis", exported_by="admin")
+        for needle in ("Document control", "ARGUS-ANL-20260101-000000-ABCD", "Contents exported", "admin"):
+            self.assertIn(needle, md)
+
     def test_report_markdown_sections(self):
         rep = inf.run_all([cdr("900", "x", datetime(2026, 6, 1, 9, 0), "T", 13.0, 80.0)], [])
         md = inf.report_markdown(rep, case_name="Operation Falcon")

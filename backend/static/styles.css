@@ -678,3 +678,16 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
   border:1px solid transparent;white-space:nowrap;transition:all .12s}
 .inf-nav a:hover{color:var(--accent);background:var(--accent-light)}
 .inf-nav a.active{color:var(--accent);border-color:var(--accent-light);background:var(--accent-light);font-weight:600}
+
+/* ===================== EXPORT HISTORY (watchlist bar) ===================== */
+.wl-exports{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+.wl-exports summary{cursor:pointer;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700}
+.wl-note{margin-left:8px;font-weight:600;color:var(--success);text-transform:none;letter-spacing:0}
+.wl-exp-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:0.74rem}
+.wl-exp-row code{font-size:0.72rem;color:var(--accent);background:var(--accent-light);padding:1px 7px;border-radius:5px}
+.wl-exp-meta{color:var(--muted)}
+.wl-exp-items{color:var(--text);opacity:.85;flex:1;min-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wl-exp-empty{font-size:0.74rem;color:var(--muted)}
+
+/* Tower Map: subject dropdown sits beside the search box */
+#mapSubjectSelect{max-width:190px}

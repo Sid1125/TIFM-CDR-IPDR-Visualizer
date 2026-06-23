@@ -138,7 +138,8 @@
   <!-- MAP TAB -->
   <section id="tab-map" class="tab-content">
     <div class="map-toolbar">
-      <input id="mapSubject" list="mapSubjectList" placeholder="All subjects — type to search…" autocomplete="off"/>
+      <select id="mapSubjectSelect" title="Pick a subject from the list"><option value="">All subjects</option></select>
+      <input id="mapSubject" list="mapSubjectList" placeholder="…or type to search" autocomplete="off"/>
       <datalist id="mapSubjectList"></datalist>
       <select id="mapMode">
         <option value="path">Movement Path</option>

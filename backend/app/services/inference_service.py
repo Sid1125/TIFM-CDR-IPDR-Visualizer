@@ -704,14 +704,59 @@ def apply_watchlist(report, phones=None, ips=None):
     return hits
 
 
-def report_markdown(report, case_name=None):
+_EXPORT_CODES = {"analysis": "ANL", "evidence": "EVD"}
+_EXPORT_LABELS = {"analysis": "Analytics report (Inferences tab)", "evidence": "Case evidence report (navbar)"}
+
+
+def make_export_ref(source: str) -> str:
+    """Official, sortable, self-describing export reference, e.g.
+    ARGUS-ANL-20260622-143052-3F9A (ANL = analysis export, EVD = evidence export)."""
+    import secrets
+    code = _EXPORT_CODES.get(source, "GEN")
+    return f"ARGUS-{code}-{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(2).upper()}"
+
+
+def export_manifest(report) -> dict:
+    """Count what an export contains — recorded in the audit log and shown in the report."""
+    cdr, ipdr = report.get("cdr", {}), report.get("ipdr", {})
+    net, temporal = cdr.get("network", {}), cdr.get("temporal", {})
+    return {
+        "cdr_subjects": cdr.get("subjects", 0),
+        "ipdr_sessions": ipdr.get("sessions", 0),
+        "persons_of_interest": len(cdr.get("risk", [])),
+        "flagged_ips": len(ipdr.get("risk", [])),
+        "watchlist_hits": len(report.get("watchlist_hits", [])),
+        "impossible_travel": len(cdr.get("impossible_travel", [])),
+        "hidden_links_convoys": sum(1 for p in cdr.get("co_presence", []) if p.get("hidden_link") or p.get("convoy")),
+        "network_roles": len(net.get("brokers", [])) + len(net.get("articulation_points", [])),
+        "multi_sim_identities": len(cdr.get("entities", [])),
+        "behavioural_shifts": len(temporal.get("escalation", {})) + len(temporal.get("dormancy", {})),
+        "ipdr_vpn_proxy": len(ipdr.get("vpn_proxy", [])),
+        "ipdr_beaconing": len(ipdr.get("beaconing", [])),
+    }
+
+
+def report_markdown(report, case_name=None, ref_id=None, source=None, exported_by=None):
     """Serialise the full inference report into a comprehensive, readable Markdown case
-    report (for export) — leaderboards plus the key CDR and IPDR findings behind them."""
+    report (for export) — leaderboards plus the key CDR and IPDR findings behind them. When
+    a reference id is supplied, a Document-control block (ref, type, case, contents manifest)
+    leads the document so the export is self-identifying and auditable."""
     cdr, ipdr = report.get("cdr", {}), report.get("ipdr", {})
     net = cdr.get("network", {})
     temporal = cdr.get("temporal", {})
     L = ["# ARGUS — Case Analysis Report", ""]
-    if case_name:
+    if ref_id:
+        man = export_manifest(report)
+        contents = " · ".join(f"{v} {k.replace('_', ' ')}" for k, v in man.items() if v)
+        L += ["## Document control", "",
+              "| Field | Value |", "|---|---|",
+              f"| Reference | `{ref_id}` |",
+              f"| Document type | {_EXPORT_LABELS.get(source, source or 'report')} |",
+              f"| Case | {case_name or '(all data)'} |",
+              f"| Generated | {datetime.now().isoformat(timespec='seconds')} |",
+              f"| Exported by | {exported_by or 'unknown'} |",
+              "", f"**Contents exported:** {contents or 'none'}", ""]
+    elif case_name:
         L.append(f"**Case:** {case_name}  ")
     L += [f"**Generated:** {datetime.now().isoformat(timespec='seconds')}  ",
           f"**CDR phone subjects:** {cdr.get('subjects', 0)} · **IPDR sessions:** {ipdr.get('sessions', 0)}",

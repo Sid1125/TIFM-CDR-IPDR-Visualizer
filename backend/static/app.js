@@ -1553,6 +1553,10 @@ async function loadGeoData(){
 function populateMapSubjects(){
   const dl=document.getElementById('mapSubjectList');
   if(dl)dl.innerHTML=geoSubjects.map(s=>`<option value="${esc(s)}"></option>`).join('');
+  const sel=document.getElementById('mapSubjectSelect');
+  if(sel){const cur=sel.value;
+    sel.innerHTML='<option value="">All subjects ('+geoSubjects.length+')</option>'+geoSubjects.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    if(geoSubjects.includes(cur))sel.value=cur;}
 }
 function clearMap(){
   mapLayers.forEach(l=>mapInstance.removeLayer(l));mapMarkers.forEach(m=>mapInstance.removeLayer(m));mapCircles.forEach(c=>mapInstance.removeLayer(c));
@@ -1667,7 +1671,9 @@ D.mapGo.addEventListener('click',runMapMode);
 D.mapMode.addEventListener('change',runMapMode);
 D.mapSubject.addEventListener('change',()=>{if(D.mapSubject.value)runMapMode()});
 // Run immediately when a complete subject is typed or picked from the suggestions.
-D.mapSubject.addEventListener('input',()=>{if(geoSubjects.includes(D.mapSubject.value))runMapMode()});
+D.mapSubject.addEventListener('input',()=>{const sel=document.getElementById('mapSubjectSelect');if(sel)sel.value=geoSubjects.includes(D.mapSubject.value)?D.mapSubject.value:'';if(geoSubjects.includes(D.mapSubject.value))runMapMode()});
+// Dropdown: pick a subject -> mirror into the search box and run.
+(function(){const sel=document.getElementById('mapSubjectSelect');if(sel)sel.addEventListener('change',()=>{D.mapSubject.value=sel.value;runMapMode();});})();
 D.mapFit.addEventListener('click',()=>{const pts=[];geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})});
 
 // -- Geofence --
@@ -2810,8 +2816,19 @@ async function getInfReport(force){
   _infReport=await API.get('/inference/report'+cq);
   return _infReport;
 }
-let _wl=[];
+let _wl=[],_exports=[];
 async function loadWatchlist(){try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';_wl=await API.get('/watchlist'+cq);}catch(e){_wl=[];}}
+async function loadExports(){try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';_exports=await API.get('/inference/exports'+cq);}catch(e){_exports=[];}}
+function _exportsHtml(){
+  if(!(_exports||[]).length)return '<span class="wl-exp-empty">No exports yet.</span>';
+  return _exports.slice(0,6).map(e=>{
+    const items=Object.entries(e.details||{}).filter(([k,v])=>v).map(([k,v])=>v+' '+k.replace(/_/g,' ')).join(', ');
+    const src=e.source==='evidence'?'Evidence (navbar)':'Analysis (inferences)';
+    return '<div class="wl-exp-row"><code>'+esc(e.ref_id)+'</code>'
+      +'<span class="wl-exp-meta">'+esc(src)+(e.exported_by?' · '+esc(e.exported_by):'')+(e.created_at?' · '+esc(e.created_at.slice(0,16).replace('T',' ')):'')+'</span>'
+      +(items?'<span class="wl-exp-items" title="'+esc(items)+'">'+esc(items)+'</span>':'')+'</div>';
+  }).join('');
+}
 function _watchlistBarHtml(rep){
   const hits=(rep&&rep.watchlist_hits)||[];
   const chips=(_wl||[]).map(e=>'<span class="wl-chip">'+esc(e.value)+' <span class="k">'+esc(e.kind)+'</span> <a onclick="wlRemove('+e.id+')" title="remove">&times;</a></span>').join('');
@@ -2819,24 +2836,27 @@ function _watchlistBarHtml(rep){
     +'<div class="wl-row"><strong>Watchlist</strong>'
     +'<input id="wlInput" placeholder="phone number or IP address" onkeydown="if(event.key===\'Enter\')wlAdd()"/>'
     +'<button class="btn-sm" onclick="wlAdd()">Add</button>'
-    +'<button id="wlExportBtn" class="btn-sm wl-export" onclick="wlExport()" title="Download the full analysis as a Markdown case report">&#8623; Export analysis (.md)</button></div>'
+    +'<button id="wlExportBtn" class="btn-sm wl-export" onclick="wlExport()" title="Download the full analysis as an official, audit-logged Markdown case report">&#8623; Export analysis (.md)</button></div>'
     +(chips?'<div class="wl-chips">'+chips+'</div>':'<div class="wl-empty">No watchlist entries. Add a number/IP to force it to the top as Critical.</div>')
     +(hits.length?'<div class="wl-hits">&#9873; '+hits.length+' watchlist match'+(hits.length>1?'es':'')+' &mdash; forced to Critical at the top of the lists.</div>':'')
+    +'<details class="wl-exports"><summary>Export history <span id="wlExportNote" class="wl-note"></span></summary><div id="wlExportsList">'+_exportsHtml()+'</div></details>'
     +'</div>';
 }
 window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;try{await API.post('/watchlist',{value:v,case_id:activeCaseId||null});await loadWatchlist();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+function _caseSafe(){const cn=(D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex]?.text)||'case';return cn.replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'case';}
 window.wlExport=async function(){
   const btn=$('wlExportBtn');const prev=btn?btn.innerHTML:'';if(btn){btn.innerHTML='Exporting…';btn.disabled=true;}
   try{
-    const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
-    const r=await fetch('/inference/report.md'+cq,{credentials:'same-origin'});
+    const base=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId)+'&':'?';
+    const r=await fetch('/inference/report.md'+base+'source=analysis',{credentials:'same-origin'});
     if(!r.ok)throw new Error('HTTP '+r.status);
+    const ref=r.headers.get('X-Export-Ref')||'ARGUS-ANL';
     const t=await r.text();
-    const cn=(D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex]?.text)||'case';
-    const safe=cn.replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'case';
     const b=new Blob([t],{type:'text/markdown;charset=utf-8'});const u=URL.createObjectURL(b);
-    const a=document.createElement('a');a.href=u;a.download='argus_'+safe+'_'+new Date().toISOString().slice(0,10)+'.md';a.click();URL.revokeObjectURL(u);
+    const a=document.createElement('a');a.href=u;a.download=ref+'_'+_caseSafe()+'.md';a.click();URL.revokeObjectURL(u);
+    await loadExports();const note=$('wlExportNote');if(note)note.textContent='Saved '+ref;
+    const list=$('wlExportsList');if(list)list.innerHTML=_exportsHtml();
   }catch(e){alert('Export failed: '+e.message);}
   finally{if(btn){btn.innerHTML=prev;btn.disabled=false;}}
 };
@@ -2872,6 +2892,7 @@ async function renderInferences(force){
   try{rep=await getInfReport(force);}
   catch(e){status.textContent='Error';box.innerHTML='<div style="padding:40px;text-align:center;color:var(--danger)">Failed: '+esc(e.message)+'</div>';return;}
   await loadWatchlist();
+  await loadExports();
   _infCache=_watchlistBarHtml(rep)+buildInferenceHtml(rep);
   box.innerHTML=_infCache;
   _decorateInferences(box);
@@ -4076,10 +4097,11 @@ D.exportBtn.addEventListener('click',async ()=>{
   const now=new Date().toISOString().slice(0,19).replace('T',' ');
   const caseName=(D.caseSelector.options[D.caseSelector.selectedIndex]?.text||'None');
   // Pull the full analytics report (risk leaderboards + all inferences) to lead the file.
-  let analytics='';
-  try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';const ar=await fetch('/inference/report.md'+cq,{credentials:'same-origin'});if(ar.ok)analytics=await ar.text();}catch(e){}
+  let analytics='',ref='';
+  try{const base=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId)+'&':'?';const ar=await fetch('/inference/report.md'+base+'source=evidence',{credentials:'same-origin'});if(ar.ok){analytics=await ar.text();ref=ar.headers.get('X-Export-Ref')||'';}}catch(e){}
   let report='';
   report+='# ARGUS — Case Evidence Report\n\n';
+  if(ref)report+='**Reference:** `'+ref+'`  \n';
   report+='**Generated:** '+now+'  \n**User:** '+(state.auth.user?state.auth.user.username:'Unknown')+'  \n**Case:** '+caseName+'\n';
   if(analytics){report+='\n'+analytics+'\n\n---\n\n# Raw evidence & sessions\n';}
   report+='\n## Summary\n';
@@ -4248,8 +4270,9 @@ D.exportBtn.addEventListener('click',async ()=>{
   const safe=(caseName||'case').replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'case';
   const blob=new Blob([report],{type:'text/markdown;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='argus_'+safe+'_'+now.slice(0,10)+'.md';
+  a.download=(ref||('ARGUS-EVD-'+now.slice(0,10).replace(/-/g,'')))+'_'+safe+'.md';
   a.click();URL.revokeObjectURL(a.href);
+  try{await loadExports();const list=$('wlExportsList');if(list)list.innerHTML=_exportsHtml();const note=$('wlExportNote');if(note&&ref)note.textContent='Saved '+ref;}catch(e){}
   D.exportBtn.textContent=prevTxt;D.exportBtn.disabled=false;
 });
 
