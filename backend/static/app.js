@@ -1,6 +1,6 @@
 // ====== STATE ======
 const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{}};
-const API={async req(p,o){const r=await fetch(p,{credentials:'same-origin',...o,headers:{...((o&&o.headers)||{})}});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||r.status);return r.status===204?null:r.json()},get(p){return this.req(p)},post(p,b){return this.req(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},del(p){return this.req(p,{method:'DELETE'})},async upload(p,f){const fd=new FormData();fd.append('file',f);const r=await fetch(p,{credentials:'same-origin',method:'POST',body:fd});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||'Upload failed');return r.json()}};
+const API={async req(p,o){const r=await fetch(p,{credentials:'same-origin',...o,headers:{...((o&&o.headers)||{})}});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||r.status);return r.status===204?null:r.json()},get(p){return this.req(p)},post(p,b){return this.req(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},put(p,b){return this.req(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},del(p){return this.req(p,{method:'DELETE'})},async upload(p,f){const fd=new FormData();fd.append('file',f);const r=await fetch(p,{credentials:'same-origin',method:'POST',body:fd});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||'Upload failed');return r.json()}};
 
 // ====== DOM REFS ======
 const $=id=>document.getElementById(id);
@@ -3350,7 +3350,7 @@ async function generateAiReport(type){
   if(D.aiMode && D.aiMode.value==='tifm'){
     D.aiStatus.textContent='Generating via backend TIFM...';
     try{
-      const r=await API.post('/ai/generate-report?report_type='+encodeURIComponent(type),{});
+      const r=await API.post('/ai/generate-report?report_type='+encodeURIComponent(type)+(activeCaseId?'&case_id='+encodeURIComponent(activeCaseId):''),{});
       reportContent.innerHTML=renderMd(r.report)||'[Empty]';
       D.aiStatus.textContent='Done.';
     }catch(e){
@@ -3398,7 +3398,7 @@ async function analyzeWithAI(){
     D.aiStatus.textContent='Connecting to backend TIFM...';
     D.aiResponse.innerHTML='<em>Waiting for analysis...</em>';
     try{
-      const r=await API.post('/ai/analyze',{});
+      const r=await API.post('/ai/analyze'+(activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):''),{});
       const analytics=r.analytics;
       const investigatorNotes=D.aiInvestigatorInput.value.trim();
       if(investigatorNotes){
@@ -3436,7 +3436,7 @@ async function analyzeWithAI(){
       const investigatorNotes=D.aiInvestigatorInput.value.trim();
       const q=investigatorNotes||'Analyze this case and provide key insights.';
       const contexts=getActiveContexts();
-      let url='/ai/chat?query='+encodeURIComponent(q);
+      let url='/ai/chat?query='+encodeURIComponent(q)+(activeCaseId?'&case_id='+encodeURIComponent(activeCaseId):'');
       if(contexts.length)url+='&context='+encodeURIComponent(contexts.join(','));
       const r=await API.post(url,{});
       D.aiResponse.innerHTML=renderMd(r.answer||'[No response]');
@@ -3525,7 +3525,7 @@ async function runFullInvestigation(){
   modulesEl.style.display='none';
   summaryEl.style.display='none';
   try{
-    const r=await API.post('/ai/investigate',{});
+    const r=await API.post('/ai/investigate'+(activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):''),{});
     const inv=r.investigation;
     if(!inv){statusEl.textContent='Empty response';return}
     

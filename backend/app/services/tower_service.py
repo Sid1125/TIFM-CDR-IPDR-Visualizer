@@ -7,16 +7,22 @@ from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower
 
 
-def list_tower_activity(db):
+def list_tower_activity(db, case_id=None):
     towers = db.query(Tower).all()
 
+    cq = db.query(CDRRecord.tower_id, CDRRecord.id)
+    iq = db.query(IPDRRecord.tower_id, IPDRRecord.id)
+    if case_id:
+        cq = cq.filter(CDRRecord.case_id == case_id)
+        iq = iq.filter(IPDRRecord.case_id == case_id)
+
     cdr_counts = Counter()
-    for tower_id, _record_id in db.query(CDRRecord.tower_id, CDRRecord.id).all():
+    for tower_id, _record_id in cq.all():
         if tower_id:
             cdr_counts[str(tower_id)] += 1
 
     ipdr_counts = Counter()
-    for tower_id, _record_id in db.query(IPDRRecord.tower_id, IPDRRecord.id).all():
+    for tower_id, _record_id in iq.all():
         if tower_id:
             ipdr_counts[str(tower_id)] += 1
 
@@ -34,8 +40,11 @@ def list_tower_activity(db):
     ]
 
 
-def find_colocation_candidates(db, limit: int = 50):
-    cdr_rows = db.query(CDRRecord.a_party_number, CDRRecord.b_party_number, CDRRecord.tower_id, CDRRecord.start_time).all()
+def find_colocation_candidates(db, limit: int = 50, case_id=None):
+    cdr_q = db.query(CDRRecord.a_party_number, CDRRecord.b_party_number, CDRRecord.tower_id, CDRRecord.start_time)
+    if case_id:
+        cdr_q = cdr_q.filter(CDRRecord.case_id == case_id)
+    cdr_rows = cdr_q.all()
     tower_to_subjects = defaultdict(set)
 
     for a_party, b_party, tower_id, _start_time in cdr_rows:

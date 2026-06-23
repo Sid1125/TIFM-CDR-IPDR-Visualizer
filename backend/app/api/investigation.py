@@ -16,22 +16,28 @@ router = APIRouter()
 
 
 @router.get("/timeline")
-def unified_timeline(db: Session = Depends(get_db), limit: int = Query(default=200, ge=1, le=1000)):
-    return build_unified_timeline(db, limit=limit)
+def unified_timeline(db: Session = Depends(get_db), limit: int = Query(default=200, ge=1, le=1000),
+                     case_id: str = Query(default="")):
+    return build_unified_timeline(db, limit=limit, case_id=case_id or None)
 
 
 @router.get("/services")
-def service_summary(db: Session = Depends(get_db), limit: int = Query(default=200, ge=1, le=5000)):
-    records = db.query(IPDRRecord).order_by(IPDRRecord.start_time.desc()).limit(limit).all()
+def service_summary(db: Session = Depends(get_db), limit: int = Query(default=200, ge=1, le=5000),
+                    case_id: str = Query(default="")):
+    q = db.query(IPDRRecord)
+    if case_id:
+        q = q.filter(IPDRRecord.case_id == case_id)
+    records = q.order_by(IPDRRecord.start_time.desc()).limit(limit).all()
     return summarize_services(records)
 
 
 @router.get("/towers")
-def tower_activity(db: Session = Depends(get_db)):
-    return list_tower_activity(db)
+def tower_activity(db: Session = Depends(get_db), case_id: str = Query(default="")):
+    return list_tower_activity(db, case_id=case_id or None)
 
 
 @router.get("/colocation")
-def colocation_candidates(db: Session = Depends(get_db), limit: int = Query(default=50, ge=1, le=200)):
-    return find_colocation_candidates(db, limit=limit)
+def colocation_candidates(db: Session = Depends(get_db), limit: int = Query(default=50, ge=1, le=200),
+                          case_id: str = Query(default="")):
+    return find_colocation_candidates(db, limit=limit, case_id=case_id or None)
 

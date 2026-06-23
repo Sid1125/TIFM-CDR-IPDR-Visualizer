@@ -128,10 +128,13 @@ def _cdr_movement(records):
     return moves
 
 
-def build_unified_timeline(db, limit: int = 200):
+def build_unified_timeline(db, limit: int = 200, case_id=None):
     events = []
 
-    cdr_records = db.query(CDRRecord).order_by(CDRRecord.start_time).limit(limit).all()
+    cdr_q = db.query(CDRRecord)
+    if case_id:
+        cdr_q = cdr_q.filter(CDRRecord.case_id == case_id)
+    cdr_records = cdr_q.order_by(CDRRecord.start_time).limit(limit).all()
     moves = _cdr_movement(cdr_records)
     for record in cdr_records:
         details = {"duration": record.duration_seconds}
@@ -150,7 +153,10 @@ def build_unified_timeline(db, limit: int = 200):
             }
         )
 
-    ipdr_records = db.query(IPDRRecord).order_by(IPDRRecord.start_time).limit(limit).all()
+    ipdr_q = db.query(IPDRRecord)
+    if case_id:
+        ipdr_q = ipdr_q.filter(IPDRRecord.case_id == case_id)
+    ipdr_records = ipdr_q.order_by(IPDRRecord.start_time).limit(limit).all()
     for session in reconstruct_ipdr_sessions(ipdr_records):
         events.append(
             {

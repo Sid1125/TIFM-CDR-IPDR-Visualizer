@@ -9,9 +9,11 @@ from networkx.algorithms.community import greedy_modularity_communities
 from app.models.cdr import CDRRecord
 
 
-def _filtered_records(db, start_date: datetime | None = None, end_date: datetime | None = None):
+def _filtered_records(db, start_date: datetime | None = None, end_date: datetime | None = None, case_id=None):
     query = db.query(CDRRecord)
 
+    if case_id:
+        query = query.filter(CDRRecord.case_id == case_id)
     if start_date is not None:
         query = query.filter(CDRRecord.start_time >= start_date)
     if end_date is not None:
@@ -20,9 +22,9 @@ def _filtered_records(db, start_date: datetime | None = None, end_date: datetime
     return query.all()
 
 
-def build_graph(db, start_date: datetime | None = None, end_date: datetime | None = None):
+def build_graph(db, start_date: datetime | None = None, end_date: datetime | None = None, case_id=None):
     graph = nx.Graph()
-    records = _filtered_records(db, start_date=start_date, end_date=end_date)
+    records = _filtered_records(db, start_date=start_date, end_date=end_date, case_id=case_id)
 
     edge_counts: Counter[tuple[str, str]] = Counter()
     for record in records:
@@ -43,8 +45,8 @@ def build_graph(db, start_date: datetime | None = None, end_date: datetime | Non
     }
 
 
-def get_graph_metrics(db, start_date: datetime | None = None, end_date: datetime | None = None):
-    graph_payload = build_graph(db, start_date=start_date, end_date=end_date)
+def get_graph_metrics(db, start_date: datetime | None = None, end_date: datetime | None = None, case_id=None):
+    graph_payload = build_graph(db, start_date=start_date, end_date=end_date, case_id=case_id)
     graph = nx.Graph()
 
     for edge in graph_payload["edges"]:

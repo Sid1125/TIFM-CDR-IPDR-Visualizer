@@ -19,8 +19,9 @@ def graph(
     db: Session = Depends(get_db),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
+    case_id: str = Query(default=""),
 ):
-    return build_graph(db, start_date=start_date, end_date=end_date)
+    return build_graph(db, start_date=start_date, end_date=end_date, case_id=case_id or None)
 
 
 @router.get("/metrics")
@@ -28,5 +29,6 @@ def graph_metrics(
     db: Session = Depends(get_db),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
+    case_id: str = Query(default=""),
 ):
-    return get_graph_metrics(db, start_date=start_date, end_date=end_date)
+    return get_graph_metrics(db, start_date=start_date, end_date=end_date, case_id=case_id or None)
