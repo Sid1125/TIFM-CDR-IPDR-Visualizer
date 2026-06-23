@@ -1,0 +1,393 @@
+{
+  "base": "http://127.0.0.1:8000",
+  "case_id": "4",
+  "results": [
+    {
+      "name": "health unauthenticated",
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 16.4,
+      "detail": "{\"status\": \"ok\"}"
+    },
+    {
+      "name": "auth/me rejects unauthenticated",
+      "method": "GET",
+      "path": "/auth/me",
+      "status": 401,
+      "ok": false,
+      "elapsed_ms": 62.3,
+      "detail": "{\"detail\": \"Not signed in\"}"
+    },
+    {
+      "name": "login admin",
+      "method": "POST",
+      "path": "/auth/login",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 351.7,
+      "detail": "{\"user\": {\"id\": 1, \"username\": \"admin\", \"role\": \"admin\", \"is_active\": true, \"created_at\": \"2026-06-06T12:34:14.632419\", \"last_login_at\": \"2026-06-23T16:23:47.005690\"}, \"session\": {\"id\": 65, \"created_at\": \"2026-06-23T16:23:47.005690\", \"expires_at\": \"2026-06-30T16:23:47.005690\", \"last_seen_at\": \"2026-06-23T16:23:47.005690\", \"revoked_at\": null, \"user_agent\": \"python-requests/2.34.2\", \"ip_address\": \"127.0.0.1\", \"is_current\": true}, \"sessions\": [{\"id\": 65, \"created_at\": \"2026-06-23T16:23:47.005690\", \"expires_at\": \"2026-06-30T16:23:47.005690\", \"last_seen_at\": \"2026-06-23T16:23:47.005690\", \"revoked_at\": null, \"user_agent\": \"python-requests/2.34.2\", \"ip_address\": \"127.0.0.1\", \"is_current\": true}, {\""
+    },
+    {
+      "name": "auth/me authenticated",
+      "method": "GET",
+      "path": "/auth/me",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 16.5,
+      "detail": "{\"user\": {\"id\": 1, \"username\": \"admin\", \"role\": \"admin\", \"is_active\": true, \"created_at\": \"2026-06-06T12:34:14.632419\", \"last_login_at\": \"2026-06-23T16:23:47.005690\"}, \"session\": {\"id\": 65, \"created_at\": \"2026-06-23T16:23:47.005690\", \"expires_at\": \"2026-06-30T16:23:47.195328\", \"last_seen_at\": \"2026-06-23T16:23:47.195328\", \"revoked_at\": null, \"user_agent\": \"python-requests/2.34.2\", \"ip_address\": \"127.0.0.1\", \"is_current\": true}, \"sessions\": [{\"id\": 65, \"created_at\": \"2026-06-23T16:23:47.005690\", \"expires_at\": \"2026-06-30T16:23:47.195328\", \"last_seen_at\": \"2026-06-23T16:23:47.195328\", \"revoked_at\": null, \"user_agent\": \"python-requests/2.34.2\", \"ip_address\": \"127.0.0.1\", \"is_current\": true}, {\""
+    },
+    {
+      "name": "sessions list",
+      "method": "GET",
+      "path": "/auth/sessions",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 10.4,
+      "detail": "{\"sessions\": [{\"id\": 65, \"created_at\": \"2026-06-23T16:23:47.005690\", \"expires_at\": \"2026-06-30T16:23:47.207503\", \"last_seen_at\": \"2026-06-23T16:23:47.207503\", \"revoked_at\": null, \"user_agent\": \"python-requests/2.34.2\", \"ip_address\": \"127.0.0.1\", \"is_current\": true}, {\"id\": 64, \"created_at\": \"2026-06-23T08:36:01.309074\", \"expires_at\": \"2026-06-30T08:46:35.786199\", \"last_seen_at\": \"2026-06-23T08:46:35.786199\", \"revoked_at\": \"2026-06-23T08:46:35.789398\", \"user_agent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\", \"ip_address\": \"127.0.0.1\", \"is_current\": false}, {\"id\": 63, \"created_at\": \"2026-06-23T08:32:07.943209\", \"expires_at"
+    },
+    {
+      "name": "create disposable case",
+      "method": "POST",
+      "path": "/cases/",
+      "status": 201,
+      "ok": true,
+      "elapsed_ms": 21.1,
+      "detail": "{\"id\": 4, \"name\": \"Codex QA normal_user 20260623-215347\", \"description\": \"Disposable QA case created by Codex endpoint matrix.\", \"created_at\": \"2026-06-23T16:23:47.224921\", \"updated_at\": \"2026-06-23T16:23:47.224925\", \"record_count\": 0}"
+    },
+    {
+      "name": "upload towers",
+      "method": "POST",
+      "path": "/upload/towers",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 219.7,
+      "detail": "{\"success\": true, \"records_imported\": 10}"
+    },
+    {
+      "name": "upload cdr case-scoped",
+      "method": "POST",
+      "path": "/upload/cdr",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 163.7,
+      "detail": "{\"success\": true, \"records_imported\": 45}"
+    },
+    {
+      "name": "upload ipdr case-scoped",
+      "method": "POST",
+      "path": "/upload/ipdr",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 84.2,
+      "detail": "{\"success\": true, \"records_imported\": 35}"
+    },
+    {
+      "name": "cases list after upload",
+      "method": "GET",
+      "path": "/cases/",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 54.3,
+      "detail": "list[3] [{\"id\": 4, \"name\": \"Codex QA normal_user 20260623-215347\", \"description\": \"Disposable QA case created by Codex endpoint matrix.\", \"created_at\": \"2026-06-23T16:23:47.224921\", \"updated_at\": \"2026-06-23T16:23:47.224925\", \"record_count\": 80}]"
+    },
+    {
+      "name": "cdr case records",
+      "method": "GET",
+      "path": "/records/cdr?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 35.4,
+      "detail": "list[45] [{\"id\": 1469, \"case_id\": \"4\", \"msisdn\": \"9000000101\", \"imsi\": null, \"imei\": null, \"a_party_number\": null, \"b_party_number\": \"9000000101\", \"call_type\": \"VOICE\", \"direction\": \"MO\", \"start_time\": \"2026-06-08T04:00:00\", \"end_time\": \"2026-06-07T17:05:34\", \"duration_seconds\": 334, \"tower_id\": \"TWR001\", \"c"
+    },
+    {
+      "name": "ipdr case records",
+      "method": "GET",
+      "path": "/records/ipdr?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 22.1,
+      "detail": "list[35] [{\"id\": 5693, \"case_id\": \"4\", \"msisdn\": null, \"imsi\": null, \"imei\": null, \"start_time\": \"2026-06-08T04:00:00\", \"end_time\": \"2026-06-07T17:24:02\", \"duration_seconds\": 1442, \"source_ip\": \"10.1.4.60\", \"destination_ip\": \"198.41.205.232\", \"source_port\": 49583, \"destination_port\": 102, \"protocol\": \"TCP\", "
+    },
+    {
+      "name": "tower list",
+      "method": "GET",
+      "path": "/towers/",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 24.2,
+      "detail": "list[271] [{\"tower_id\": \"TOW_CELL1051\", \"latitude\": null, \"longitude\": null, \"city\": null, \"state\": null}]"
+    },
+    {
+      "name": "geo records",
+      "method": "GET",
+      "path": "/geo/records?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 26.3,
+      "detail": "list[0] []"
+    },
+    {
+      "name": "geo subjects",
+      "method": "GET",
+      "path": "/geo/subjects?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 12.0,
+      "detail": "list[74] [\"10.1.1.209\"]"
+    },
+    {
+      "name": "geo towers",
+      "method": "GET",
+      "path": "/geo/towers",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 11.5,
+      "detail": "list[271] [{\"tower_id\": \"TWR001\", \"latitude\": 28.669671, \"longitude\": 77.019004, \"city\": \"New Delhi\", \"state\": \"Delhi\"}]"
+    },
+    {
+      "name": "investigation timeline",
+      "method": "GET",
+      "path": "/investigation/timeline?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 62.9,
+      "detail": "list[671] [{\"time\": \"2026-01-01T00:44:00\", \"event_type\": \"IP Session\", \"service\": \"Likely Mail\", \"confidence\": 86, \"subject\": \"58.169.143.196\", \"peer\": \"2.251.214.246\", \"tower_id\": \"TOW_CELL4959\", \"details\": {\"subtype\": \"Retrieval\", \"family\": \"Mail\", \"end\": \"2026-01-01T01:12:25\", \"duration_seconds\": 1705, \"re"
+    },
+    {
+      "name": "investigation services",
+      "method": "GET",
+      "path": "/investigation/services?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 15.6,
+      "detail": "list[7] [{\"service\": \"Likely Google\", \"count\": 75, \"confidence\": 90, \"evidence\": [\"Google IP range (8.8.8.0/24)\", \"Port 5060\", \"SIP signaling\", \"SIP family port\"], \"subtype\": \"Call signaling\", \"family\": \"Google\", \"total_bytes\": 146187580}]"
+    },
+    {
+      "name": "investigation towers",
+      "method": "GET",
+      "path": "/investigation/towers?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 22.6,
+      "detail": "list[271] [{\"tower_id\": \"TWR001\", \"city\": \"New Delhi\", \"state\": \"Delhi\", \"latitude\": 28.669671, \"longitude\": 77.019004, \"cdr_events\": 54, \"ipdr_events\": 60}]"
+    },
+    {
+      "name": "investigation colocation",
+      "method": "GET",
+      "path": "/investigation/colocation?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 14.2,
+      "detail": "list[50] [{\"tower_id\": \"TWR010\", \"subject_count\": 54, \"subjects\": [\"9000000130\", \"9000000131\", \"9000000133\", \"9000000137\", \"9000000138\", \"9000000142\", \"9000000143\", \"9000000146\", \"9000000147\", \"9000000151\", \"9000000152\", \"9000000155\", \"9000000161\", \"9000000174\", \"9000000176\", \"9000000177\", \"9000000180\", \"900"
+    },
+    {
+      "name": "graph base",
+      "method": "GET",
+      "path": "/graph/?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 47.4,
+      "detail": "{\"nodes\": [{\"id\": \"9757347712\"}, {\"id\": \"9871913964\"}, {\"id\": \"9761759901\"}, {\"id\": \"9871289977\"}, {\"id\": \"9746410558\"}, {\"id\": \"9824168229\"}, {\"id\": \"9738592185\"}, {\"id\": \"9851280100\"}, {\"id\": \"9743013856\"}, {\"id\": \"9822201312\"}, {\"id\": \"9768241131\"}, {\"id\": \"9856975826\"}, {\"id\": \"9780821790\"}, {\"id\": \"9839195352\"}, {\"id\": \"9754040738\"}, {\"id\": \"9826239225\"}, {\"id\": \"9785208882\"}, {\"id\": \"9822614873\"}, {\"id\": \"9751294797\"}, {\"id\": \"9836034512\"}, {\"id\": \"9711912865\"}, {\"id\": \"9846109510\"}, {\"id\": \"9773869553\"}, {\"id\": \"9813872017\"}, {\"id\": \"9783783730\"}, {\"id\": \"9838237785\"}, {\"id\": \"9742254164\"}, {\"id\": \"9854742856\"}, {\"id\": \"9763273359\"}, {\"id\": \"9846090701\"}, {\"id\": \"9713988869\"}, {\"id\": "
+    },
+    {
+      "name": "graph metrics",
+      "method": "GET",
+      "path": "/graph/metrics?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 264.2,
+      "detail": "{\"degree_centrality\": {\"9757347712\": 0.002457002457002457, \"9871913964\": 0.0171990171990172, \"9811000777\": 0.012285012285012284, \"9890435162\": 0.014742014742014743, \"9884449549\": 0.022113022113022112, \"9815500011\": 0.004914004914004914, \"9824168229\": 0.012285012285012284, \"9899001122\": 0.002457002457002457, \"9761759901\": 0.002457002457002457, \"9871289977\": 0.002457002457002457, \"9746410558\": 0.002457002457002457, \"9833000888\": 0.007371007371007371, \"9738592185\": 0.002457002457002457, \"9851280100\": 0.002457002457002457, \"9743013856\": 0.004914004914004914, \"9822201312\": 0.002457002457002457, \"9768241131\": 0.002457002457002457, \"9856975826\": 0.009828009828009828, \"9878925806\": 0.004914004914004"
+    },
+    {
+      "name": "timeline base",
+      "method": "GET",
+      "path": "/timeline/?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 48.5,
+      "detail": "list[1271] [{\"time\": \"2026-01-01T00:44:00\", \"event_type\": \"IP Session\", \"event\": \"58.169.143.196 -> 2.251.214.246\", \"subject\": \"58.169.143.196\", \"peer\": \"2.251.214.246\", \"service\": \"Likely Mail\", \"confidence\": 86, \"tower_id\": \"TOW_CELL4959\"}]"
+    },
+    {
+      "name": "stats top contacts",
+      "method": "GET",
+      "path": "/stats/top-contacts?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 18.1,
+      "detail": "list[10] [{\"contact\": \"9884449549\", \"count\": 30}]"
+    },
+    {
+      "name": "stats cdr",
+      "method": "GET",
+      "path": "/stats/cdr?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 21.4,
+      "detail": "{\"total_records\": 1469, \"unique_a_party\": 306, \"unique_b_party\": 321, \"total_duration_seconds\": 888726, \"avg_duration_seconds\": 604.99, \"call_type_distribution\": {\"Voice\": 209, \"SMS\": 268, \"VOICE\": 286, \"USSD\": 247, \"VIDEO\": 231, \"CONFERENCE\": 228}, \"direction_distribution\": {\"MT\": 489, \"MO\": 568, \"ROAMING\": 412}, \"technology_distribution\": {\"4G LTE\": 86, \"3G\": 233, \"2G\": 216, \"4G\": 347, \"5G\": 215, \"VoLTE\": 199, \"VoWiFi\": 173}}"
+    },
+    {
+      "name": "stats ipdr",
+      "method": "GET",
+      "path": "/stats/ipdr?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 726.5,
+      "detail": "{\"total_records\": 1993, \"total_bytes_uploaded\": 4128073541, \"total_bytes_downloaded\": 8352867773, \"total_bytes\": 12480941314, \"protocol_distribution\": {\"UDP\": 719, \"TCP\": 1274}, \"apn_distribution\": {\"airtel\": 222, \"internet\": 236, \"mms\": 188, \"telenor\": 209, \"jio\": 190, \"wap\": 187, \"jazz\": 195, \"bsnl\": 210, \"vi\": 213, \"LTE\": 35, \"vi.internet\": 18, \"airtelgprs.com\": 28, \"ims\": 35, \"jionet\": 25, \"uninor\": 2}, \"rat_distribution\": {\"LTE\": 357, \"EDGE\": 260, \"HSDPA\": 260, \"NR\": 260, \"HSPA\": 255, \"GPRS\": 256, \"UMTS\": 279, \"HSPA+\": 16, \"5G\": 15}}"
+    },
+    {
+      "name": "annotations list",
+      "method": "GET",
+      "path": "/annotations",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 32.3,
+      "detail": "list[0] []"
+    },
+    {
+      "name": "watchlist list",
+      "method": "GET",
+      "path": "/watchlist?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 30.2,
+      "detail": "list[0] []"
+    },
+    {
+      "name": "inference report",
+      "method": "GET",
+      "path": "/inference/report?case_id=4&limit=5000",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 28.4,
+      "detail": "{\"cdr\": {\"subjects\": 5, \"movement\": {\"9000000103\": {\"anchors\": {\"home\": {\"tower_id\": \"TWR001\", \"events\": 1, \"latitude\": null, \"longitude\": null}, \"work\": {\"tower_id\": \"TWR001\", \"events\": 3, \"latitude\": null, \"longitude\": null}}, \"distinct_towers\": 2, \"total_events\": 8, \"modes\": {}, \"max_leg_km\": 0, \"impossible_travel\": [], \"dwell\": [{\"tower_id\": \"TWR001\", \"dwell_hours\": 84.3, \"visits\": 7, \"latitude\": null, \"longitude\": null}], \"mobility\": {\"class\": \"local\", \"distinct_towers\": 2, \"total_km\": 0, \"max_leg_km\": 0}}, \"9000000104\": {\"anchors\": {\"home\": {\"tower_id\": \"TWR001\", \"events\": 6, \"latitude\": null, \"longitude\": null}, \"work\": {\"tower_id\": \"TWR002\", \"events\": 1, \"latitude\": null, \"longitude\""
+    },
+    {
+      "name": "inference markdown export",
+      "method": "GET",
+      "path": "/inference/report.md?case_id=4&source=analysis&limit=5000",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 22.1,
+      "detail": "# ARGUS \u2014 Case Analysis Report\n\n## Document control\n\n| Field | Value |\n|---|---|\n| Reference | `ARGUS-ANL-20260623-215349-8D02` |\n| Document type | Analytics report (Inferences tab) |\n| Case | Codex QA normal_user 20260623-215347 |\n| Generated | 2026-06-23T21:53:49 |\n| Exported by | admin |\n\n**Contents exported:** 5 cdr subjects \u00b7 35 ipdr sessions \u00b7 4 persons of interest\n\n**Generated:** 2026-06-23T21:53:49  \n**CDR phone subjects:** 5 \u00b7 **IPDR sessions:** 35\n\n> CDR (phone numbers) and IPDR (IP ad"
+    },
+    {
+      "name": "inference exports list",
+      "method": "GET",
+      "path": "/inference/exports?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 12.5,
+      "detail": "list[1] [{\"ref_id\": \"ARGUS-ANL-20260623-215349-8D02\", \"source\": \"analysis\", \"case_name\": \"Codex QA normal_user 20260623-215347\", \"exported_by\": \"admin\", \"created_at\": \"2026-06-23T21:53:49.265839+05:30\", \"details\": {\"cdr_subjects\": 5, \"ipdr_sessions\": 35, \"persons_of_interest\": 4, \"flagged_ips\": 0, \"watchlis"
+    },
+    {
+      "name": "ai knowledge base",
+      "method": "GET",
+      "path": "/ai/knowledge-base",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 14.2,
+      "detail": "{\"whatsapp\": {\"name\": \"WhatsApp\", \"ports\": [3478, 3479, 3480, 5222, 5223, 5228], \"protocols\": [\"UDP\", \"TCP\"], \"indicators\": [\"STUN traffic to Meta IP ranges\", \"TCP connection to WhatsApp chat servers on port 5222/5223\", \"Push messaging traffic on port 5228\", \"UDP media bursts on port 3478\"], \"base_confidence\": 92, \"asn_keywords\": [\"META\", \"WHATSAPP\", \"FACEBOOK\"]}, \"telegram\": {\"name\": \"Telegram\", \"ports\": [443, 80, 5222, 8443, 4430], \"protocols\": [\"TCP\", \"UDP\"], \"indicators\": [\"MTProto proxy traffic patterns\", \"Sustained connections to Telegram Messenger LLP IP block\", \"VoIP UDP traffic on random high ports to Telegram ASNs\"], \"base_confidence\": 85, \"asn_keywords\": [\"TELEGRAM\"]}, \"signal\": {"
+    },
+    {
+      "name": "ai analyze",
+      "method": "POST",
+      "path": "/ai/analyze?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 13.7,
+      "detail": "{\"success\": true, \"analytics\": {\"attribution\": {\"SMB / File Sharing\": {\"count\": 1, \"confidence\": 83, \"evidence\": [\"Port match: 138\"]}, \"Email (SMTP/POP3/IMAP)\": {\"count\": 1, \"confidence\": 91, \"evidence\": [\"POP3 mail retrieval on port 110/995\"]}}, \"identity\": {}, \"movement\": {\"subjects_movement\": {}, \"detected_meetings\": []}, \"network\": {\"nodes_count\": 0, \"edges_count\": 0, \"network_density\": 0, \"centrality_metrics\": {}, \"communities\": []}}}"
+    },
+    {
+      "name": "ai generate report",
+      "method": "POST",
+      "path": "/ai/generate-report?case_id=4&report_type=full",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 11.4,
+      "detail": "{\"success\": true, \"report\": \"# DIGITAL FORENSICS INVESTIGATION REPORT (FULL)\\nGenerated at: 2026-06-23 21:53:49\\n\\n## 1. Executive Summary\\nAnalysis of network records reveals a community of **0** unique entities with **0** communication edges.\\nOverall network structural density is calculated at **0**.\\n\\n## 2. Bounded Communities and Structural Roles\\nNo network metrics calculated.\\n\\n## 3. Suspected Identity & Device Anomalies\\nNo active SIM swaps or device changes detected.\\n\\n## 4. Location & Meeting Logs\\nNo physical co-location meetings detected.\\n\\n## 5. Application Usage & Cryptographic Signatures\\n| App Service | Connection Counts | Signature Confidence | Sample Indicator |\\n|---|-"
+    },
+    {
+      "name": "ai investigate",
+      "method": "POST",
+      "path": "/ai/investigate?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 16.5,
+      "detail": "{\"success\": true, \"investigation\": {\"summary\": {\"total_records_analyzed\": 80, \"cdr_count\": 45, \"ipdr_count\": 35, \"total_subjects\": 0, \"total_towers\": 271, \"date_range\": {\"start\": null, \"end\": null, \"span_days\": 0}, \"modules_executed\": 11, \"total_findings\": 0, \"high_priority_findings\": 0}, \"sessions\": {\"by_subject\": {}, \"total_sessions\": 0, \"subjects_analyzed\": 0}, \"communication_patterns\": {\"by_subject\": {}, \"calling_circles\": [], \"total_pairs_analyzed\": 0}, \"temporal_analysis\": {\"total_records\": 0, \"date_range\": {\"start\": null, \"end\": null, \"span_days\": 0}, \"hourly_distribution\": {\"0\": 0, \"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0, \"9\": 0, \"10\": 0, \"11\": 0, \"12\": 0, \"13\""
+    },
+    {
+      "name": "ai finetune dataset",
+      "method": "GET",
+      "path": "/ai/finetune-dataset?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 13.3,
+      "detail": "{\"success\": true, \"file_written\": \"D:\\\\GPCSSI_NEW\\\\backend\\\\app\\\\ai\\\\telecom_train.jsonl\", \"records_count\": 0, \"peft_guide\": \"# TIFM QLoRA Fine-Tuning Guide\\n\\n## Quick Start (Recommended)\\nRun the full pipeline from the `backend/` directory:\\n```bash\\n# Install dependencies\\npip install torch transformers accelerate peft bitsandbytes datasets trl\\n\\n# Generate training data and train\\npython pipeline_tifm_finetune.py --train\\n\\n# Or step by step:\\npython pipeline_tifm_finetune.py --generate-only\\npython pipeline_tifm_finetune.py --train-only\\n```\\n\\n## What This Produces\\n- **Training data**: `app/ai/tifm_train.jsonl` -- high-quality Q&A pairs grounded in TIFM multi-agent analytics (7 quest"
+    },
+    {
+      "name": "admin users",
+      "method": "GET",
+      "path": "/auth/admin/users",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 10.1,
+      "detail": "{\"users\": [{\"id\": 1, \"username\": \"admin\", \"role\": \"admin\", \"is_active\": true, \"created_at\": \"2026-06-06T12:34:14.632419\", \"last_login_at\": \"2026-06-23T16:23:47.005690\"}]}"
+    },
+    {
+      "name": "watchlist add phone",
+      "method": "POST",
+      "path": "/watchlist",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 11.3,
+      "detail": "{\"id\": 3, \"value\": \"+919900000001\", \"kind\": \"phone\"}"
+    },
+    {
+      "name": "watchlist after add",
+      "method": "GET",
+      "path": "/watchlist?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 9.3,
+      "detail": "list[1] [{\"id\": 3, \"value\": \"+919900000001\", \"kind\": \"phone\", \"note\": null, \"case_id\": \"4\"}]"
+    },
+    {
+      "name": "case update",
+      "method": "PUT",
+      "path": "/cases/4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 15.7,
+      "detail": "{\"id\": 4, \"name\": \"Codex QA normal_user 20260623-215347\", \"description\": \"Updated by QA matrix\", \"created_at\": \"2026-06-23T16:23:47.224921\", \"updated_at\": \"2026-06-23T16:23:49.405487\", \"record_count\": 80}"
+    },
+    {
+      "name": "records reset disposable case",
+      "method": "DELETE",
+      "path": "/records/reset?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 10.2,
+      "detail": "{\"success\": true, \"cdr_deleted\": 45, \"ipdr_deleted\": 35}"
+    },
+    {
+      "name": "cdr after disposable reset",
+      "method": "GET",
+      "path": "/records/cdr?case_id=4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 9.8,
+      "detail": "list[0] []"
+    },
+    {
+      "name": "delete disposable case",
+      "method": "DELETE",
+      "path": "/cases/4",
+      "status": 200,
+      "ok": true,
+      "elapsed_ms": 14.0,
+      "detail": "{\"success\": true, \"deleted_records\": true}"
+    }
+  ]
+}
