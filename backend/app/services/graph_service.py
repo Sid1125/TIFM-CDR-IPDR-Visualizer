@@ -7,6 +7,7 @@ import networkx as nx
 from networkx.algorithms.community import greedy_modularity_communities
 
 from app.models.cdr import CDRRecord
+from app.models.ipdr import IPDRRecord
 
 
 def _filtered_records(db, start_date: datetime | None = None, end_date: datetime | None = None, case_id=None):
@@ -22,23 +23,50 @@ def _filtered_records(db, start_date: datetime | None = None, end_date: datetime
     return query.all()
 
 
+def _filtered_ipdr(db, start_date=None, end_date=None, case_id=None):
+    query = db.query(IPDRRecord)
+    if case_id:
+        query = query.filter(IPDRRecord.case_id == case_id)
+    if start_date is not None:
+        query = query.filter(IPDRRecord.start_time >= start_date)
+    if end_date is not None:
+        query = query.filter(IPDRRecord.start_time <= end_date)
+    return query.all()
+
+
 def build_graph(db, start_date: datetime | None = None, end_date: datetime | None = None,
                 case_id=None, subject=None, limit: int = 0):
     """Build the call graph server-side. ``subject`` focuses on edges touching one number;
     ``limit`` caps the returned edges to the top-N heaviest so the browser renders a bounded
     subgraph at any case size. Node weights are the node's TRUE total over *all* edges (not just
     the shown ones), so centrality stays exact/full-coverage even when the view is trimmed.
-    Returns nodes/edges plus total_nodes/total_edges/shown_edges for an honest 'top N of M'."""
-    records = _filtered_records(db, start_date=start_date, end_date=end_date, case_id=case_id)
-
+    Includes both the CDR call network (phone↔phone) and the IPDR connection network
+    (source_ip↔destination_ip). The two never share an edge, so they appear as disjoint
+    components — no CDR/IPDR cross-attribution — but each node is tagged with its kind so the
+    view can colour them distinctly. Returns nodes/edges plus total_nodes/total_edges/
+    shown_edges for an honest 'top N of M'."""
     edge_counts: Counter[tuple[str, str]] = Counter()
-    for record in records:
+    node_kind: dict[str, str] = {}
+
+    for record in _filtered_records(db, start_date=start_date, end_date=end_date, case_id=case_id):
         a, b = record.a_party_number, record.b_party_number
         if not a or not b or a == b:
             continue
         if subject and subject not in (a, b):
             continue
         edge_counts[tuple(sorted((a, b)))] += 1
+        node_kind.setdefault(a, "cdr")
+        node_kind.setdefault(b, "cdr")
+
+    for record in _filtered_ipdr(db, start_date=start_date, end_date=end_date, case_id=case_id):
+        a, b = record.source_ip, record.destination_ip
+        if not a or not b or a == b:
+            continue
+        if subject and subject not in (a, b):
+            continue
+        edge_counts[tuple(sorted((a, b)))] += 1
+        node_kind.setdefault(a, "ipdr")
+        node_kind.setdefault(b, "ipdr")
 
     # true node weights over every edge (full coverage), before any display trim
     full_node_weight: Counter[str] = Counter()
@@ -57,7 +85,7 @@ def build_graph(db, start_date: datetime | None = None, end_date: datetime | Non
         shown_nodes.add(t)
 
     return {
-        "nodes": [{"id": n, "weight": full_node_weight[n]} for n in shown_nodes],
+        "nodes": [{"id": n, "weight": full_node_weight[n], "kind": node_kind.get(n, "cdr")} for n in shown_nodes],
         "edges": [{"source": s, "target": t, "weight": w} for (s, t), w in items],
         "total_nodes": len(full_node_weight),
         "total_edges": total_edges,

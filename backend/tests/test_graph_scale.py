@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base
 from app.models.cdr import CDRRecord
-from app.models.ipdr import IPDRRecord  # noqa: F401 (registers table)
+from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower  # noqa: F401
 from app.services.graph_service import build_graph, get_graph_metrics
 
@@ -33,6 +33,9 @@ class GraphScaleTests(unittest.TestCase):
                                   b_party_number="902", start_time=datetime(2026, 1, 1, 11, 0)))
         rows.append(CDRRecord(case_id="B", a_party_number="700", b_party_number="701",
                               start_time=datetime(2026, 1, 1, 9, 0)))
+        # an IPDR connection (source_ip -> destination_ip) in case A
+        rows.append(IPDRRecord(case_id="A", source_ip="10.0.0.5", destination_ip="8.8.8.8",
+                               start_time=datetime(2026, 1, 1, 12, 0)))
         db.add_all(rows)
         db.commit()
         db.close()
@@ -45,7 +48,7 @@ class GraphScaleTests(unittest.TestCase):
         g = build_graph(db, case_id="A", limit=2)
         self.assertEqual(g["shown_edges"], 2)
         self.assertEqual(len(g["edges"]), 2)
-        self.assertEqual(g["total_edges"], 6)            # 5 hub edges + 901-902
+        self.assertEqual(g["total_edges"], 7)            # 5 hub edges + 901-902 + 1 IPDR edge
         # heaviest first: 900-905 (w5) and 900-904 (w4)
         weights = sorted((e["weight"] for e in g["edges"]), reverse=True)
         self.assertEqual(weights, [5, 4])
@@ -70,6 +73,21 @@ class GraphScaleTests(unittest.TestCase):
         self.assertTrue(all("901" in (e["source"], e["target"]) for e in g["edges"]))
         # case B must not leak
         self.assertEqual(build_graph(db, case_id="A", subject="700")["edges"], [])
+        db.close()
+
+    def test_includes_ipdr_network_tagged(self):
+        db = self._db()
+        g = build_graph(db, case_id="A", limit=0)
+        kinds = {n["id"]: n["kind"] for n in g["nodes"]}
+        # CDR phones tagged cdr, IPDR endpoints tagged ipdr (disjoint components)
+        self.assertEqual(kinds.get("900"), "cdr")
+        self.assertEqual(kinds.get("10.0.0.5"), "ipdr")
+        self.assertEqual(kinds.get("8.8.8.8"), "ipdr")
+        # the IPDR edge exists and never links a phone to an IP
+        edges = {(e["source"], e["target"]) for e in g["edges"]}
+        self.assertIn(("10.0.0.5", "8.8.8.8"), edges)
+        for s, t in edges:
+            self.assertFalse((kinds[s] == "cdr") ^ (kinds[t] == "cdr"))  # no cross-kind edge
         db.close()
 
     def test_metrics_full_and_sampling_flag(self):

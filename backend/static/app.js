@@ -1497,7 +1497,7 @@ async function renderGraph(){
   D.graphSvg.innerHTML='<svg width="100%" height="100%"></svg>';
   const svg=d3.select(D.graphSvg).select('svg'),w=D.graphSvg.clientWidth||800,h=D.graphSvg.clientHeight||500;
   const links=(payload.edges||[]).map(e=>({key:e.source+'|'+e.target,source:e.source,target:e.target,weight:e.weight}));
-  const nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight}));
+  const nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight,kind:n.kind||'cdr'}));
   if(!nodes.length){D.graphStats.textContent='No connections'+(subject?' for this subject':'')+'.';return;}
   const moreEdges=(payload.total_edges||links.length)-(payload.shown_edges||links.length);
   D.graphStats.textContent=`${nodes.length} nodes, ${links.length} links`+(moreEdges>0?` (top ${links.length} of ${payload.total_edges})`:'')+(payload.total_nodes?` · ${payload.total_nodes} nodes total`:'');
@@ -1516,7 +1516,7 @@ async function renderGraph(){
   curGraphNodes=nodes;curGraphLinks=links;curGraphSim=sim;
 
   const link=g.append('g').selectAll('line').data(links).join('line').attr('stroke','#dccfc0').attr('stroke-width',d=>Math.max(0.5,Math.min(6,d.weight*0.5))).attr('stroke-opacity',0.6);
-  const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))).style('fill',d=>d.id===subject?'#b94a48':'var(--accent)').attr('stroke','#fff').attr('stroke-width',1.5).style('cursor','pointer')
+  const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))).style('fill',d=>d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'var(--accent)')).attr('stroke','#fff').attr('stroke-width',1.5).style('cursor','pointer')
     .on('click',(e,d)=>{showProfile(d.id)})
     .on('mouseover',(e,d)=>{
       const deg=curCentrality?curCentrality.degree.find(x=>x[0]===d.id):null;
