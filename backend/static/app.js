@@ -1887,10 +1887,11 @@ function showMapHeat(sub){
   const maxC=Math.max(1,...towers.map(t=>t.count));
   const grad={0.0:'#2c7fb8',0.35:'#41b6c4',0.55:'#7fcdbb',0.7:'#d9f0a3',0.82:'#fec44f',0.92:'#fe9929',1.0:'#cc2a1e'};
   if(typeof L.heatLayer==='function'){
-    // Real density surface: one weighted point per location, intensity = visit count,
-    // normalised against the busiest tower so colour maps to relative activity.
-    const heat=L.heatLayer(towers.map(t=>[t.lat,t.lng,t.count]),
-      {radius:28,blur:22,maxZoom:16,max:maxC,minOpacity:0.3,gradient:grad}).addTo(mapInstance);
+    // Real density surface: feed one point per record so co-located records *accumulate*
+    // into hot cores (a single weighted point per tower can't — its alpha is capped, not
+    // additive, so everything reads cold). leaflet.heat sums overlapping contributions.
+    const heat=L.heatLayer(rows.map(r=>[r.latitude,r.longitude,1]),
+      {radius:30,blur:20,maxZoom:16,minOpacity:0.35,gradient:grad}).addTo(mapInstance);
     mapLayers.push(heat);
     // tiny clickable dots keep every location inspectable on top of the gradient
     towers.forEach(t=>{
