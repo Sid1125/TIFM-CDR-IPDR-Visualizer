@@ -2415,7 +2415,7 @@ function renderChartDayOfWeek(){
 // ====== 6. RECORDS TABLE ======
 let annotationsMap={};
 function loadAnnotations(){
-  API.get('/annotations').then(list=>{
+  API.get('/annotations/').then(list=>{
     annotationsMap={};
     list.forEach(a=>{annotationsMap[a.record_type+'_'+a.record_id]=a});
     renderRecTable();
@@ -2432,9 +2432,9 @@ function toggleAnnot(r){
       delete annotationsMap[key];paint();
     }).catch(()=>{});
   }else{
-    API.post('/annotations',{record_type:r.type,record_id:r.id,tag:'flagged',note:''}).then(a=>{
+    API.post('/annotations/',{record_type:r.type,record_id:numId,tag:'flagged',note:''}).then(a=>{
       annotationsMap[key]=a;paint();
-    }).catch(()=>{});
+    }).catch(e=>{console.error('annotation failed',e);});
   }
 }
 function renderRecords(){
