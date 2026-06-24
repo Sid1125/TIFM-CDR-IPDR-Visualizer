@@ -2424,13 +2424,16 @@ function loadAnnotations(){
 function toggleAnnot(r){
   const numId=parseInt(r.id.slice(1));
   const key=r.type+'_'+numId;
+  // Repaint just this row's star in place — re-rendering the whole table here would reset
+  // the paged view back to the first page.
+  const paint=()=>{const cell=D.recBody.querySelector('.annot-cell[data-annot="'+key+'"]');if(cell)cell.innerHTML=annotationsMap[key]?'&#9733;':'&#9734;';};
   if(annotationsMap[key]){
     API.del('/annotations/'+annotationsMap[key].id).then(()=>{
-      delete annotationsMap[key];renderRecTable();
+      delete annotationsMap[key];paint();
     }).catch(()=>{});
   }else{
     API.post('/annotations',{record_type:r.type,record_id:r.id,tag:'flagged',note:''}).then(a=>{
-      annotationsMap[key]=a;renderRecTable();
+      annotationsMap[key]=a;paint();
     }).catch(()=>{});
   }
 }
@@ -2441,23 +2444,18 @@ function renderRecords(){
   D.recService.innerHTML='<option value="all">All services</option>'+[...svcs].map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
   renderRecTable();
 }
-let recPage=0;
-function renderRecTable(){
-  let rows=[...allRows];
-  if(D.recType.value!=='all')rows=rows.filter(r=>r.type===D.recType.value);
-  if(D.recService.value!=='all')rows=rows.filter(r=>r.svc===D.recService.value);
-  const q=D.recSearch.value.trim().toLowerCase();
-  if(q)rows=rows.filter(r=>`${r.sub} ${r.cnt} ${r.tow} ${r.cll||''} ${r.prot||''} ${r.imsi||''} ${r.imei||''}`.toLowerCase().includes(q));
-  D.recCount.textContent=`${rows.length} records`;
-  const page=rows.slice(0,recPage+60);
-  D.recBody.innerHTML=page.map(r=>{
-    const cdr=r.type==='CDR';
-    return `<tr onclick="showProfile('${esc(r.sub)}')" style="cursor:pointer">
-      <td style="text-align:center;cursor:pointer;font-size:0.85rem" onclick="event.stopPropagation();toggleAnnot({id:'${r.id}',type:'${r.type}'})">${annotationsMap[r.type+'_'+parseInt(r.id.slice(1))]?'&#9733;':'&#9734;'}</td>
+let recPage=0,recFiltered=[];
+const REC_PAGE=60;
+function recRowHtml(r){
+  const cdr=r.type==='CDR';
+  const wSub=colWidth(r.sub),wCnt=colWidth(r.cnt);
+  const svcAttr=cdr?'':esc(recordSvcAttr(r));
+  return `<tr onclick="showProfile('${esc(r.sub)}')" style="cursor:pointer">
+      <td class="annot-cell" data-annot="${r.type+'_'+parseInt(r.id.slice(1))}" style="text-align:center;cursor:pointer;font-size:0.85rem" onclick="event.stopPropagation();toggleAnnot({id:'${r.id}',type:'${r.type}'})">${annotationsMap[r.type+'_'+parseInt(r.id.slice(1))]?'&#9733;':'&#9734;'}</td>
       <td>${fmt(r.ts)}</td>
       <td><span class="tag${cdr?'':' tag-alt'}">${r.type}</span></td>
-      <td style="min-width:${colWidth(r.sub)}px;max-width:${colWidth(r.sub)}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.sub)}">${esc(r.sub||'')}</td>
-      <td style="min-width:${colWidth(r.cnt)}px;max-width:${colWidth(r.cnt)}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.cnt)}">${esc(r.cnt||'')}</td>
+      <td style="min-width:${wSub}px;max-width:${wSub}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.sub)}">${esc(r.sub||'')}</td>
+      <td style="min-width:${wCnt}px;max-width:${wCnt}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.cnt)}">${esc(r.cnt||'')}</td>
       <td>${r.dur!=null?r.dur+'s':''}</td>
       <td>${esc(cdr?r.cll||'':r.prot||'')}</td>
       <td>${esc(cdr?r.dir||'':r.apn||'')}</td>
@@ -2465,7 +2463,7 @@ function renderRecTable(){
       <td>${cdr?'':r.sport!=null?r.sport:''}</td>
       <td>${cdr?'':r.dport!=null?r.dport:''}</td>
       <td style="font-size:0.7rem">${cdr?'':r.dport?portSvc(r.dport):r.sport?portSvc(r.sport):''}</td>
-      <td style="font-size:0.7rem;min-width:300px;white-space:normal;word-break:break-word;line-height:1.3" title="${cdr?'':esc(recordSvcAttr(r))}">${cdr?'':esc(recordSvcAttr(r))}</td>
+      <td style="font-size:0.7rem;min-width:300px;white-space:normal;word-break:break-word;line-height:1.3" title="${svcAttr}">${svcAttr}</td>
       <td>${r.tow?twr(r.tow):''}</td>
       <td>${esc(r.cell||'')}</td>
       <td>${esc(r.lac||'')}</td>
@@ -2479,10 +2477,28 @@ function renderRecTable(){
       <td style="font-size:0.7rem">${r.lng!=null?Number(r.lng).toFixed(4):''}</td>
       <td style="font-size:0.7rem">${esc(r.case_id||'')}</td>
     </tr>`;
-  }).join('');
-  D.recLoadMore.style.display=rows.length>page.length?'block':'none';
-  D.recLoadMore.onclick=()=>{recPage+=60;renderRecTable()};
 }
+function renderRecTable(){
+  // Full reset: recompute the filtered set and render only the first page.
+  let rows=[...allRows];
+  if(D.recType.value!=='all')rows=rows.filter(r=>r.type===D.recType.value);
+  if(D.recService.value!=='all')rows=rows.filter(r=>r.svc===D.recService.value);
+  const q=D.recSearch.value.trim().toLowerCase();
+  if(q)rows=rows.filter(r=>`${r.sub} ${r.cnt} ${r.tow} ${r.cll||''} ${r.prot||''} ${r.imsi||''} ${r.imei||''}`.toLowerCase().includes(q));
+  recFiltered=rows;recPage=0;
+  D.recCount.textContent=`${rows.length} records`;
+  D.recBody.innerHTML='';
+  appendRecPage();
+}
+// Append only the next page instead of rebuilding the whole table. The old path rebuilt
+// every accumulated row on each "Load more" (O(n^2) across clicks) — the cause of the lag
+// that grew the further you paged. Appending keeps each click ~constant time.
+function appendRecPage(){
+  const start=recPage*REC_PAGE,slice=recFiltered.slice(start,start+REC_PAGE);
+  if(slice.length){D.recBody.insertAdjacentHTML('beforeend',slice.map(recRowHtml).join(''));recPage++;}
+  D.recLoadMore.style.display=recFiltered.length>recPage*REC_PAGE?'block':'none';
+}
+D.recLoadMore.onclick=appendRecPage;
 D.recSearch.addEventListener('input',()=>{recPage=0;renderRecTable()});
 D.recType.addEventListener('change',()=>{recPage=0;renderRecTable()});
 D.recService.addEventListener('change',()=>{recPage=0;renderRecTable()});
