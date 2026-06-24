@@ -205,8 +205,8 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Tech:** `L.polyline`, `L.circleMarker`, `mapInstance.distance()`, `D.mapTimeSlider` + `D.mapTimePlay`
 
 #### Activity Heatmap
-- **Description:** Renders a gradient heatmap overlay showing where activity is concentrated. Tower hotspots with visit counts in sidebar.
-- **Tech:** `leaflet.heat` plugin, `L.heatLayer()` with custom gradient (green → yellow → red), bubble count aggregation
+- **Description:** Renders a true Gaussian density surface (not graduated bubbles) showing where activity is concentrated. Each location contributes a point weighted by its visit count, normalized against the busiest tower so colour reflects relative intensity. Small clickable dots overlay the surface so every location stays inspectable (tower id + visit count popups). Sidebar lists records, distinct locations, peak visit count, a gradient legend, and the top hotspots (click to zoom).
+- **Tech:** `leaflet.heat` plugin, `L.heatLayer(points, {radius, blur, max: maxC, minOpacity, gradient})` with weighted `[lat, lng, count]` points and a blue→cyan→green→yellow→red gradient; bounds fit to the subject's points; graceful `L.circleMarker` fallback if the plugin is unavailable
 
 #### Operational Zones
 - **Description:** Draws radius circles around towers, sized proportionally to activity count. Tower markers with popups showing visit counts. Percentage breakdown in sidebar.
@@ -221,8 +221,8 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Tech:** `detectMeetings()` engine, double-loop comparison of subject records, `Math.abs(time gap) < 3600000`, gap-based coloring, `towerSequenceSimilarity()` with space-optimized LCS DP (two-row Uint16Array, O(n) memory), `movSimCache`, score fusion combining gap + encounters + movement similarity, configurable pair limit (default 30)
 
 #### Triangulation
-- **Description:** Time-based tower clustering (30-minute windows) to estimate subject location. Renders tech-aware coverage circles (5G/NR = 1km, 4G/LTE = 3km, 3G/UMTS = 5km, 2G/GPRS/EDGE = 15km). Computes Turf.js polygon intersections for overlap zones. Colors circles green→red based on tower usage density.
-- **Tech:** `showMapTriangulation()`, `L.circle()` with tech-based radii, `turf.intersect()` for overlap polygons, `turf.polygon()` geometry, color scale from green (low usage) to red (high usage)
+- **Description:** Time-based tower clustering (30-minute hand-off windows) to estimate subject location. Renders tech-aware coverage circles (5G/NR = 1km, 4G/LTE = 3km, 3G/UMTS = 5km, 2G/GPRS/EDGE = 15km) coloured green→red by tower-usage density. For each cluster it computes a **position fix**: an inverse-variance weighted centroid of the contributing towers (each weighted by `1/r²`, so tighter cells pull the estimate harder — the RF analogue of an inverse-variance mean), drawn as a crosshair marker with a ±precision uncertainty circle (bounded by the tightest cell) and geometry lines to each tower. When the cells genuinely overlap, the rigorous Turf.js intersection region is drawn as a red dashed polygon. Unlike a strict all-cells intersection, the overlap is computed tightest-first and *skips* non-overlapping cells instead of aborting, so a fix is always produced even when the cells don't all intersect. Sidebar reports tower count, position fixes, overlap fixes, best precision (±km), and a clickable list of estimated positions.
+- **Tech:** `showMapTriangulation()`, `L.circle()` with tech-based radii, inverse-variance weighted centroid (`Σ w·p / Σ w`, `w = 1/r²`), `triangulateOverlap()` helper doing tightest-first `turf.intersect()` with skip-on-empty fallback, `turf.circle()`/`turf.polygon()` geometry, `L.divIcon` crosshair marker + uncertainty `L.circle`, green→red density colour scale
 
 ### Geofencing
 - **Description:** "Geofence" button in the map toolbar toggles Leaflet.draw polygon drawing mode. Once a polygon is drawn, the dashboard shows a geo-fenced record count. "Clear Fence" button removes the polygon. Drawn polygon persists independently across map mode switches.

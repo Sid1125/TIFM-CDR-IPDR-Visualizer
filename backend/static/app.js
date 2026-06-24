@@ -1880,25 +1880,42 @@ function showMapHeat(sub){
   const locs={};
   rows.forEach(r=>{
     const k=r.tower_id||`${+r.latitude.toFixed(4)},${+r.longitude.toFixed(4)}`;
-    if(!locs[k])locs[k]={lat:r.latitude,lng:r.longitude,count:0};
+    if(!locs[k])locs[k]={lat:r.latitude,lng:r.longitude,count:0,id:r.tower_id||null};
     locs[k].count++;
   });
   const towers=Object.values(locs);
   const maxC=Math.max(1,...towers.map(t=>t.count));
-  towers.forEach(t=>{
-    const p=t.count/maxC;
-    const c=p>0.7?'#b94a48':p>0.4?'#d4a017':'#2d7d46';
-    mapCircles.push(L.circleMarker([t.lat,t.lng],{radius:5+15*p,color:c,fillColor:c,fillOpacity:0.25+0.55*p,weight:1,opacity:0.6}).addTo(mapInstance));
-    mapMarkers.push(L.marker([t.lat,t.lng],{icon:L.divIcon({className:'',html:`<div style="width:10px;height:10px;border-radius:50%;background:${c};opacity:0.8"></div>`,iconSize:[10,10],iconAnchor:[5,5]})}).bindPopup(`<strong>${esc(t.lat.toFixed(4))}, ${esc(t.lng.toFixed(4))}</strong><br>${t.count} visits`).addTo(mapInstance));
-  });
-  fitAllGeo();
+  const grad={0.0:'#2c7fb8',0.35:'#41b6c4',0.55:'#7fcdbb',0.7:'#d9f0a3',0.82:'#fec44f',0.92:'#fe9929',1.0:'#cc2a1e'};
+  if(typeof L.heatLayer==='function'){
+    // Real density surface: one weighted point per location, intensity = visit count,
+    // normalised against the busiest tower so colour maps to relative activity.
+    const heat=L.heatLayer(towers.map(t=>[t.lat,t.lng,t.count]),
+      {radius:28,blur:22,maxZoom:16,max:maxC,minOpacity:0.3,gradient:grad}).addTo(mapInstance);
+    mapLayers.push(heat);
+    // tiny clickable dots keep every location inspectable on top of the gradient
+    towers.forEach(t=>{
+      const m=L.circleMarker([t.lat,t.lng],{radius:3,color:'#fff',weight:1,opacity:0.5,fillColor:'#222',fillOpacity:0.45});
+      m.bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`);
+      m.addTo(mapInstance);mapMarkers.push(m);
+    });
+  }else{
+    // fallback: graduated bubbles if the heat plugin failed to load
+    towers.forEach(t=>{const p=t.count/maxC;const c=p>0.7?'#cc2a1e':p>0.4?'#fe9929':'#41b6c4';
+      mapCircles.push(L.circleMarker([t.lat,t.lng],{radius:5+15*p,color:c,fillColor:c,fillOpacity:0.25+0.55*p,weight:1,opacity:0.6}).bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`).addTo(mapInstance))});
+  }
+  const pts=towers.map(t=>[t.lat,t.lng]);if(pts.length)mapInstance.fitBounds(pts,{padding:[40,40]});else fitAllGeo();
   const sorted=towers.sort((a,b)=>b.count-a.count);
-  let h='<h4 style="margin:0 0 6px">Activity Heatmap</h4>'+`<div class="stat-row"><span class="label">Records</span><span class="value">${rows.length}</span></div>`+`<div class="stat-row"><span class="label">Locations</span><span class="value">${sorted.length}</span></div><h4 style="margin:8px 0 4px">Hotspots</h4>`;
+  let h='<h4 style="margin:0 0 6px">Activity Heatmap</h4>'
+    +`<div class="stat-row"><span class="label">Records</span><span class="value">${rows.length}</span></div>`
+    +`<div class="stat-row"><span class="label">Locations</span><span class="value">${sorted.length}</span></div>`
+    +`<div class="stat-row"><span class="label">Peak</span><span class="value">${maxC} visits</span></div>`;
+  h+='<div style="margin:8px 0 4px"><div style="height:10px;border-radius:5px;background:linear-gradient(to right,#2c7fb8,#41b6c4,#7fcdbb,#d9f0a3,#fec44f,#fe9929,#cc2a1e)"></div><div style="display:flex;justify-content:space-between;font-size:0.62rem;color:var(--muted);margin-top:2px"><span>low</span><span>high</span></div></div>';
+  h+='<h4 style="margin:8px 0 4px">Hotspots</h4>';
   sorted.slice(0,8).forEach(t=>{
     const p=t.count/maxC;
-    const c=p>0.7?'#b94a48':p>0.4?'#d4a017':'#2d7d46';
-    const loc=t.lat.toFixed(4)+','+t.lng.toFixed(4);
-    h+=`<div class="evt" style="border-left-color:${c}"><span class="evt-loc">${esc(loc)}</span><span class="evt-time">${t.count} visits</span></div>`;
+    const c=p>0.7?'#cc2a1e':p>0.4?'#fe9929':'#41b6c4';
+    const loc=t.id||(t.lat.toFixed(4)+','+t.lng.toFixed(4));
+    h+=`<div class="evt" style="border-left-color:${c}" onclick="mapInstance.setView([${t.lat},${t.lng}],15)"><span class="evt-loc">${esc(loc)}</span><span class="evt-time">${t.count} visits</span></div>`;
   });
   D.mapAnalysis.innerHTML=h;
 }
@@ -1923,6 +1940,23 @@ function showMapColocation(sub){
   let h='<h4>Co-location</h4>'+`<div class="stat-row"><span class="label">Shared Towers</span><span class="value">${shared.length}</span></div>`+`<div class="stat-row"><span class="label">Co-located With</span><span class="value">${new Set(shared.flatMap(([k,v])=>[...v.subjects].filter(s=>s!==sub))).size}</span></div>`;
   h+='<h4 style="margin:8px 0 4px">Details</h4>';shared.slice(0,8).forEach(([id,td])=>{const others=[...td.subjects].filter(s=>s!==sub).join(', ');h+=`<div class="evt"><span class="evt-loc">${esc(id)}</span><span class="evt-time">With: ${esc(others)}</span></div>`});
   D.mapAnalysis.innerHTML=h;
+}
+// Best-effort intersection of tower coverage cells, tightest-first. Skips a cell that
+// doesn't overlap the running region (rather than aborting the whole cluster), so partial
+// overlaps still yield a confidence polygon. Returns a GeoJSON polygon or null.
+function triangulateOverlap(tw){
+  if(typeof turf==='undefined'||!tw||tw.length<2)return null;
+  const sorted=[...tw].sort((a,b)=>a.rad-b.rad);
+  const circ=t=>turf.circle([t.lng,t.lat],t.rad/1000,{steps:48,units:'kilometers'});
+  try{
+    let acc=circ(sorted[0]),got=false;
+    for(let i=1;i<sorted.length;i++){
+      const inter=turf.intersect(acc,circ(sorted[i]));
+      if(!inter)continue;
+      acc=inter;got=true;
+    }
+    return got?acc:null;
+  }catch(e){return null}
 }
 function showMapTriangulation(sub){
   clearMap();
@@ -1957,41 +1991,47 @@ function showMapTriangulation(sub){
     m.bindPopup(`<strong>${esc(id)}</strong><br>Records: ${cnt}<br>Coverage: ${(rad/1000).toFixed(1)} km`);
     m.addTo(mapInstance);mapMarkers.push(m);
   });
-  usedClusters.forEach(c=>{
+  const fixes=[];
+  usedClusters.forEach((c,ci)=>{
     const ids=[...new Set(c.map(r=>r.tower_id))];
     if(ids.length<2)return;
-    const centers=ids.map(id=>{
-      const loc=towerLocs[id];
-      if(!loc)return null;
-      const rad=covRadius(c.find(r=>r.tower_id===id)||{});
-      if(rad<=0)return null;
-      return{center:[loc.lng,loc.lat],radius:rad/1000};
-    }).filter(Boolean);
-    if(centers.length<2)return;
-    try{
-      let overlap=turf.circle(centers[0].center,centers[0].radius,{steps:48,units:'kilometers'});
-      for(let j=1;j<centers.length;j++){
-        const next=turf.circle(centers[j].center,centers[j].radius,{steps:48,units:'kilometers'});
-        const inter=turf.intersect(overlap,next);
-        if(!inter){overlap=null;break}
-        overlap=inter;
-      }
-      if(overlap){
-        const coords=overlap.geometry.coordinates[0].map(c=>[c[1],c[0]]);
-        const poly=L.polygon(coords,{color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.25,weight:2,dashArray:'4 4'}).addTo(mapInstance);
-        mapLayers.push(poly);
-      }
-    }catch(e){/* skip cluster if intersection fails */}
+    const tw=ids.map(id=>{const loc=towerLocs[id];if(!loc)return null;const rad=covRadius(c.find(r=>r.tower_id===id)||{});if(rad<=0)return null;return{id,lat:loc.lat,lng:loc.lng,rad}}).filter(Boolean);
+    if(tw.length<2)return;
+    // Weighted position estimate: a tighter cell (smaller coverage radius) constrains the fix
+    // more, so weight each tower by 1/r^2 — the RF analogue of an inverse-variance mean. This
+    // yields an estimate even when the cells don't all intersect.
+    let sw=0,la=0,lo=0;tw.forEach(t=>{const w=1/(t.rad*t.rad);sw+=w;la+=t.lat*w;lo+=t.lng*w});
+    const est={lat:la/sw,lng:lo/sw};
+    const unc=Math.min(...tw.map(t=>t.rad)); // tightest constraining cell bounds the precision
+    // Geometry lines from the estimate to each contributing tower.
+    tw.forEach(t=>{const ln=L.polyline([[est.lat,est.lng],[t.lat,t.lng]],{color:'#7a8aa0',weight:1,opacity:0.45,dashArray:'2 4'}).addTo(mapInstance);mapLayers.push(ln)});
+    // Rigorous overlap region (best-effort; skips non-overlapping cells instead of aborting).
+    const overlap=triangulateOverlap(tw);
+    if(overlap){const coords=overlap.geometry.coordinates[0].map(p=>[p[1],p[0]]);const poly=L.polygon(coords,{color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.22,weight:1.5,dashArray:'4 4'}).addTo(mapInstance);mapLayers.push(poly)}
+    // Uncertainty circle + estimated-position marker (crosshair).
+    const uc=L.circle([est.lat,est.lng],{radius:unc,color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.05,weight:1,opacity:0.4,dashArray:'2 6'}).addTo(mapInstance);mapCircles.push(uc);
+    const em=L.marker([est.lat,est.lng],{icon:L.divIcon({className:'',html:'<div style="width:16px;height:16px;border:2px solid #b94a48;border-radius:50%;box-shadow:0 0 0 2px #fff;position:relative"><div style="position:absolute;left:50%;top:50%;width:6px;height:6px;background:#b94a48;border-radius:50%;transform:translate(-50%,-50%)"></div></div>',iconSize:[16,16],iconAnchor:[8,8]})});
+    em.bindTooltip('Estimated position',{direction:'top'});
+    em.bindPopup(`<strong>Estimated position</strong><br>Cluster ${ci+1} · ${tw.length} towers${overlap?' · overlap fix':''}<br>Confidence ±${(unc/1000).toFixed(1)} km<br>${fmt(c[0].start_time)}`);
+    em.addTo(mapInstance);mapMarkers.push(em);
+    fixes.push({ci,est,unc,n:tw.length,overlap:!!overlap,time:c[0].start_time});
   });
-  if(towerIds.length){const pts=towerIds.map(id=>[towerLocs[id].lat,towerLocs[id].lng]);mapInstance.fitBounds(pts,{padding:[40,40]})}
+  const allPts=towerIds.map(id=>[towerLocs[id].lat,towerLocs[id].lng]).concat(fixes.map(f=>[f.est.lat,f.est.lng]));
+  if(allPts.length)mapInstance.fitBounds(allPts,{padding:[40,40]});
+  fixes.sort((a,b)=>a.unc-b.unc);
   let h='<h4 style="margin:0 0 6px">Triangulation</h4>';
   h+=`<div class="stat-row"><span class="label">Towers</span><span class="value">${towerIds.length}</span></div>`;
-  h+=`<div class="stat-row"><span class="label">Clusters</span><span class="value">${usedClusters.length}</span></div>`;
-  h+=`<div class="stat-row"><span class="label">Overlaps</span><span class="value">${usedClusters.filter(c=>new Set(c.map(r=>r.tower_id)).size>=2).length}</span></div>`;
+  h+=`<div class="stat-row"><span class="label">Position Fixes</span><span class="value">${fixes.length}</span></div>`;
+  h+=`<div class="stat-row"><span class="label">Overlap Fixes</span><span class="value">${fixes.filter(f=>f.overlap).length}</span></div>`;
+  if(fixes.length)h+=`<div class="stat-row"><span class="label">Best Precision</span><span class="value">±${(fixes[0].unc/1000).toFixed(1)} km</span></div>`;
+  if(fixes.length){
+    h+='<h4 style="margin:8px 0 4px">Estimated Positions</h4>';
+    fixes.slice(0,8).forEach(f=>{h+=`<div class="evt" onclick="mapInstance.setView([${f.est.lat},${f.est.lng}],15)"><span class="evt-time">${fmt(f.time)}</span><span class="evt-loc">${f.n} towers · ±${(f.unc/1000).toFixed(1)} km${f.overlap?' · overlap':''}</span></div>`});
+  }
   h+='<h4 style="margin:8px 0 4px">Tower Usage</h4>';
   const sortedTowers=Object.entries(towerTotals).sort((a,b)=>b[1]-a[1]);
-  sortedTowers.slice(0,8).forEach(([id,cnt])=>{const loc=towerLocs[id]||{};h+=`<div class="evt" onclick="mapInstance.setView([${loc.lat},${loc.lng}],14)"><span class="evt-loc">${esc(id)}</span><span class="evt-time">${cnt} records</span></div>`});
-  h+='<div style="margin-top:10px;padding:8px;background:var(--card-bg);border-radius:6px;font-size:0.72rem;color:var(--muted)"><b>How it works:</b> Circles show estimated coverage by technology (1-15km radius). Overlapping zones (red dashed) indicate possible locations from consecutive tower handoffs within 30 min windows.</div>';
+  sortedTowers.slice(0,6).forEach(([id,cnt])=>{const loc=towerLocs[id]||{};h+=`<div class="evt" onclick="mapInstance.setView([${loc.lat},${loc.lng}],14)"><span class="evt-loc">${esc(id)}</span><span class="evt-time">${cnt} records</span></div>`});
+  h+='<div style="margin-top:10px;padding:8px;background:var(--card-bg);border-radius:6px;font-size:0.72rem;color:var(--muted)"><b>How it works:</b> Each burst of tower hand-offs inside a 30-min window is one fix. Coverage cells are sized by radio technology (1–15 km); the crosshair is the inverse-variance weighted centre of those towers (tighter cells weigh more), the red dashed polygon is the rigorous cell-overlap region when one exists, and the faint circle marks the ±precision bound.</div>';
   D.mapAnalysis.innerHTML=h;
 }
 function showMapMeetings(sub){
