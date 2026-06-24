@@ -1480,20 +1480,27 @@ D.cpCloseBtn.addEventListener('click',()=>{D.cpResults.style.display='none';D.cp
 
 // ====== 2. NETWORK GRAPH (D3) ======
 let curGraphNodes=null,curGraphLinks=null,curGraphSim=null,curCentrality=null;
-function renderGraph(){
-  if(!allRows.length)return;
+async function renderGraph(){
+  const subject=D.graphSubject.value;
+  const limit=subject?500:150;
+  // Fetch the bounded subgraph server-side (top-N heaviest edges) so the browser never builds
+  // a graph from the whole case. Node weights returned are the node's TRUE total over all
+  // edges, so the view is trimmed but the weights/degrees stay full-coverage.
+  let payload;
+  try{
+    const p=new URLSearchParams();
+    if(activeCaseId)p.set('case_id',activeCaseId);
+    if(subject)p.set('subject',subject);
+    p.set('limit',limit);
+    payload=await API.get('/graph/?'+p.toString());
+  }catch(e){console.error('graph load',e);D.graphStats.textContent='Failed to load graph.';return;}
   D.graphSvg.innerHTML='<svg width="100%" height="100%"></svg>';
   const svg=d3.select(D.graphSvg).select('svg'),w=D.graphSvg.clientWidth||800,h=D.graphSvg.clientHeight||500;
-  const links=[],nodesMap=new Map();
-  const subject=D.graphSubject.value;
-  const rows=subject?rowsFor(subject):allRows.filter(r=>r.sub&&r.cnt);
-  const linkMap=new Map();
-  rows.forEach(r=>{const k=[r.sub,r.cnt].sort().join('|');linkMap.set(k,(linkMap.get(k)||0)+1)});
-  const sorted=[...linkMap.entries()].sort((a,b)=>b[1]-a[1]);
-  const top=sorted.slice(0,subject?500:150);
-  top.forEach(([k,w])=>{const [s,t]=k.split('|');links.push({key:k,source:s,target:t,weight:w});nodesMap.set(s,(nodesMap.get(s)||0)+w);nodesMap.set(t,(nodesMap.get(t)||0)+w)});
-  const nodes=[...nodesMap.entries()].map(([id,w])=>({id,weight:w}));
-  D.graphStats.textContent=`${nodes.length} nodes, ${links.length} links (top ${subject?'all':'150'})`;
+  const links=(payload.edges||[]).map(e=>({key:e.source+'|'+e.target,source:e.source,target:e.target,weight:e.weight}));
+  const nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight}));
+  if(!nodes.length){D.graphStats.textContent='No connections'+(subject?' for this subject':'')+'.';return;}
+  const moreEdges=(payload.total_edges||links.length)-(payload.shown_edges||links.length);
+  D.graphStats.textContent=`${nodes.length} nodes, ${links.length} links`+(moreEdges>0?` (top ${links.length} of ${payload.total_edges})`:'')+(payload.total_nodes?` · ${payload.total_nodes} nodes total`:'');
 
   // -- Centrality (Degree only — real betweenness/closeness requires shortest-path traversal) --
   const degree=new Map();nodes.forEach(n=>degree.set(n.id,0));

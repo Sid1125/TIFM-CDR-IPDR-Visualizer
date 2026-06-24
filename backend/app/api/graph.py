@@ -20,8 +20,13 @@ def graph(
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
     case_id: str = Query(default=""),
+    subject: str = Query(default=""),
+    limit: int = Query(default=0, ge=0, le=5000),
 ):
-    return build_graph(db, start_date=start_date, end_date=end_date, case_id=case_id or None)
+    return build_graph(
+        db, start_date=start_date, end_date=end_date, case_id=case_id or None,
+        subject=subject or None, limit=limit,
+    )
 
 
 @router.get("/metrics")
