@@ -159,6 +159,10 @@ async function loadCaseData(){
     renderRecords();
     renderCharts();
     initGraphSubjects();
+    // Re-render whatever tab the user is currently viewing so switching cases updates the
+    // view instantly, instead of requiring a manual tab switch or a page refresh. Dashboard,
+    // Charts and Records are already re-rendered just above, so only refresh the others.
+    if(state.tab&&!['dashboard','charts','records'].includes(state.tab))switchTab(state.tab);
   }catch(e){console.error(e)}
 }
 function nCdr(r){
