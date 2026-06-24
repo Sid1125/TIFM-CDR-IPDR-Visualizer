@@ -147,7 +147,7 @@ function setActiveCase(id){
   try{if(activeCaseId)localStorage.setItem('activeCaseId',activeCaseId);else localStorage.removeItem('activeCaseId');}catch(e){}
 }
 async function loadCaseData(){
-  invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;
+  invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;
   try{
     const caseParam=activeCaseId?'?case_id='+activeCaseId:'';
     const[cdr,ipdr,towers]=await Promise.all([API.get('/records/cdr'+caseParam),API.get('/records/ipdr'+caseParam),API.get('/towers/')]);
@@ -155,6 +155,7 @@ async function loadCaseData(){
     allRows=[...cdr.map(nCdr),...ipdr.map(nIpdr)].sort((a,b)=>new Date(b.ts)-new Date(a.ts));
     const subs=new Set();allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
     state.subjects=[...subs].sort();
+    await ensureMeetingsLoaded(true);  // server-side meetings ready before any tab renders
     renderDashboard();
     renderRecords();
     renderCharts();
@@ -1219,25 +1220,33 @@ function renderDashBar(contactCounts){
   window.dashBarChart=new Chart(D.dashBar,{type:'bar',data:{labels:sorted.map(s=>s[0].length>12?s[0].slice(0,12)+'...':s[0]),datasets:[{label:'Interactions',data:sorted.map(s=>s[1]),backgroundColor:'#2c6f79',borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false,onClick:(e,el)=>{if(el.length){const idx=el[0].datasetIndex;const sub=state.subjects.find(s=>sorted[idx]&&s.includes(sorted[idx][0].slice(0,8)));if(sub)showProfile(sub)}}}});
 }
 
-// -- Tower Sequence Similarity (Movement Pattern Analysis) --
-// Compares the time-ordered tower visits of two subjects using
-// a greedy longest-common-subsequence ratio. Returns 0..1.
-const SEQ_SIM_CAP=500; // bound the O(m*n) LCS: compare the most-recent CAP tower visits each
-function towerSequenceSimilarity(subA,subB){
-  const rowsA=allRows.filter(r=>(r.sub===subA||r.cnt===subA)&&r.tow&&r.ts).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
-  const rowsB=allRows.filter(r=>(r.sub===subB||r.cnt===subB)&&r.tow&&r.ts).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
-  if(!rowsA.length||!rowsB.length)return 0;
-  const seqA=rowsA.slice(-SEQ_SIM_CAP).map(r=>r.tow),seqB=rowsB.slice(-SEQ_SIM_CAP).map(r=>r.tow);
-  const m=seqA.length,n=seqB.length;
-  // Space-optimized LCS (two rows, O(n) memory)
-  let prev=new Uint16Array(n+1),curr=new Uint16Array(n+1);
-  for(let i=1;i<=m;i++){
-    for(let j=1;j<=n;j++)
-      curr[j]=seqA[i-1]===seqB[j-1]?prev[j-1]+1:Math.max(prev[j],curr[j-1]);
-    [prev,curr]=[curr,prev];
-  }
-  return prev[n]/Math.max(m,n,1);
+// -- Meeting / co-location cache (server-backed) --
+// Meeting detection runs server-side now (exact, full-coverage; see /investigation/meetings).
+// We fetch the whole case's meetings ONCE into _meetings and every consumer reads from it
+// synchronously via detectMeetings() below — no O(n^2) client scan, no top-30 sampling.
+let _meetings=null; // {list:[client-shaped], total, high, medium, low}
+async function ensureMeetingsLoaded(force){
+  if(_meetings&&!force)return _meetings;
+  try{
+    const p=new URLSearchParams();if(activeCaseId)p.set('case_id',activeCaseId);p.set('limit','2000');
+    const r=await API.get('/investigation/meetings?'+p.toString());
+    const byPair=new Map();
+    (r.meetings||[]).forEach(m=>{const k=[m.subject_a,m.subject_b].sort().join('|');byPair.set(k,(byPair.get(k)||0)+1);});
+    const list=(r.meetings||[]).map(m=>{
+      const gl=(m.confidence||'').toLowerCase()||(m.gap_min<5?'high':m.gap_min<15?'medium':'low');
+      const k=[m.subject_a,m.subject_b].sort().join('|');
+      return {subA:m.subject_a,subB:m.subject_b,tow:m.tower_id,lat:m.latitude,lng:m.longitude,
+        time:new Date(m.time_a),gap:m.gap_min,gapLevel:gl,
+        score:gl==='high'?90:gl==='medium'?60:30,
+        encounterCount:byPair.get(k)||1,subAEvent:'',subBEvent:'',
+        evidence:['Time gap: '+Math.round(m.gap_min)+'m ('+gl+')'+(byPair.get(k)>1?'; '+byPair.get(k)+' same-tower encounters':'')]};
+    });
+    _meetings={list,total:r.total||list.length,high:r.high||0,medium:r.medium||0,low:r.low||0};
+  }catch(e){console.error('meetings load',e);_meetings={list:[],total:0,high:0,medium:0,low:0};}
+  return _meetings;
 }
+// Exact meeting totals (full case), used by count consumers instead of the (capped) list length.
+function meetingTotals(){return _meetings||{list:[],total:0,high:0,medium:0,low:0};}
 
 // -- Analytics Cache --
 window._aiCache=null;
@@ -1280,93 +1289,22 @@ function confidenceBreakdown(baseScore,components){
   const total=components.reduce((s,c)=>s+c.value,baseScore);
   return{baseScore,components,total:Math.min(100,Math.max(0,total))};
 }
-// Scores co-location by: time proximity (primary), repeated encounters (multiplier), service overlap (bonus), movement similarity (bonus)
-// Returns {subA, subB, tow, time, gap, gapLevel, score, encounterCount, evidence[]}
-const MEET_THRESHOLDS={high:5,medium:15,low:60}; // minutes
+// Synchronous filter over the server-fetched meeting cache (_meetings, loaded once per case by
+// ensureMeetingsLoaded). Supports {subject}, {subjectA,subjectB} (a specific pair), or all
+// pairs (default/allPairs). Returns client-shaped meetings sorted by score, optionally capped.
 function detectMeetings(opts){
-  const {subject,rowsA,rowsB,allPairs,maxResults}=opts||{};
-  const meetings=[], seen=new Set(), encounterMap=new Map();
-  const gapHigh=MEET_THRESHOLDS.high*60000,gapMed=MEET_THRESHOLDS.medium*60000,gapMax=MEET_THRESHOLDS.low*60000;
-  const pairSets=[];
-  if(allPairs){
-    let subList=state.subjects.filter(s=>allRows.some(r=>r.sub===s&&r.ts&&r.tow));
-    if(subList.length>30){
-      const subRank=subList.map(s=>[s,allRows.filter(r=>r.sub===s&&r.ts&&r.tow).length]).sort((a,b)=>b[1]-a[1]).slice(0,30);
-      subList=subRank.map(s=>s[0]);
-    }
-    for(let i=0;i<subList.length;i++){
-      for(let j=i+1;j<subList.length;j++){
-        const a=subList[i],b=subList[j];
-        const rowsA=allRows.filter(r=>r.sub===a&&r.ts&&r.tow);
-        const rowsB=allRows.filter(r=>r.sub===b&&r.ts&&r.tow);
-        pairSets.push({a,b,rowsA,rowsB});
-      }
-    }
-  }else if(subject){
-    const rowsA=allRows.filter(r=>r.sub===subject&&r.ts&&r.tow);
-    const others=new Set(allRows.filter(r=>r.sub!==subject&&r.ts&&r.tow).map(r=>r.sub));
-    others.forEach(b=>{
-      const rowsB=allRows.filter(r=>r.sub===b&&r.ts&&r.tow);
-      pairSets.push({a:subject,b,rowsA,rowsB});
-    });
-  }else if(rowsA&&rowsB){
-    pairSets.push({a:'Subject A',b:'Subject B',rowsA,rowsB});
+  const {subject,subjectA,subjectB,allPairs,maxResults}=opts||{};
+  const all=(_meetings&&_meetings.list)||[];
+  let res;
+  if(subject){
+    res=all.filter(m=>m.subA===subject||m.subB===subject);
+  }else if(subjectA&&subjectB){
+    res=all.filter(m=>(m.subA===subjectA&&m.subB===subjectB)||(m.subA===subjectB&&m.subB===subjectA));
+  }else{ // allPairs / default
+    res=all.slice();
   }
-  pairSets.forEach(({a,b,rowsA,rowsB})=>{
-    const pairKey=[a,b].sort().join('::');
-    let encCount=0;
-    // Index B's located rows by tower so each A row only scans same-tower candidates,
-    // turning the meeting scan from O(|A|*|B|) into ~O(|A| + matches).
-    const bByTower=new Map();
-    rowsB.forEach(r2=>{if(r2.ts&&r2.tow){let arr=bByTower.get(r2.tow);if(!arr){arr=[];bByTower.set(r2.tow,arr);}arr.push(r2);}});
-    rowsA.forEach(r1=>{
-      if(!r1.ts||!r1.tow)return;
-      const t1=new Date(r1.ts).getTime();
-      const cands=bByTower.get(r1.tow);if(!cands)return;
-      cands.forEach(r2=>{
-        const t2=new Date(r2.ts).getTime();
-        const gap=Math.abs(t2-t1);
-        if(gap>=gapMax)return;
-        const key=[a,b,r1.tow,Math.min(t1,t2)].sort().join('|');
-        if(seen.has(key))return;seen.add(key);
-        encCount++;
-        const gapMin=Math.round(gap/60000);
-        const gapLevel=gap<=gapHigh?'high':gap<=gapMed?'medium':'low';
-        // Score: base from gap, multiplied by encounter count, plus service bonus for same svc
-        let baseScore=gap<=gapHigh?80:gap<=gapMed?50:20;
-        const sameService=r1.svc&&r2.svc&&r1.svc===r2.svc;
-        if(sameService)baseScore+=10;
-        const evidence=[];
-        evidence.push('Time gap: '+gapMin+'m ('+gapLevel+')');
-        if(sameService)evidence.push('Same service: '+r1.svc);
-        meetings.push({subA:a,subB:b,tow:r1.tow,time:new Date(Math.min(t1,t2)),gap:gapMin,gapLevel,
-          score:baseScore,encounterCount:0,
-          subAEvent:(r1.type||'')+(r1.svc?' '+r1.svc:''),
-          subBEvent:(r2.type||'')+(r2.svc?' '+r2.svc:''),
-          evidence
-        });
-      });
-    });
-    encounterMap.set(pairKey,encCount);
-  });
-  // Apply encounter multiplier: more encounters = higher confidence
-  meetings.forEach(m=>{
-    const pk=[m.subA,m.subB].sort().join('::');
-    m.encounterCount=encounterMap.get(pk)||1;
-    m.score=Math.min(100,m.score+Math.min(encounterMap.get(pk)||1,10)*2);
-  });
-  // Apply movement similarity bonus: similar tower paths ? higher confidence
-  const movSimCache=new Map();
-  meetings.forEach(m=>{
-    const key=[m.subA,m.subB].sort().join('|');
-    if(!movSimCache.has(key)){
-      movSimCache.set(key,towerSequenceSimilarity(m.subA,m.subB));
-    }
-    const sim=movSimCache.get(key);
-    if(sim>0.3){m.score+=Math.round(sim*15);m.evidence.push('Movement similarity: '+(sim*100).toFixed(0)+'% tower path overlap')}
-  });
-  meetings.sort((a,b)=>b.score-a.score);
-  return maxResults?meetings.slice(0,maxResults):meetings;
+  res.sort((a,b)=>b.score-a.score);
+  return maxResults?res.slice(0,maxResults):res;
 }
 
 // ====== INVESTIGATION SUMMARY ======
@@ -1416,12 +1354,12 @@ function renderCaseSummary(){
   D.csMeta.textContent=`${totalSubjects} subjects — ${totalCdr+totalIpdr} records — ${allCnts.size} contacts — ${span}`;
   refreshDashMeetings();
 }
-// Fill the dashboard Meetings card from the server's exact, full-coverage co-location count.
+// Fill the dashboard Meetings card from the server's exact, full-coverage co-location counts
+// (cached in _meetings, preloaded on case open).
 async function refreshDashMeetings(){
   const v=()=>document.getElementById('dashMeetVal'),s=()=>document.getElementById('dashMeetSub');
   try{
-    const p=new URLSearchParams();if(activeCaseId)p.set('case_id',activeCaseId);p.set('limit','1');
-    const r=await API.get('/investigation/meetings?'+p.toString());
+    const r=await ensureMeetingsLoaded();
     if(v()){v().style.color='';v().textContent=n(r.total||0);}
     if(s()){s().style.color='';s().innerHTML=(r.total?'<span style="color:var(--success)">'+n(r.high||0)+' high</span> — <span style="color:var(--warn)">'+n(r.medium||0)+' med</span> — <span style="color:var(--muted)">'+n(r.low||0)+' low</span> confidence':'Potential co-locations');}
   }catch(e){if(v())v().textContent='n/a';if(s())s().textContent='';}
@@ -2812,7 +2750,7 @@ function buildCaseOverview(){
   const subs=new Set();allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
   const ts=allRows.filter(r=>r.ts).map(r=>+new Date(r.ts));
   const span=ts.length?Math.round((Math.max(...ts)-Math.min(...ts))/86400000):0;
-  let meetings=0;try{meetings=detectMeetings({allPairs:true}).length}catch(e){}
+  let meetings=0;try{meetings=meetingTotals().total}catch(e){}
   const sessions=state.subjects.reduce((sum,s)=>sum+reconstructSessions(s).length,0);
   let simSwaps=0,deviceChanges=0;
   state.subjects.slice(0,20).forEach(s=>{const c=buildIdentityProfile(s).changes;simSwaps+=c.filter(x=>x.type==='sim_swap').length;deviceChanges+=c.filter(x=>x.type==='device_change').length});
@@ -4384,20 +4322,18 @@ D.exportBtn.addEventListener('click',async ()=>{
 
   // ===== MEETING EVIDENCE =====
   const allMeetingsReport=detectMeetings({allPairs:true});
-  if(allMeetingsReport.length){
+  const meetTot=meetingTotals();
+  if(meetTot.total){
     report+='\n--- Meeting Evidence ---\n';
-    report+='Total meetings detected: '+allMeetingsReport.length+'\n';
-    const h=allMeetingsReport.filter(m=>m.gapLevel==='high').length;
-    const m=allMeetingsReport.filter(m=>m.gapLevel==='medium').length;
-    const l=allMeetingsReport.filter(m=>m.gapLevel==='low').length;
-    report+='High confidence: '+h+' | Medium: '+m+' | Low: '+l+'\n';
+    report+='Total meetings detected: '+meetTot.total+'\n';
+    report+='High confidence: '+meetTot.high+' | Medium: '+meetTot.medium+' | Low: '+meetTot.low+'\n';
     allMeetingsReport.sort((a,b)=>b.score-a.score).slice(0,30).forEach(mt=>{
       report+='  '+mt.time.toLocaleString()+' | '+mt.subA+' & '+mt.subB+' | '+mt.tow+' | gap:'+mt.gap+'m | '+mt.gapLevel.toUpperCase()+' | score:'+mt.score+'\n';
       if(mt.subAEvent||mt.subBEvent)report+='    Events: ['+mt.subA+'] '+mt.subAEvent+' | ['+mt.subB+'] '+mt.subBEvent+'\n';
       if(mt.evidence&&mt.evidence.length)report+='    Why: '+mt.evidence.join('; ')+'\n';
       report+='    Encounters: '+mt.encounterCount+' same-tower events\n';
     });
-    if(allMeetingsReport.length>30)report+='  ... and '+(allMeetingsReport.length-30)+' more\n';
+    if(meetTot.total>allMeetingsReport.length)report+='  ... and '+(meetTot.total-allMeetingsReport.length)+' more\n';
   }
 
   report+='\n_End of report._\n';
@@ -4640,7 +4576,7 @@ function runCorrelation(){
   // Common towers with map
   const commonTowerData=state.towers.filter(t=>commonTows.includes(t.tower_id||t.id));
   // Meeting detection via unified engine
-  const meetings=detectMeetings({rowsA,rowsB});
+  const meetings=detectMeetings({subjectA:a,subjectB:b});
   window.meetingStore=window.meetingStore||{};const msKey=a+'|'+b;window.meetingStore[msKey]=meetings;
   // -- Weighted Correlation Score --
   const weights={contact:5,service:2,tower:1,session:4};
