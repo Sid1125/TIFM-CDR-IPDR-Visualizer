@@ -122,6 +122,14 @@
   <section id="tab-graph" class="tab-content">
     <div class="graph-toolbar">
       <select id="graphSubject"><option value="">All subjects</option></select>
+      <select id="graphLimit" title="How many of the heaviest links to draw">
+        <option value="150">150 links</option>
+        <option value="300" selected>300 links</option>
+        <option value="500">500 links</option>
+        <option value="1000">1000 links</option>
+        <option value="2000">2000 links</option>
+        <option value="0">All (may be slow)</option>
+      </select>
       <input id="graphSearchInput" type="search" placeholder="Search node..."/>
       <button id="graphResetZoom" class="btn">Reset</button>
       <button id="graphCenterBtn" class="btn">Center</button>

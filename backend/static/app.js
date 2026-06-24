@@ -9,7 +9,7 @@ const D={
   sessionUser:$('sessionUser'),sessionStatus:$('sessionStatus'),logoutBtn:$('logoutBtn'),
   importStatus:$('importStatus'),cdrFile:$('cdrFile'),ipdrFile:$('ipdrFile'),towerFile:$('towerFile'),
   dashCards:$('dashCards'),dashGraph:$('dashGraph'),dashPie:$('dashPieChart'),dashHeat:$('dashHeatmap'),dashBar:$('dashBarChart'),dashMatrix:$('dashMatrix'),
-  graphSubject:$('graphSubject'),graphSearch:$('graphSearchInput'),graphReset:$('graphResetZoom'),graphCenter:$('graphCenterBtn'),graphStats:$('graphStats'),graphSvg:$('graphSvgContainer'),graphSidebar:$('graphSidebar'),graphDetails:$('graphNodeDetails'),
+  graphSubject:$('graphSubject'),graphLimit:$('graphLimit'),graphSearch:$('graphSearchInput'),graphReset:$('graphResetZoom'),graphCenter:$('graphCenterBtn'),graphStats:$('graphStats'),graphSvg:$('graphSvgContainer'),graphSidebar:$('graphSidebar'),graphDetails:$('graphNodeDetails'),
   mapSubject:$('mapSubject'),mapMode:$('mapMode'),mapGo:$('mapGoBtn'),mapFit:$('mapFitBtn'),geoFenceBtn:$('geoFenceBtn'),mapStage:$('mapStage'),mapSidebar:$('mapSidebar'),mapAnalysis:$('mapAnalysis'),mapTimeBar:$('mapTimelineBar'),mapTimeLabel:$('mapTimeLabel'),mapTimeSlider:$('mapTimeSlider'),mapTimePlay:$('mapTimePlay'),
   tlSearch:$('tlSearch'),tlType:$('tlType'),tlPlayBtn:$('tlPlayBtn'),tlCompare:$('tlCompare'),tlCount:$('tlCount'),tlContainer:$('tlContainer'),
   chartServPie:$('chartServicePie'),chartHourly:$('chartHourlyBar'),chartTopContacts:$('chartTopContacts'),chartServTimeline:$('chartServiceTimeline'),
@@ -1482,7 +1482,9 @@ D.cpCloseBtn.addEventListener('click',()=>{D.cpResults.style.display='none';D.cp
 let curGraphNodes=null,curGraphLinks=null,curGraphSim=null,curCentrality=null;
 async function renderGraph(){
   const subject=D.graphSubject.value;
-  const limit=subject?500:150;
+  // Max links to draw: user-selectable (0 = all). The browser force-layout gets sluggish past
+  // a couple thousand nodes, so the picker tops out at 2000 with an explicit "All" escape hatch.
+  const limit=D.graphLimit?parseInt(D.graphLimit.value):(subject?500:150);
   // Fetch the bounded subgraph server-side (top-N heaviest edges) so the browser never builds
   // a graph from the whole case. Node weights returned are the node's TRUE total over all
   // edges, so the view is trimmed but the weights/degrees stay full-coverage.
@@ -1520,8 +1522,9 @@ async function renderGraph(){
     .on('click',(e,d)=>{showProfile(d.id)})
     .on('mouseover',(e,d)=>{
       const deg=curCentrality?curCentrality.degree.find(x=>x[0]===d.id):null;
-      D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong><br>
-        Connections: ${links.filter(l=>(l.source.id||l.source)===d.id||(l.target.id||l.target)===d.id).length}<br>
+      D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>
+        Total weight: ${d.weight}<br>
+        Connections (shown): ${links.filter(l=>(l.source.id||l.source)===d.id||(l.target.id||l.target)===d.id).length}<br>
         ${deg?`Degree: ${deg[1]}<br>`:''}<button class="btn btn-sm" onclick="showSubjectRecords('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">View Records</button>`
     })
     .call(d3.drag().on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y}).on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
@@ -1539,6 +1542,7 @@ async function renderGraph(){
   };
   D.graphSearch.addEventListener('input',D.graphSearch._handler);
 }
+if(D.graphLimit)D.graphLimit.addEventListener('change',renderGraph);
 D.graphReset.addEventListener('click',()=>location.reload());
 D.graphCenter.addEventListener('click',()=>{const svg=d3.select(D.graphSvg).select('svg');svg.transition().duration(500).call(d3.zoom().transform,d3.zoomIdentity)});
 
