@@ -2475,7 +2475,6 @@ function renderRecords(){
   D.recService.innerHTML='<option value="all">All services</option>'+[...svcs].sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
   if([...D.recService.options].some(o=>o.value===cur))D.recService.value=cur;
 }
-const REC_PAGE=60;
 function recRowHtml(r){
   const cdr=r.type==='CDR';
   const wSub=colWidth(r.sub),wCnt=colWidth(r.cnt);
@@ -2509,27 +2508,18 @@ function recRowHtml(r){
     </tr>`;
 }
 // Client-side records: every record is already loaded into allRows once on case open, so the
-// table renders straight from memory — "Load more" and search are instant (no per-page network
-// round-trip). Pagination is append-only (slice the next REC_PAGE rows and append) so it stays
-// fast no matter how deep you page.
-let recShown=0,recFiltered=[];
+// table renders the whole (filtered) set straight from memory in one pass — no "Load more"
+// button, just scroll. Search/filters re-render instantly off the in-memory rows.
 function renderRecTable(){
   let rows=[...allRows];
   if(D.recType.value!=='all')rows=rows.filter(r=>r.type===D.recType.value);
   if(D.recService.value!=='all')rows=rows.filter(r=>r.svc===D.recService.value);
   const q=D.recSearch.value.trim().toLowerCase();
   if(q)rows=rows.filter(r=>`${r.sub} ${r.cnt} ${r.tow} ${r.cll||''} ${r.prot||''} ${r.imsi||''} ${r.imei||''}`.toLowerCase().includes(q));
-  recFiltered=rows;recShown=0;
   D.recCount.textContent=rows.length+' records';
-  D.recBody.innerHTML='';
-  appendRecPage();
+  D.recBody.innerHTML=rows.map(recRowHtml).join('');
+  if(D.recLoadMore)D.recLoadMore.style.display='none';
 }
-function appendRecPage(){
-  const slice=recFiltered.slice(recShown,recShown+REC_PAGE);
-  if(slice.length){D.recBody.insertAdjacentHTML('beforeend',slice.map(recRowHtml).join(''));recShown+=slice.length;}
-  D.recLoadMore.style.display=recShown<recFiltered.length?'block':'none';
-}
-D.recLoadMore.onclick=appendRecPage;
 D.recSearch.addEventListener('input',renderRecTable);
 D.recType.addEventListener('change',renderRecTable);
 D.recService.addEventListener('change',renderRecTable);

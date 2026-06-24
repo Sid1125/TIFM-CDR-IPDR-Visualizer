@@ -150,13 +150,13 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 
 ## 4. Network Graph
 
-### D3.js Force-Directed Graph
-- **Description:** Full-page interactive network graph showing entity relationships. Nodes represent entities (phone numbers or IPs), edges represent connections with weight.
-- **Tech:** D3.js v7, `forceSimulation` with `forceLink`, `forceManyBody` (-150 strength), `forceCenter`, `forceCollide`
+### D3.js Force-Directed Graph (server-built, bounded)
+- **Description:** Full-page interactive network graph showing entity relationships. Nodes represent entities (phone numbers or IPs), edges represent connections with weight. The graph is **built server-side** (`/graph`) and the browser receives only a **bounded top-N subgraph** (the heaviest links), so it never assembles a 500k-record graph in memory. Node weights are the node's **true total over all edges** (full-coverage centrality even when the view is trimmed), and the endpoint reports `total_nodes`/`total_edges` for an honest "top N of M" label. Includes **both** the CDR call network (phone↔phone) and the IPDR connection network (source_ip↔destination_ip) as **disjoint components** (no CDR/IPDR cross-attribution); IPDR nodes are coloured distinctly (purple) and each node carries a `kind` tag (cdr/ipdr) shown on hover. Graph data is verified to exactly match the records (edge set, weights, and node weights identical; sum of edge weights == record count).
+- **Tech:** server `build_graph()` (NetworkX, `Counter` edge aggregation over both tables); D3.js v7 `forceSimulation` with `forceLink`, `forceManyBody` (-150), `forceCenter`, `forceCollide`; client fetches `/graph/?case_id&subject&limit`
 
-### Subject Filtering
-- **Description:** A dropdown to filter the graph to show only one subject and its direct connections. Also limits the link count (500 for specific subject, 150 for all subjects) to prevent visual clutter.
-- **Tech:** `<select>` with `change` event, `rowsFor()`, capped slices
+### Subject Filtering + Selectable Link Count
+- **Description:** A dropdown filters the graph to one subject and its direct connections. A separate **"Max links" picker (150 / 300 / 500 / 1000 / 2000 / All, default 300)** controls how many of the heaviest links are drawn, so investigators can see more of the network on demand. The force layout tops out around 2000 nodes comfortably; "All" is available with a "may be slow" hint.
+- **Tech:** `<select id="graphSubject">` + `<select id="graphLimit">`, both re-fetch `/graph` with the chosen `subject`/`limit`
 
 ### Search/Highlight
 - **Description:** Real-time search input that dims non-matching nodes and edges (opacity 0.1/0.05) while highlighting matches (opacity 1/0.4).
@@ -217,8 +217,8 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Tech:** Client-side tower aggregation, `Set` for unique subjects per tower, filter by shared subjects
 
 #### Meeting Detection
-- **Description:** Detects potential in-person meetings when two subjects appear at the same tower within 1 hour of each other. Color-coded by gap time: red (<5 min), yellow (<15 min), green. Shows confidence level (High/Medium/Low) in sidebar. Meeting detection uses a unified scoring engine that combines temporal proximity, encounter frequency, and LCS-based movement similarity (tower sequence overlap between subjects). Movement similarity uses the Longest Common Subsequence ratio of time-ordered tower visits, scored 0-1.
-- **Tech:** `detectMeetings()` engine, double-loop comparison of subject records, `Math.abs(time gap) < 3600000`, gap-based coloring, `towerSequenceSimilarity()` with space-optimized LCS DP (two-row Uint16Array, O(n) memory), `movSimCache`, score fusion combining gap + encounters + movement similarity, configurable pair limit (default 30)
+- **Description:** Detects potential in-person meetings when two subjects appear at the same tower within a time window. Detection now runs **server-side** (`/investigation/meetings`) — exact and full-coverage over the whole case (see the Meeting Detection Engine entry) — and the map plots the encounters, colour-coded by gap (red < 5 min, amber < 15 min, blue otherwise) with the closest encounters and exact total/distinct-pairs counts in the sidebar; each sidebar row zooms to its tower.
+- **Tech:** `showMapMeetings(sub)` fetches `GET /investigation/meetings?case_id&subject`, `L.circleMarker` per encounter with gap-based colour
 
 #### Triangulation
 - **Description:** Time-based tower clustering (30-minute hand-off windows) to estimate subject location. Renders tech-aware coverage circles (5G/NR = 1km, 4G/LTE = 3km, 3G/UMTS = 5km, 2G/GPRS/EDGE = 15km) coloured green→red by tower-usage density. For each cluster it computes a **position fix**: an inverse-variance weighted centroid of the contributing towers (each weighted by `1/r²`, so tighter cells pull the estimate harder — the RF analogue of an inverse-variance mean), drawn as a crosshair marker with a ±precision uncertainty circle (bounded by the tightest cell) and geometry lines to each tower. When the cells genuinely overlap, the rigorous Turf.js intersection region is drawn as a red dashed polygon. Unlike a strict all-cells intersection, the overlap is computed tightest-first and *skips* non-overlapping cells instead of aborting, so a fix is always produced even when the cells don't all intersect. Sidebar reports tower count, position fixes, overlap fixes, best precision (±km), and a clickable list of estimated positions.
@@ -361,8 +361,12 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Tech:** `<table>` with horizontal scroll, `renderRecTable()` builds HTML string, `colWidth(v)` helper for dynamic column sizing
 
 ### Record Annotations
-- **Description:** A star/flag icon in the first column of each row. Clicking toggles an annotation on the record. Annotations are stored server-side linked by `record_type` + `record_id`, and persisted per user. Starred records persist across sessions.
-- **Tech:** `POST /annotations` to create, `DELETE /annotations/{id}` to remove, `GET /annotations` to load on tab render, `data-annotation-id` attribute on toggled rows, star (★) and empty star (☆) rendering
+- **Description:** A star/flag icon in the first column of each row. Clicking toggles an annotation on the record. Annotations are stored server-side linked by `record_type` + numeric `record_id`, and persisted per user. Starred records persist across sessions. Toggling repaints just that row's star in place (no table re-render).
+- **Tech:** `POST /annotations/` (numeric `record_id`) to create, `DELETE /annotations/{id}` to remove, `GET /annotations/` to load on tab render, `.annot-cell[data-annot]` in-place repaint, star (★) / empty star (☆)
+
+### Clickable Tower IDs
+- **Description:** Every tower id shown in the table (and across the app — profile, map popups, inference cards) is a clickable chip; clicking it jumps to the Tower Map and zooms to that tower with a highlight marker. Works from any tab (loads the map/geo on demand) and resolves coordinates from the loaded geo records (falling back to the towers table).
+- **Tech:** `twr(id)` chip (data-attr id, `event.stopPropagation()` so it doesn't open the row's profile) → `showTower(id)` → `towerLocate()` + `L.circleMarker` highlight
 
 ### Record Type Filter
 - **Description:** Dropdown to show All, CDR only, or IPDR only records.
@@ -373,12 +377,12 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Tech:** `<select>` dynamically populated from `new Set(allRows.map(r => r.svc))`
 
 ### Text Search
-- **Description:** Real-time search across subject, counterpart, tower, cell, protocol, IMSI, and IMEI fields. Pagination resets on search.
-- **Tech:** `.filter(r => `${r.sub} ${r.cnt} ...`.includes(q))`, `recPage = 0` on input
+- **Description:** Real-time search across subject, counterpart, tower, cell, protocol, IMSI, and IMEI fields. Re-renders instantly off the in-memory rows.
+- **Tech:** `.filter(r => `${r.sub} ${r.cnt} ...`.includes(q))` over `allRows`
 
-### Infinite Scroll Pagination
-- **Description:** "Load More" button loads 60 additional records per click. Shows current count (e.g., "1245 records").
-- **Tech:** `recPage` counter, `rows.slice(0, recPage + 60)`, button visibility toggle
+### Full Render (no pagination)
+- **Description:** Every record of the case is loaded once into memory on case open (`allRows`), and the table renders the **entire filtered set in one pass** — there is no "Load more" button; you just scroll. Filters/search re-render instantly from memory. (A server-side paginated `/records/page` + `/records/services` pair exists and is tested as an opt-in fetch-on-demand mode for cases too large to hold comfortably in memory, but the default UI renders all at once.)
+- **Tech:** `renderRecTable()` builds the full `rows.map(recRowHtml).join('')`; `recRowHtml(r)` per-row builder; Load-more button hidden
 
 ### Row Click → Subject Profile
 - **Description:** Clicking any row in the table opens the subject profile modal for the record's subject.
@@ -560,9 +564,9 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Description:** Shows the last 50 records for a subject in a paginated overlay. Accessible from subject profile.
 - **Tech:** `showSubjectRecords(sub)`, builds scrollable record listing
 
-### Meeting Detection Engine
-- **Description:** Unified meeting detection engine supporting single subject, all pairs (up to 30 subjects), or direct A/B comparison. Uses thresholds: High = 5 min gap, Medium = 15 min, Low = 60 min. Scoring: base from gap (80/50/20) + same service bonus (+10) + encounter multiplier (up to +20) + movement similarity bonus (up to +15 via LCS-based tower sequence similarity).
-- **Tech:** `detectMeetings(opts)`, `towerSequenceSimilarity()` with space-optimized LCS (Uint16Array, O(n) memory)
+### Meeting Detection Engine (server-side, exact)
+- **Description:** Co-location ("meeting") detection — two phones at the **same tower within a time window** — runs **server-side** (`/investigation/meetings`) via a time-sorted sweep with an early break once the window is exceeded (~O(n·window-density)), so it is **exact and full-coverage** over the whole case and scales to large data. Case-scoped and subject-filterable; CDR-only (a meeting is two people physically co-located, so IPDR endpoints are excluded). Returns per-encounter rows (tower, coords, both times, gap, confidence) plus exact `total` / `distinct_pairs` / `high` / `medium` / `low` counts. Confidence: High < 5 min, Medium < 15 min, Low < window (default 60 min). Consumed by the **Map "Meetings" mode** and the **Dashboard Meetings card** (the old client scan only sampled the top-30 subjects and undercounted). *(A client-side `detectMeetings`/`towerSequenceSimilarity` with gap+encounter+LCS-movement scoring still backs the Correlation and AI-tab views pending their migration to the endpoint.)*
+- **Tech:** `find_meetings(db, case_id, subject, window_min, limit)` sweep-line; endpoint `GET /investigation/meetings`
 
 ---
 
@@ -715,16 +719,20 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Tech:** `dataset_generator.py`, `generate_synthetic_case()`, seeded with `random.seed(42)`, output format matching real CDR/IPDR schema
 
 ### Record Querying with Dynamic Filters (`records_service.py`)
-- **Description:** Flexible query builder for CDR and IPDR records supporting: date range, tower ID, MSISDN, IMSI, IMEI, call type, direction, protocol, APN, RAT, free-text search (across 7-9 fields), limit, and offset.
-- **Tech:** SQLAlchemy `query.filter()` chaining, `or_()` for multi-field search, `.ilike()` for case-insensitive search
+- **Description:** Flexible query builder for CDR and IPDR records supporting: date range, tower ID, MSISDN, IMSI, IMEI, call type, direction, protocol, APN, RAT, free-text search (across 7-9 fields), limit, and offset. Also a **unified paginated page** across both tables: `page_records()` does a time-ordered `UNION ALL` (on a lightweight id/rtype/start_time projection, then hydrates rows) with `total`/`distinct_pairs` counts, plus `distinct_services()` for the service filter — the server-side, fetch-on-demand path for very large cases.
+- **Tech:** SQLAlchemy `query.filter()` chaining, `or_()` multi-field `.ilike()` search, `union_all()` + `select()` + `func.count()`; endpoints `GET /records/page`, `GET /records/services`
+
+### Scalability Indexes & Bounded Analytics
+- **Description:** For 50k–500k-record cases: **composite indexes** `(case_id, start_time)`, `(case_id, tower_id)`, `(case_id, a_party_number/source_ip)` on both tables keep case-scoped, time-ordered, filtered scans fast; they're created idempotently on startup for existing databases. Heavy analytics are moved to the server and made full-coverage-but-bounded — the network graph returns a top-N subgraph with exact node weights, meeting detection is an exact server-side sweep, and graph betweenness samples above 800 nodes. The map subject picker lists only **located parties** (CDR a-party + msisdn, IPDR source_ip) — never the remote endpoint it contacted (e.g. a DNS/CDN server like `1.1.1.1`), so every map mode resolves.
+- **Tech:** `Index()` in `cdr.py`/`ipdr.py` `__table_args__` + `_ensure_indexes()` `CREATE INDEX IF NOT EXISTS` on startup; `get_subjects()` located-party filter
 
 ### NetworkX Graph Construction (`graph_service.py`)
-- **Description:** Builds a NetworkX graph from CDR records by creating weighted edges between A-party and B-party numbers. Returns nodes and edges as JSON-serializable payloads.
-- **Tech:** NetworkX `nx.Graph()`, `edge_counts` Counter, `add_edge()` with weight attribute
+- **Description:** Builds the call/connection graph server-side: weighted edges between CDR A-party↔B-party **and** IPDR source_ip↔destination_ip (tagged per node as cdr/ipdr; the two never share an edge). Supports a `subject` focus and a `limit` (returns only the top-N heaviest edges for display) while keeping each node's weight its **true total over all edges**, and reports `total_nodes`/`total_edges`/`shown_edges`. Verified to exactly match the records.
+- **Tech:** NetworkX `nx.Graph()`, `edge_counts`/`full_node_weight` Counters, `most_common()` top-N trim, `node_kind` map
 
 ### Graph Metrics Computation (`graph_service.py`)
-- **Description:** Computes degree centrality (most connected entities), betweenness centrality (bridge entities), communities via greedy modularity, and structural bridges.
-- **Tech:** `nx.degree_centrality()`, `nx.betweenness_centrality()`, `greedy_modularity_communities()`, `nx.bridges()`
+- **Description:** Computes degree centrality (most connected entities), betweenness centrality (bridge entities), communities via greedy modularity, and structural bridges over the **full** graph. Betweenness falls back to **k-pivot sampling** above 800 nodes (exact betweenness is O(V·E) — infeasible at scale) and flags when it sampled.
+- **Tech:** `nx.degree_centrality()`, `nx.betweenness_centrality(graph, k=…, seed=42)` when large, `greedy_modularity_communities()`, `nx.bridges()`, `betweenness_sampled` flag
 
 ### Unified Investigation Timeline (`investigation_service.py`)
 - **Description:** Merges CDR calls, **reconstructed** IPDR sessions, and tower registry data into a single chronologically sorted timeline. IPDR records are no longer emitted one event per row — they are grouped server-side by `reconstruct_ipdr_sessions()` into concurrent `(counterpart, activity family)` tracks with family-adaptive idle gaps (mirroring the frontend), and each session reports aggregated bytes, duration, record count, and a most-confident service attribution.
@@ -768,25 +776,28 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - `POST /upload/ipdr` — Upload IPDR CSV (replaces existing)
 - `POST /upload/towers` — Upload Towers CSV (merges)
 
-### Record Querying (3 endpoints)
+### Record Querying (5 endpoints)
 - `GET /records/cdr` — List CDR records with 10+ optional filters
 - `GET /records/ipdr` — List IPDR records with 10+ optional filters
+- `GET /records/page` — Unified, time-ordered, paginated page across CDR+IPDR (case/type/search/service, limit/offset, total count) — server-side fetch-on-demand path for very large cases
+- `GET /records/services` — Distinct services (CDR call types + IPDR protocols) in a case
 - `DELETE /records/reset` — Delete all CDR, IPDR, and Tower records
 
 ### Geo-Spatial (3 endpoints)
 - `GET /geo/records` — All geo-tagged records (CDR + IPDR) with optional subject filter
-- `GET /geo/subjects` — All unique subjects with record counts
+- `GET /geo/subjects` — Located parties that have geo-tagged records (CDR a-party + msisdn, IPDR source_ip; excludes remote endpoints like DNS/CDN destinations)
 - `GET /geo/towers` — All tower locations with metadata
 
-### Investigation (4 endpoints)
+### Investigation (5 endpoints)
 - `GET /investigation/timeline` — Unified CDR/IPDR/Tower timeline
 - `GET /investigation/services` — Service classification summary
 - `GET /investigation/towers` — Tower activity counts
 - `GET /investigation/colocation` — Colocation candidates (shared towers)
+- `GET /investigation/meetings` — Exact server-side co-location/meeting detection (case/subject/window), with high/medium/low counts
 
 ### Graph Analysis (2 endpoints)
-- `GET /graph/` — Network graph nodes + weighted edges
-- `GET /graph/metrics` — Centrality, communities, bridges
+- `GET /graph/` — Bounded top-N network subgraph (CDR + IPDR), `subject`/`limit`, with true node weights + totals
+- `GET /graph/metrics` — Centrality, communities, bridges (betweenness sampled above 800 nodes)
 
 ### Inference & Analytics (4 endpoints)
 - `GET /inference/report` — Full analytics report: composite risk leaderboards (CDR + IPDR), call-graph structure, temporal/behavioral shifts, IPDR volume/beaconing/destinations, multi-SIM entity resolution, and any watchlist hits — all case-scoped
