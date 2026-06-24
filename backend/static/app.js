@@ -1877,20 +1877,26 @@ function showMapPath(sub){
 function showMapHeat(sub){
   clearMap();const rows=geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null);
   if(!rows.length){D.mapAnalysis.innerHTML='No records.';return}
+  // Aggregate per tower, snapping its records to their centroid. Records carry ~400 m of
+  // per-event jitter around a tower; using raw coords makes one tower fragment into several
+  // blobs when zoomed in, so we collapse each tower to a single representative point.
   const locs={};
   rows.forEach(r=>{
     const k=r.tower_id||`${+r.latitude.toFixed(4)},${+r.longitude.toFixed(4)}`;
-    if(!locs[k])locs[k]={lat:r.latitude,lng:r.longitude,count:0,id:r.tower_id||null};
-    locs[k].count++;
+    if(!locs[k])locs[k]={slat:0,slng:0,count:0,id:r.tower_id||null};
+    locs[k].slat+=r.latitude;locs[k].slng+=r.longitude;locs[k].count++;
   });
-  const towers=Object.values(locs);
+  const towers=Object.values(locs).map(t=>({lat:t.slat/t.count,lng:t.slng/t.count,count:t.count,id:t.id}));
   const maxC=Math.max(1,...towers.map(t=>t.count));
   const grad={0.0:'#2c7fb8',0.35:'#41b6c4',0.55:'#7fcdbb',0.7:'#d9f0a3',0.82:'#fec44f',0.92:'#fe9929',1.0:'#cc2a1e'};
   if(typeof L.heatLayer==='function'){
-    // Real density surface: feed one point per record so co-located records *accumulate*
-    // into hot cores (a single weighted point per tower can't — its alpha is capped, not
-    // additive, so everything reads cold). leaflet.heat sums overlapping contributions.
-    const heat=L.heatLayer(rows.map(r=>[r.latitude,r.longitude,1]),
+    // Stack `count` points at each tower's centroid. Stacking accumulates into a graded hot
+    // core (a single weighted point can't — its alpha is capped, not additive, so it reads
+    // cold), and because the points share one exact coordinate the tower stays a single blob
+    // at every zoom level. Total points == record count, so no extra cost over per-record.
+    const heatPts=[];
+    towers.forEach(t=>{for(let i=0;i<t.count;i++)heatPts.push([t.lat,t.lng,1]);});
+    const heat=L.heatLayer(heatPts,
       {radius:30,blur:20,maxZoom:16,minOpacity:0.35,gradient:grad}).addTo(mapInstance);
     mapLayers.push(heat);
     // tiny clickable dots keep every location inspectable on top of the gradient
@@ -1952,7 +1958,8 @@ function triangulateOverlap(tw){
   try{
     let acc=circ(sorted[0]),got=false;
     for(let i=1;i<sorted.length;i++){
-      const inter=turf.intersect(acc,circ(sorted[i]));
+      // Turf v7: intersect() takes a FeatureCollection of two polygons (not two args).
+      const inter=turf.intersect(turf.featureCollection([acc,circ(sorted[i])]));
       if(!inter)continue;
       acc=inter;got=true;
     }
