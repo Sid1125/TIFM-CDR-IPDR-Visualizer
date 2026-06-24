@@ -1390,12 +1390,8 @@ function renderCaseSummary(){
   // Time span
   const times=allRows.filter(r=>r.ts).map(r=>new Date(r.ts));
   const span=times.length?Math.round((Math.max(...times)-Math.min(...times))/86400000)+' days':'n/a';
-  // Meetings via unified engine
-  const allMeetings=detectMeetings({allPairs:true});
-  const meetingsHigh=allMeetings.filter(m=>m.gapLevel==='high').length;
-  const meetingsMed=allMeetings.filter(m=>m.gapLevel==='medium').length;
-  const meetingsLow=allMeetings.filter(m=>m.gapLevel==='low').length;
-  const meetingsTotal=allMeetings.length;
+  // Meetings: counted server-side (exact, full-coverage) and filled in async below — the old
+  // client scan only sampled the top-30 subjects, undercounting on real cases.
   // Communication direction
   const dirCounts={mo:0,mt:0};allRows.forEach(r=>{if(r.dir==='MO'||r.dir==='mo')dirCounts.mo++;else if(r.dir==='MT'||r.dir==='mt')dirCounts.mt++});
   // Burst count
@@ -1412,12 +1408,23 @@ function renderCaseSummary(){
     {l:'Most Active',v:topSub?esc(topSub[0]):'n/a',sub:topSub?topSub[1]+' records':''},
     {l:'Top Service',v:topSvc?esc(topSvc[0]):'n/a',sub:topSvc?topSvc[1]+' records':''},
     {l:'Top Tower',v:topTow?esc(topTow[0]):'n/a',sub:topTow?topTow[1]+' visits':''},
-    {l:'Meetings',v:n(meetingsTotal),sub:meetingsTotal?'<span style="color:var(--success)">'+n(meetingsHigh)+' high</span> — <span style="color:var(--warn)">'+n(meetingsMed)+' med</span> — <span style="color:var(--muted)">'+n(meetingsLow)+' low</span> confidence':'Potential co-locations'},
+    {l:'Meetings',v:'<span id="dashMeetVal" style="color:var(--muted)">…</span>',sub:'<span id="dashMeetSub" style="color:var(--muted)">computing…</span>'},
     {l:'Comm. Direction',v:dirCounts.mo||dirCounts.mt?n(dirCounts.mo)+'MO / '+n(dirCounts.mt)+'MT':'n/a',sub:''},
     {l:'Activity Spikes',v:n(bursts),sub:'Anomalous days'},
     {l:'Case Span',v:span,sub:times.length?new Date(Math.min(...times)).toLocaleDateString()+' — '+new Date(Math.max(...times)).toLocaleDateString():''},
   ].map(c=>`<div class="cs-item"><div class="cs-label">${c.l}</div><div class="cs-value">${c.v}</div>${c.sub?'<div class="cs-sub">'+c.sub+'</div>':''}</div>`).join('');
   D.csMeta.textContent=`${totalSubjects} subjects — ${totalCdr+totalIpdr} records — ${allCnts.size} contacts — ${span}`;
+  refreshDashMeetings();
+}
+// Fill the dashboard Meetings card from the server's exact, full-coverage co-location count.
+async function refreshDashMeetings(){
+  const v=()=>document.getElementById('dashMeetVal'),s=()=>document.getElementById('dashMeetSub');
+  try{
+    const p=new URLSearchParams();if(activeCaseId)p.set('case_id',activeCaseId);p.set('limit','1');
+    const r=await API.get('/investigation/meetings?'+p.toString());
+    if(v()){v().style.color='';v().textContent=n(r.total||0);}
+    if(s()){s().style.color='';s().innerHTML=(r.total?'<span style="color:var(--success)">'+n(r.high||0)+' high</span> — <span style="color:var(--warn)">'+n(r.medium||0)+' med</span> — <span style="color:var(--muted)">'+n(r.low||0)+' low</span> confidence':'Potential co-locations');}
+  }catch(e){if(v())v().textContent='n/a';if(s())s().textContent='';}
 }
 
 // ====== COMPARE PERIODS ======
@@ -2461,17 +2468,12 @@ function toggleAnnot(r){
   }
 }
 function renderRecords(){
-  loadRecServices();      // service dropdown from the server (whole case, not just loaded rows)
   loadAnnotations();      // loads stars, then triggers the first page via renderRecTable()
-}
-async function loadRecServices(){
-  try{
-    const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
-    const svcs=await API.get('/records/services'+cq);
-    const cur=D.recService.value;
-    D.recService.innerHTML='<option value="all">All services</option>'+svcs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
-    if([...D.recService.options].some(o=>o.value===cur))D.recService.value=cur;
-  }catch(e){/* keep existing options */}
+  // Service dropdown from the already-loaded rows (no extra round-trip).
+  const svcs=new Set(allRows.map(r=>r.svc).filter(Boolean));
+  const cur=D.recService.value;
+  D.recService.innerHTML='<option value="all">All services</option>'+[...svcs].sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  if([...D.recService.options].some(o=>o.value===cur))D.recService.value=cur;
 }
 const REC_PAGE=60;
 function recRowHtml(r){
@@ -2506,34 +2508,29 @@ function recRowHtml(r){
       <td style="font-size:0.7rem">${esc(r.case_id||'')}</td>
     </tr>`;
 }
-// Server-side records: the table fetches pages from /records/page on demand instead of
-// holding the whole case in memory, so it scales to large cases. Filters (type/service) and
-// search are sent as query params and applied in the DB; "Load more" fetches the next offset.
-let recOffset=0,recTotal=0,_recSeq=0;
-async function fetchRecPage(reset){
-  const seq=++_recSeq;
-  if(reset){recOffset=0;}
-  const p=new URLSearchParams();
-  if(activeCaseId)p.set('case_id',activeCaseId);
-  p.set('type',D.recType.value||'all');
-  const q=D.recSearch.value.trim();if(q)p.set('search',q);
-  if(D.recService.value&&D.recService.value!=='all')p.set('service',D.recService.value);
-  p.set('limit',REC_PAGE);p.set('offset',recOffset);
-  let res;
-  try{res=await API.get('/records/page?'+p.toString());}catch(e){console.error('records page',e);return;}
-  if(seq!==_recSeq)return; // a newer request superseded this one (rapid typing/filtering)
-  recTotal=res.total||0;
-  const html=(res.rows||[]).map(r=>recRowHtml(r.rtype==='CDR'?nCdr(r):nIpdr(r))).join('');
-  if(reset){D.recBody.innerHTML=html;}else{D.recBody.insertAdjacentHTML('beforeend',html);}
-  recOffset+=(res.rows||[]).length;
-  D.recCount.textContent=recTotal+' records';
-  D.recLoadMore.style.display=recOffset<recTotal?'block':'none';
+// Client-side records: every record is already loaded into allRows once on case open, so the
+// table renders straight from memory — "Load more" and search are instant (no per-page network
+// round-trip). Pagination is append-only (slice the next REC_PAGE rows and append) so it stays
+// fast no matter how deep you page.
+let recShown=0,recFiltered=[];
+function renderRecTable(){
+  let rows=[...allRows];
+  if(D.recType.value!=='all')rows=rows.filter(r=>r.type===D.recType.value);
+  if(D.recService.value!=='all')rows=rows.filter(r=>r.svc===D.recService.value);
+  const q=D.recSearch.value.trim().toLowerCase();
+  if(q)rows=rows.filter(r=>`${r.sub} ${r.cnt} ${r.tow} ${r.cll||''} ${r.prot||''} ${r.imsi||''} ${r.imei||''}`.toLowerCase().includes(q));
+  recFiltered=rows;recShown=0;
+  D.recCount.textContent=rows.length+' records';
+  D.recBody.innerHTML='';
+  appendRecPage();
 }
-function renderRecTable(){fetchRecPage(true);}
-function appendRecPage(){fetchRecPage(false);}
+function appendRecPage(){
+  const slice=recFiltered.slice(recShown,recShown+REC_PAGE);
+  if(slice.length){D.recBody.insertAdjacentHTML('beforeend',slice.map(recRowHtml).join(''));recShown+=slice.length;}
+  D.recLoadMore.style.display=recShown<recFiltered.length?'block':'none';
+}
 D.recLoadMore.onclick=appendRecPage;
-let _recSearchTimer=null;
-D.recSearch.addEventListener('input',()=>{clearTimeout(_recSearchTimer);_recSearchTimer=setTimeout(renderRecTable,250);});
+D.recSearch.addEventListener('input',renderRecTable);
 D.recType.addEventListener('change',renderRecTable);
 D.recService.addEventListener('change',renderRecTable);
 

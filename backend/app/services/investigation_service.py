@@ -172,7 +172,14 @@ def find_meetings(db, case_id=None, subject=None, window_min: int = 60, limit: i
             })
     out.sort(key=lambda m: m["gap_min"])
     pairs = {tuple(sorted((m["subject_a"], m["subject_b"]))) for m in out}
-    return {"total": len(out), "distinct_pairs": len(pairs), "meetings": out[:limit]}
+    levels = {"High": 0, "Medium": 0, "Low": 0}
+    for m in out:
+        levels[m["confidence"]] += 1
+    return {
+        "total": len(out), "distinct_pairs": len(pairs),
+        "high": levels["High"], "medium": levels["Medium"], "low": levels["Low"],
+        "meetings": out[:limit],
+    }
 
 
 def build_unified_timeline(db, limit: int = 200, case_id=None):
