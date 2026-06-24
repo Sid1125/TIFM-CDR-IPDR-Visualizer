@@ -1543,7 +1543,7 @@ function initGraphSubjects(){
 }
 
 // ====== 3. TOWER MAP (Leaflet) ======
-let mapInstance=null,mapLayers=[],mapMarkers=[],mapPolyline=null,mapCircles=[],mapTimeData=[],mapTimePlaying=false,geofenceDrawn=null;
+let mapInstance=null,mapLayers=[],mapMarkers=[],mapPolyline=null,mapCircles=[],mapTimeData=[],mapTimePlaying=false,geofenceDrawn=null,_towerHi=null;
 async function initMap(){
   if(!state.geoRecords)await loadGeoData();
   if(!mapInstance){
@@ -1553,6 +1553,43 @@ async function initMap(){
     initGeofenceListeners();
   }
   runMapMode();
+}
+// Resolve a tower's coordinates: prefer the loaded geo records (per-record lat/lng), fall
+// back to the towers table. Returns {lat,lng} or null.
+function towerLocate(towerId){
+  const tc=towerCoords();if(tc[towerId])return tc[towerId];
+  const t=(state.towers||[]).find(x=>x.tower_id===towerId&&x.latitude!=null&&x.longitude!=null);
+  return t?{lat:t.latitude,lng:t.longitude}:null;
+}
+// Click-through for any tower id rendered via twr(): jump to the Tower Map tab and zoom to
+// the tower with a highlight marker. Works from any tab (loads geo / builds the map if the
+// map was never opened). Leaves the current overlay in place and drops a marker on top.
+async function showTower(towerId){
+  if(!towerId)return;
+  // activate the map tab visually (mirror switchTab without re-running the mode)
+  state.tab='map';
+  document.querySelectorAll('.topbar-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='map'));
+  document.querySelectorAll('.tab-content').forEach(s=>s.classList.toggle('active',s.id==='tab-map'));
+  if(!state.geoRecords)await loadGeoData();
+  if(!mapInstance){
+    mapInstance=L.map(D.mapStage,{zoomControl:true}).setView([20.5937,78.9629],5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
+    initGeofenceListeners();
+  }
+  setTimeout(()=>mapInstance.invalidateSize(),50);
+  const pt=towerLocate(towerId);
+  if(!pt){D.mapAnalysis&&(D.mapAnalysis.innerHTML='<p style="color:var(--muted);font-size:0.85rem">No location on file for tower <b>'+esc(towerId)+'</b>.</p>');return;}
+  if(_towerHi){try{mapInstance.removeLayer(_towerHi)}catch(e){}}
+  _towerHi=L.circleMarker([pt.lat,pt.lng],{radius:12,color:'#fff',weight:3,fillColor:'#b94a48',fillOpacity:0.95}).addTo(mapInstance);
+  _towerHi.bindPopup('<b>'+esc(towerId)+'</b><br>Tower location').openPopup();
+  mapInstance.setView([pt.lat,pt.lng],15,{animate:true});
+}
+// Render a tower id as a clickable chip (stops row clicks; reads the id from a data attr so
+// nothing is injected into the handler string).
+function twr(id){
+  if(id==null||id==='')return '';
+  const s=esc(String(id));
+  return '<span class="twr-link" data-tower="'+s+'" onclick="event.stopPropagation();showTower(this.dataset.tower)" title="Show tower '+s+' on map">'+s+'</span>';
 }
 let geoRecords=[],geoSubjects=[];
 async function loadGeoData(){
@@ -1570,6 +1607,7 @@ function populateMapSubjects(){
 function clearMap(){
   mapLayers.forEach(l=>mapInstance.removeLayer(l));mapMarkers.forEach(m=>mapInstance.removeLayer(m));mapCircles.forEach(c=>mapInstance.removeLayer(c));
   if(mapPolyline){mapInstance.removeLayer(mapPolyline);mapPolyline=null}
+  if(_towerHi){try{mapInstance.removeLayer(_towerHi)}catch(e){}_towerHi=null}
   mapLayers=[];mapMarkers=[];mapCircles=[];
 }
 function geoSub(sub){if(!sub)return geoRecords;return geoRecords.filter(r=>r.subject===sub||r.counterpart===sub||r.msisdn===sub)}
@@ -1579,7 +1617,7 @@ function popupHtml(r){
   h+=`<b>Time:</b> ${fmt(r.start_time)}<br>`;if(r.duration_seconds!=null)h+=`<b>Duration:</b> ${r.duration_seconds}s<br>`;
   if(r.call_type)h+=`<b>Type:</b> ${esc(r.call_type)}<br>`;if(r.direction)h+=`<b>Direction:</b> ${esc(r.direction)}<br>`;
   if(r.protocol)h+=`<b>Protocol:</b> ${esc(r.protocol)}<br>`;if(r.msisdn)h+=`<b>MSISDN:</b> ${esc(r.msisdn)}<br>`;
-  if(r.tower_id)h+=`<b>Tower:</b> ${esc(r.tower_id)}<br>`;if(r.tower&&r.tower.city)h+=`<b>Location:</b> ${esc(r.tower.city)}<br>`;
+  if(r.tower_id)h+=`<b>Tower:</b> ${twr(r.tower_id)}<br>`;if(r.tower&&r.tower.city)h+=`<b>Location:</b> ${esc(r.tower.city)}<br>`;
   if(r.bytes_uploaded!=null)h+=`<b>Up:</b> ${n(r.bytes_uploaded)} bytes<br>`;if(r.bytes_downloaded!=null)h+=`<b>Down:</b> ${n(r.bytes_downloaded)} bytes<br>`;
   h+='</div>';return h;
 }
@@ -1669,8 +1707,8 @@ async function showMapAnchors(sub){
   place(mv.anchors.work,'Work','#2d7d46');
   if(bounds.length)mapInstance.fitBounds(bounds,{padding:[50,50]});
   let h='<h4 style="margin:0 0 6px">Anchors — '+esc(sub)+'</h4>';
-  h+='<div class="stat-row"><span class="label">Home tower</span><span class="value">'+esc(mv.anchors.home?mv.anchors.home.tower_id:'?')+'</span></div>';
-  h+='<div class="stat-row"><span class="label">Work tower</span><span class="value">'+esc(mv.anchors.work?mv.anchors.work.tower_id:'?')+'</span></div>';
+  h+='<div class="stat-row"><span class="label">Home tower</span><span class="value">'+(mv.anchors.home?twr(mv.anchors.home.tower_id):'?')+'</span></div>';
+  h+='<div class="stat-row"><span class="label">Work tower</span><span class="value">'+(mv.anchors.work?twr(mv.anchors.work.tower_id):'?')+'</span></div>';
   h+='<div class="stat-row"><span class="label">Distinct towers</span><span class="value">'+mv.distinct_towers+'</span></div>';
   h+='<div class="stat-row"><span class="label">Max leg</span><span class="value">'+mv.max_leg_km+' km</span></div>';
   if(mv.impossible_travel&&mv.impossible_travel.length)h+='<div class="stat-row"><span class="label" style="color:var(--danger)">Impossible legs</span><span class="value" style="color:var(--danger)">'+mv.impossible_travel.length+'</span></div>';
@@ -2428,7 +2466,7 @@ function renderRecTable(){
       <td>${cdr?'':r.dport!=null?r.dport:''}</td>
       <td style="font-size:0.7rem">${cdr?'':r.dport?portSvc(r.dport):r.sport?portSvc(r.sport):''}</td>
       <td style="font-size:0.7rem;min-width:300px;white-space:normal;word-break:break-word;line-height:1.3" title="${cdr?'':esc(recordSvcAttr(r))}">${cdr?'':esc(recordSvcAttr(r))}</td>
-      <td>${esc(r.tow||'')}</td>
+      <td>${r.tow?twr(r.tow):''}</td>
       <td>${esc(r.cell||'')}</td>
       <td>${esc(r.lac||'')}</td>
       <td>${esc(r.imsi||'')}</td>
@@ -2534,12 +2572,12 @@ function showProfile(sub){
       </div>
     </div>
     ${towers.size?`<div class="prof-section"><h4>Towers (${towers.size})</h4>
-      <div class="prof-tags">${[...towers].slice(0,15).map(t=>'<span class="prof-tag" onclick="switchTab(\'map\')">'+esc(t)+'</span>').join('')}</div></div>`:''}
+      <div class="prof-tags">${[...towers].slice(0,15).map(t=>'<span class="prof-tag" data-tower="'+esc(t)+'" onclick="showTower(this.dataset.tower)" title="Show on map" style="cursor:pointer">'+esc(t)+'</span>').join('')}</div></div>`:''}
     ${meetings.length?`<div class="prof-section"><h4 class="alert">Detected co-locations (${meetings.length})</h4>
       <div class="prof-list">${meetings.slice(0,8).map((m,mi)=>{
         const confColor=m.gapLevel==='high'?'var(--success)':m.gapLevel==='medium'?'var(--warn)':'var(--muted)';
         const confLabel=m.gapLevel==='high'?'High':m.gapLevel==='medium'?'Med':'Low';
-        return '<div style="padding:2px 0;display:flex;align-items:center;gap:4px"><span style="color:'+confColor+'">&#9679;</span> '+esc(m.time.toLocaleString())+' with <strong style="cursor:pointer;color:var(--accent)" onclick="showProfile(\''+esc(m.subB)+'\')">'+esc(m.subB)+'</strong> at '+esc(m.tow)+' <span style="color:'+confColor+';font-weight:600;font-size:0.68rem">['+confLabel+' '+m.score+']</span><button onclick="showMeetingOverlay(\''+esc(sub+'|'+sub)+'\','+mi+')" style="background:none;border:1px solid var(--line);color:var(--accent);padding:1px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem">View</button></div>';
+        return '<div style="padding:2px 0;display:flex;align-items:center;gap:4px"><span style="color:'+confColor+'">&#9679;</span> '+esc(m.time.toLocaleString())+' with <strong style="cursor:pointer;color:var(--accent)" onclick="showProfile(\''+esc(m.subB)+'\')">'+esc(m.subB)+'</strong> at '+twr(m.tow)+' <span style="color:'+confColor+';font-weight:600;font-size:0.68rem">['+confLabel+' '+m.score+']</span><button onclick="showMeetingOverlay(\''+esc(sub+'|'+sub)+'\','+mi+')" style="background:none;border:1px solid var(--line);color:var(--accent);padding:1px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem">View</button></div>';
       }).join('')}</div></div>`:''}
     <div class="prof-section"><h4>Hourly activity</h4>
       <div class="prof-hours">${hours.map((h,i)=>`<div class="prof-hour" style="background:${h>Math.max(...hours)*0.7?'#b94a48':h>Math.max(...hours)*0.4?'#d4a017':'var(--accent)'};height:${Math.max(4,(h/Math.max(...hours||1))*40)}px" title="${i}:00 - ${h}"></div>`).join('')}</div></div>
@@ -3035,7 +3073,7 @@ function buildInferenceHtml(rep){
     const rows=imp.map(x=>{const cl=cloneBy[x.subject];
       return '<div class="inf-row"><div class="top"><strong>'+_infSubj(x.subject)+'</strong>'
         +'<span style="color:var(--danger);font-weight:700">'+(x.speed_kmh!=null?n(Math.round(x.speed_kmh))+' km/h':'same minute (∞)')+'</span>'
-        +'<span style="font-size:0.7rem;color:var(--muted)">'+esc(x.from_tower)+' → '+esc(x.to_tower)+'</span></div>'
+        +'<span style="font-size:0.7rem;color:var(--muted)">'+twr(x.from_tower)+' → '+twr(x.to_tower)+'</span></div>'
         +'<div class="meta">'+x.distance_km+' km in '+x.dt_minutes+' min'+(x.from_imei!==x.to_imei?' · IMEI changed':'')+(cl?' · '+esc(cl.verdict):'')+'</div></div>';
     }).join('');
     theme+=card('Impossible travel &amp; cloning',imp.length+' flagged','var(--danger)','crit',
@@ -3062,7 +3100,7 @@ function buildInferenceHtml(rep){
   theme='';
   if(hidden.length){
     const rows=hidden.map(c=>'<div class="inf-row"><div class="top">'+_infSubj(c.subject_a)+'<span style="color:var(--muted)">&amp;</span>'+_infSubj(c.subject_b)+_infChip('never call','var(--danger)')+'</div>'
-      +'<div class="meta">Together '+c.occurrences+'× over '+c.distinct_days+' day(s) at '+esc((c.towers||[]).slice(0,3).join(', '))+'</div></div>').join('');
+      +'<div class="meta">Together '+c.occurrences+'× over '+c.distinct_days+' day(s) at '+(c.towers||[]).slice(0,3).map(t=>twr(String(t).split('~')[0])).join(', ')+'</div></div>').join('');
     theme+=card('Hidden links',hidden.length,'var(--danger)','crit',
       'Pairs repeatedly in the <b>same place at the same time</b> who <b>never call each other</b> &mdash; meeting in person while avoiding a phone trail.',rows);
   }
@@ -3112,9 +3150,9 @@ function buildInferenceHtml(rep){
   }
   const movers=Object.entries(C.movement||{}).map(e=>Object.assign({s:e[0]},e[1])).filter(m=>m.distinct_towers>1).sort((a,b)=>b.distinct_towers-a.distinct_towers).slice(0,8);
   if(movers.length){
-    const rows=movers.map(m=>{const home=m.anchors&&m.anchors.home?m.anchors.home.tower_id:'?';const work=m.anchors&&m.anchors.work?m.anchors.work.tower_id:'?';
-      const mob=m.mobility?m.mobility.class:'';const dwell=(m.dwell&&m.dwell.length)?' · longest dwell '+esc(m.dwell[0].tower_id)+' ('+m.dwell[0].dwell_hours+'h)':'';
-      return '<div class="inf-row" style="padding:5px 0"><div class="top"><strong>'+_infSubj(m.s)+'</strong>'+(mob?_infChip(mob,'var(--accent)'):'')+'<span style="font-size:0.7rem;color:var(--muted)">'+m.distinct_towers+' towers · home '+esc(home)+' / work '+esc(work)+dwell+'</span></div></div>';}).join('');
+    const rows=movers.map(m=>{const home=m.anchors&&m.anchors.home?twr(m.anchors.home.tower_id):'?';const work=m.anchors&&m.anchors.work?twr(m.anchors.work.tower_id):'?';
+      const mob=m.mobility?m.mobility.class:'';const dwell=(m.dwell&&m.dwell.length)?' · longest dwell '+twr(m.dwell[0].tower_id)+' ('+m.dwell[0].dwell_hours+'h)':'';
+      return '<div class="inf-row" style="padding:5px 0"><div class="top"><strong>'+_infSubj(m.s)+'</strong>'+(mob?_infChip(mob,'var(--accent)'):'')+'<span style="font-size:0.7rem;color:var(--muted)">'+m.distinct_towers+' towers · home '+home+' / work '+work+dwell+'</span></div></div>';}).join('');
     theme+=card('Movement &amp; anchors','top '+movers.length,'var(--accent)','info',
       'Each subject&rsquo;s likely <b>home and work cells</b>, how mobile they are (stationary&rarr;highly&nbsp;mobile) and where they <b>dwell longest</b> &mdash; context for the flags above.',rows);
   }

@@ -211,6 +211,9 @@ a{color:var(--accent);text-decoration:none}
 .prof-tags{display:flex;flex-wrap:wrap;gap:4px;font-size:0.74rem}
 .prof-tag{padding:2px 8px;border-radius:4px;background:var(--accent-light);color:var(--accent);cursor:pointer}
 .prof-list{font-size:0.74rem;max-height:140px;overflow-y:auto}
+/* Clickable tower id -> jumps to the Tower Map and zooms to the tower */
+.twr-link{color:var(--accent);cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
+.twr-link:hover{text-decoration:underline solid;filter:brightness(1.15)}
 
 /* AI INSIGHTS TAB */
 /* ---- AI Insights Tab ---- */
