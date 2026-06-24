@@ -1888,7 +1888,10 @@ function showMapHeat(sub){
   });
   const towers=Object.values(locs).map(t=>({lat:t.slat/t.count,lng:t.slng/t.count,count:t.count,id:t.id}));
   const maxC=Math.max(1,...towers.map(t=>t.count));
-  const grad={0.0:'#2c7fb8',0.35:'#41b6c4',0.55:'#7fcdbb',0.7:'#d9f0a3',0.82:'#fec44f',0.92:'#fe9929',1.0:'#cc2a1e'};
+  // Warm scale (purple→magenta→orange→red): the old blue low-end washed out against the
+  // light basemap and blue water and only read once zoomed in. Warm colours stay legible on
+  // land and water, and the 0.5 opacity floor keeps sparse areas visible at any zoom.
+  const grad={0.0:'#7b2d8e',0.35:'#c2185b',0.6:'#ef6c00',0.8:'#e53935',1.0:'#b71c1c'};
   if(typeof L.heatLayer==='function'){
     // Stack `count` points at each tower's centroid. Stacking accumulates into a graded hot
     // core (a single weighted point can't — its alpha is capped, not additive, so it reads
@@ -1897,7 +1900,7 @@ function showMapHeat(sub){
     const heatPts=[];
     towers.forEach(t=>{for(let i=0;i<t.count;i++)heatPts.push([t.lat,t.lng,1]);});
     const heat=L.heatLayer(heatPts,
-      {radius:30,blur:20,maxZoom:16,minOpacity:0.35,gradient:grad}).addTo(mapInstance);
+      {radius:30,blur:20,maxZoom:16,minOpacity:0.5,gradient:grad}).addTo(mapInstance);
     mapLayers.push(heat);
     // tiny clickable dots keep every location inspectable on top of the gradient
     towers.forEach(t=>{
@@ -1907,7 +1910,7 @@ function showMapHeat(sub){
     });
   }else{
     // fallback: graduated bubbles if the heat plugin failed to load
-    towers.forEach(t=>{const p=t.count/maxC;const c=p>0.7?'#cc2a1e':p>0.4?'#fe9929':'#41b6c4';
+    towers.forEach(t=>{const p=t.count/maxC;const c=p>0.7?'#b71c1c':p>0.4?'#ef6c00':'#7b2d8e';
       mapCircles.push(L.circleMarker([t.lat,t.lng],{radius:5+15*p,color:c,fillColor:c,fillOpacity:0.25+0.55*p,weight:1,opacity:0.6}).bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`).addTo(mapInstance))});
   }
   const pts=towers.map(t=>[t.lat,t.lng]);if(pts.length)mapInstance.fitBounds(pts,{padding:[40,40]});else fitAllGeo();
@@ -1916,11 +1919,11 @@ function showMapHeat(sub){
     +`<div class="stat-row"><span class="label">Records</span><span class="value">${rows.length}</span></div>`
     +`<div class="stat-row"><span class="label">Locations</span><span class="value">${sorted.length}</span></div>`
     +`<div class="stat-row"><span class="label">Peak</span><span class="value">${maxC} visits</span></div>`;
-  h+='<div style="margin:8px 0 4px"><div style="height:10px;border-radius:5px;background:linear-gradient(to right,#2c7fb8,#41b6c4,#7fcdbb,#d9f0a3,#fec44f,#fe9929,#cc2a1e)"></div><div style="display:flex;justify-content:space-between;font-size:0.62rem;color:var(--muted);margin-top:2px"><span>low</span><span>high</span></div></div>';
+  h+='<div style="margin:8px 0 4px"><div style="height:10px;border-radius:5px;background:linear-gradient(to right,#7b2d8e,#c2185b,#ef6c00,#e53935,#b71c1c)"></div><div style="display:flex;justify-content:space-between;font-size:0.62rem;color:var(--muted);margin-top:2px"><span>low</span><span>high</span></div></div>';
   h+='<h4 style="margin:8px 0 4px">Hotspots</h4>';
   sorted.slice(0,8).forEach(t=>{
     const p=t.count/maxC;
-    const c=p>0.7?'#cc2a1e':p>0.4?'#fe9929':'#41b6c4';
+    const c=p>0.7?'#b71c1c':p>0.4?'#ef6c00':'#7b2d8e';
     const loc=t.id||(t.lat.toFixed(4)+','+t.lng.toFixed(4));
     h+=`<div class="evt" style="border-left-color:${c}" onclick="mapInstance.setView([${t.lat},${t.lng}],15)"><span class="evt-loc">${esc(loc)}</span><span class="evt-time">${t.count} visits</span></div>`;
   });
