@@ -52,9 +52,34 @@ def favicon():
     return Response(status_code=204)
 
 
+def _ensure_indexes():
+    """Idempotently add the composite indexes to existing databases. create_all() won't alter
+    an already-created table, so add them explicitly. CREATE INDEX IF NOT EXISTS is supported by
+    both Postgres and SQLite; failures (e.g. older engines) are non-fatal."""
+    from sqlalchemy import text
+    stmts = [
+        "CREATE INDEX IF NOT EXISTS ix_cdr_case_start ON cdr_records (case_id, start_time)",
+        "CREATE INDEX IF NOT EXISTS ix_cdr_case_tower ON cdr_records (case_id, tower_id)",
+        "CREATE INDEX IF NOT EXISTS ix_cdr_case_aparty ON cdr_records (case_id, a_party_number)",
+        "CREATE INDEX IF NOT EXISTS ix_ipdr_case_start ON ipdr_records (case_id, start_time)",
+        "CREATE INDEX IF NOT EXISTS ix_ipdr_case_tower ON ipdr_records (case_id, tower_id)",
+        "CREATE INDEX IF NOT EXISTS ix_ipdr_case_srcip ON ipdr_records (case_id, source_ip)",
+    ]
+    try:
+        with engine.begin() as conn:
+            for s in stmts:
+                try:
+                    conn.execute(text(s))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    _ensure_indexes()
     with SessionLocal() as db:
         bootstrap_default_user(db)
 

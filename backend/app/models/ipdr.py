@@ -5,12 +5,20 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import Float
+from sqlalchemy import Index
 
 from app.core.database import Base
 
 
 class IPDRRecord(Base):
     __tablename__ = "ipdr_records"
+
+    # Composite indexes for case-scoped, time-ordered paging and tower/source lookups at scale.
+    __table_args__ = (
+        Index("ix_ipdr_case_start", "case_id", "start_time"),
+        Index("ix_ipdr_case_tower", "case_id", "tower_id"),
+        Index("ix_ipdr_case_srcip", "case_id", "source_ip"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     case_id = Column(String, index=True, nullable=True)

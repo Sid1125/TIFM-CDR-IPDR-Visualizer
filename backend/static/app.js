@@ -2438,13 +2438,18 @@ function toggleAnnot(r){
   }
 }
 function renderRecords(){
-  recPage=0;
-  loadAnnotations();
-  const svcs=new Set(allRows.map(r=>r.svc).filter(Boolean));
-  D.recService.innerHTML='<option value="all">All services</option>'+[...svcs].map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
-  renderRecTable();
+  loadRecServices();      // service dropdown from the server (whole case, not just loaded rows)
+  loadAnnotations();      // loads stars, then triggers the first page via renderRecTable()
 }
-let recPage=0,recFiltered=[];
+async function loadRecServices(){
+  try{
+    const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+    const svcs=await API.get('/records/services'+cq);
+    const cur=D.recService.value;
+    D.recService.innerHTML='<option value="all">All services</option>'+svcs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    if([...D.recService.options].some(o=>o.value===cur))D.recService.value=cur;
+  }catch(e){/* keep existing options */}
+}
 const REC_PAGE=60;
 function recRowHtml(r){
   const cdr=r.type==='CDR';
@@ -2478,30 +2483,36 @@ function recRowHtml(r){
       <td style="font-size:0.7rem">${esc(r.case_id||'')}</td>
     </tr>`;
 }
-function renderRecTable(){
-  // Full reset: recompute the filtered set and render only the first page.
-  let rows=[...allRows];
-  if(D.recType.value!=='all')rows=rows.filter(r=>r.type===D.recType.value);
-  if(D.recService.value!=='all')rows=rows.filter(r=>r.svc===D.recService.value);
-  const q=D.recSearch.value.trim().toLowerCase();
-  if(q)rows=rows.filter(r=>`${r.sub} ${r.cnt} ${r.tow} ${r.cll||''} ${r.prot||''} ${r.imsi||''} ${r.imei||''}`.toLowerCase().includes(q));
-  recFiltered=rows;recPage=0;
-  D.recCount.textContent=`${rows.length} records`;
-  D.recBody.innerHTML='';
-  appendRecPage();
+// Server-side records: the table fetches pages from /records/page on demand instead of
+// holding the whole case in memory, so it scales to large cases. Filters (type/service) and
+// search are sent as query params and applied in the DB; "Load more" fetches the next offset.
+let recOffset=0,recTotal=0,_recSeq=0;
+async function fetchRecPage(reset){
+  const seq=++_recSeq;
+  if(reset){recOffset=0;}
+  const p=new URLSearchParams();
+  if(activeCaseId)p.set('case_id',activeCaseId);
+  p.set('type',D.recType.value||'all');
+  const q=D.recSearch.value.trim();if(q)p.set('search',q);
+  if(D.recService.value&&D.recService.value!=='all')p.set('service',D.recService.value);
+  p.set('limit',REC_PAGE);p.set('offset',recOffset);
+  let res;
+  try{res=await API.get('/records/page?'+p.toString());}catch(e){console.error('records page',e);return;}
+  if(seq!==_recSeq)return; // a newer request superseded this one (rapid typing/filtering)
+  recTotal=res.total||0;
+  const html=(res.rows||[]).map(r=>recRowHtml(r.rtype==='CDR'?nCdr(r):nIpdr(r))).join('');
+  if(reset){D.recBody.innerHTML=html;}else{D.recBody.insertAdjacentHTML('beforeend',html);}
+  recOffset+=(res.rows||[]).length;
+  D.recCount.textContent=recTotal+' records';
+  D.recLoadMore.style.display=recOffset<recTotal?'block':'none';
 }
-// Append only the next page instead of rebuilding the whole table. The old path rebuilt
-// every accumulated row on each "Load more" (O(n^2) across clicks) — the cause of the lag
-// that grew the further you paged. Appending keeps each click ~constant time.
-function appendRecPage(){
-  const start=recPage*REC_PAGE,slice=recFiltered.slice(start,start+REC_PAGE);
-  if(slice.length){D.recBody.insertAdjacentHTML('beforeend',slice.map(recRowHtml).join(''));recPage++;}
-  D.recLoadMore.style.display=recFiltered.length>recPage*REC_PAGE?'block':'none';
-}
+function renderRecTable(){fetchRecPage(true);}
+function appendRecPage(){fetchRecPage(false);}
 D.recLoadMore.onclick=appendRecPage;
-D.recSearch.addEventListener('input',()=>{recPage=0;renderRecTable()});
-D.recType.addEventListener('change',()=>{recPage=0;renderRecTable()});
-D.recService.addEventListener('change',()=>{recPage=0;renderRecTable()});
+let _recSearchTimer=null;
+D.recSearch.addEventListener('input',()=>{clearTimeout(_recSearchTimer);_recSearchTimer=setTimeout(renderRecTable,250);});
+D.recType.addEventListener('change',renderRecTable);
+D.recService.addEventListener('change',renderRecTable);
 
 // ====== 7. SUBJECT PROFILE ======
 function showProfile(sub){

@@ -15,8 +15,39 @@ from app.schemas.cdr import CDRRead
 from app.schemas.ipdr import IPDRRead
 from app.services.records_service import list_cdr_records
 from app.services.records_service import list_ipdr_records
+from app.services.records_service import page_records
+from app.services.records_service import distinct_services
 
 router = APIRouter()
+
+
+@router.get("/page")
+def get_records_page(
+    db: Session = Depends(get_db),
+    case_id: str | None = Query(default=None),
+    type: str = Query(default="all"),
+    search: str | None = Query(default=None),
+    service: str | None = Query(default=None),
+    limit: int = Query(default=60, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    """Server-side, time-ordered, paginated records page across CDR + IPDR for one case.
+    Returns {total, rows:[…rtype-tagged…], limit, offset}. The browser fetches pages on demand
+    instead of holding the whole case in memory."""
+    res = page_records(db, case_id=case_id, rtype=type, search=search, service=service, limit=limit, offset=offset)
+    rows = []
+    for rec, rt in zip(res["rows"], res["order"]):
+        d = (CDRRead if rt == "CDR" else IPDRRead).model_validate(rec).model_dump(mode="json")
+        d["rtype"] = rt
+        rows.append(d)
+    return {"total": res["total"], "rows": rows, "limit": limit, "offset": offset}
+
+
+@router.get("/services")
+def get_record_services(db: Session = Depends(get_db), case_id: str | None = Query(default=None)):
+    """Distinct service values (CDR call types + IPDR protocols) present in a case, so the
+    Service filter works without loading the whole case client-side."""
+    return distinct_services(db, case_id=case_id)
 
 
 @router.delete("/reset")

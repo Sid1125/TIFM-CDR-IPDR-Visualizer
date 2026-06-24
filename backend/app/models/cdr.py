@@ -4,12 +4,22 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import Float
+from sqlalchemy import Index
 
 from app.core.database import Base
 
 
 class CDRRecord(Base):
     __tablename__ = "cdr_records"
+
+    # Composite indexes for the dominant access pattern: case-scoped, time-ordered paging and
+    # tower/subject lookups at 50k-500k rows. Single-column indexes below still help point
+    # lookups; these speed the paginated record browser and tower/subject filters.
+    __table_args__ = (
+        Index("ix_cdr_case_start", "case_id", "start_time"),
+        Index("ix_cdr_case_tower", "case_id", "tower_id"),
+        Index("ix_cdr_case_aparty", "case_id", "a_party_number"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     case_id = Column(String, index=True, nullable=True)
