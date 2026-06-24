@@ -2098,17 +2098,29 @@ function showMapTriangulation(sub){
   h+='<div style="margin-top:10px;padding:8px;background:var(--card-bg);border-radius:6px;font-size:0.72rem;color:var(--muted)"><b>How it works:</b> Each burst of tower hand-offs inside a 30-min window is one fix. Coverage cells are sized by radio technology (1–15 km); the crosshair is the inverse-variance weighted centre of those towers (tighter cells weigh more), the red dashed polygon is the rigorous cell-overlap region when one exists, and the faint circle marks the ±precision bound.</div>';
   D.mapAnalysis.innerHTML=h;
 }
-function showMapMeetings(sub){
-  clearMap();const rows=geoRecords.filter(r=>r.latitude!=null&&r.longitude!=null);
-  if(!rows.length){D.mapAnalysis.innerHTML='No data.';return}
-  const sr=rows.filter(r=>r.subject===sub),or=rows.filter(r=>r.subject!==sub&&r.counterpart===sub);
-  const ms=[];sr.forEach(a=>{or.forEach(b=>{if(a.tower_id&&a.tower_id===b.tower_id){const at=new Date(a.start_time||0).getTime(),bt=new Date(b.start_time||0).getTime();if(Math.abs(at-bt)<3600000)ms.push({s1:sub,s2:b.subject,tower:a.tower_id,lat:a.latitude,lng:a.longitude,t1:a.start_time,t2:b.start_time,gap:Math.abs(at-bt)/60000})}})});
-  ms.sort((a,b)=>a.gap-b.gap);
-  ms.slice(0,20).forEach(m=>{const col=m.gap<5?'#b94a48':m.gap<15?'#d4a017':'#2c6f79';mapMarkers.push(L.circleMarker([m.lat,m.lng],{radius:8,color:col,fillColor:col,fillOpacity:0.4,weight:2}).bindPopup(`<strong>Possible Meeting</strong><br>${esc(m.s1)} & ${esc(m.s2)}<br>Gap: ${m.gap.toFixed(0)} min`).addTo(mapInstance))});
+async function showMapMeetings(sub){
+  clearMap();
+  // Exact co-location detection runs server-side now (was an O(n^2) client scan over loaded
+  // records); it covers the whole case, not just what's in memory.
+  D.mapAnalysis.innerHTML='<p style="color:var(--muted);font-size:0.85rem">Detecting meetings…</p>';
+  let res;
+  try{
+    const p=new URLSearchParams();
+    if(activeCaseId)p.set('case_id',activeCaseId);
+    if(sub)p.set('subject',sub);
+    res=await API.get('/investigation/meetings?'+p.toString());
+  }catch(e){console.error('meetings',e);D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to detect meetings.</p>';return;}
+  const ms=(res.meetings||[]).filter(m=>m.latitude!=null&&m.longitude!=null);
+  ms.slice(0,40).forEach(m=>{const col=m.gap_min<5?'#b94a48':m.gap_min<15?'#d4a017':'#2c6f79';
+    mapMarkers.push(L.circleMarker([m.latitude,m.longitude],{radius:8,color:col,fillColor:col,fillOpacity:0.4,weight:2}).bindPopup(`<strong>Possible Meeting</strong><br>${esc(m.subject_a)} & ${esc(m.subject_b)}<br>Tower ${esc(m.tower_id)}<br>Gap: ${m.gap_min.toFixed(0)} min`).addTo(mapInstance))});
   if(ms.length){const pts=mapMarkers.filter(m=>m.getLatLng).map(m=>m.getLatLng());if(pts.length)mapInstance.fitBounds(pts,{padding:[40,40]})}else fitAllGeo();
-  let h='<h4>Meeting Detection</h4>'+`<div class="stat-row"><span class="label">Meetings</span><span class="value">${ms.length}</span></div>`+`<div class="stat-row"><span class="label">With</span><span class="value">${new Set(ms.map(m=>m.s2)).size}</span></div>`;
+  const withSet=new Set(ms.map(m=>m.subject_a===sub?m.subject_b:m.subject_a));
+  let h='<h4>Meeting Detection</h4>'
+    +`<div class="stat-row"><span class="label">Meetings</span><span class="value">${res.total||ms.length}</span></div>`
+    +`<div class="stat-row"><span class="label">Distinct pairs</span><span class="value">${res.distinct_pairs||0}</span></div>`
+    +(sub?`<div class="stat-row"><span class="label">With</span><span class="value">${withSet.size}</span></div>`:'');
   if(!ms.length)h+='<p style="color:var(--muted);font-size:0.8rem">No meetings detected.</p>';
-  else{h+='<h4 style="margin:8px 0 4px">Meetings</h4>';ms.slice(0,10).forEach(m=>{const conf=m.gap<5?'High':m.gap<15?'Medium':'Low';h+=`<div class="evt" style="border-left-color:${m.gap<5?'#b94a48':m.gap<15?'#d4a017':'#2c6f79'}"><span class="evt-time">${fmt(m.t1)}</span><span class="evt-loc">${esc(m.s1)} & ${esc(m.s2)} (${conf})</span></div>`})}
+  else{h+='<h4 style="margin:8px 0 4px">Closest encounters</h4>';ms.slice(0,12).forEach(m=>{const c=m.gap_min<5?'#b94a48':m.gap_min<15?'#d4a017':'#2c6f79';h+=`<div class="evt" style="border-left-color:${c}" onclick="mapInstance.setView([${m.latitude},${m.longitude}],15)"><span class="evt-time">${fmt(m.time_a)}</span><span class="evt-loc">${esc(m.subject_a)} & ${esc(m.subject_b)} (${esc(m.confidence)})</span></div>`})}
   D.mapAnalysis.innerHTML=h;
 }
 function fitAllGeo(){const pts=[];geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})}

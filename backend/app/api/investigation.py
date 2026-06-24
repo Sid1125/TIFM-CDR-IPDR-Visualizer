@@ -7,12 +7,27 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services.investigation_service import build_unified_timeline
+from app.services.investigation_service import find_meetings
 from app.services.service_attribution_service import summarize_services
 from app.services.tower_service import find_colocation_candidates
 from app.services.tower_service import list_tower_activity
 from app.models.ipdr import IPDRRecord
 
 router = APIRouter()
+
+
+@router.get("/meetings")
+def meetings(
+    db: Session = Depends(get_db),
+    case_id: str = Query(default=""),
+    subject: str = Query(default=""),
+    window_min: int = Query(default=60, ge=1, le=240),
+    limit: int = Query(default=500, ge=1, le=2000),
+):
+    """Exact server-side co-location detection (two phones at one tower within a window).
+    Replaces the client-side O(n^2) meeting scan; scales to large cases."""
+    return find_meetings(db, case_id=case_id or None, subject=subject or None,
+                         window_min=window_min, limit=limit)
 
 
 @router.get("/timeline")

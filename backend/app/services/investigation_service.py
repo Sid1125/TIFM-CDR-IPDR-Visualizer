@@ -128,6 +128,53 @@ def _cdr_movement(records):
     return moves
 
 
+def find_meetings(db, case_id=None, subject=None, window_min: int = 60, limit: int = 500):
+    """Exact, full-coverage co-location ("meeting") detection: two phones at the SAME tower
+    within ``window_min`` minutes. Server-side and case-scoped, this replaces the client-side
+    O(n^2) detectMeetings (which also sampled only the top-30 subjects). Uses a time-sorted
+    sweep with an early break once the window is exceeded, so it is ~O(n * window-density) and
+    scales to large cases. ``subject`` keeps only encounters involving that number. Returns the
+    encounters sorted by smallest gap (tightest = most likely a real meeting), capped to
+    ``limit`` rows for transport; the detection itself is exhaustive.
+
+    CDR-only: a "meeting" is two people physically co-located at a cell, so IPDR (IP endpoints)
+    is intentionally excluded — consistent with the strict CDR/IPDR separation."""
+    q = db.query(
+        CDRRecord.start_time, CDRRecord.a_party_number, CDRRecord.tower_id,
+        CDRRecord.latitude, CDRRecord.longitude,
+    ).filter(
+        CDRRecord.start_time.isnot(None), CDRRecord.tower_id.isnot(None),
+        CDRRecord.a_party_number.isnot(None),
+    )
+    if case_id:
+        q = q.filter(CDRRecord.case_id == case_id)
+    located = sorted(q.all(), key=lambda r: r[0])
+
+    window = window_min * 60
+    out = []
+    n = len(located)
+    for i in range(n):
+        ti, si, twi, lai, loi = located[i]
+        for j in range(i + 1, n):
+            tj, sj, twj, laj, loj = located[j]
+            if (tj - ti).total_seconds() > window:
+                break
+            if si == sj or twi != twj:
+                continue
+            if subject and subject not in (si, sj):
+                continue
+            gap_min = round((tj - ti).total_seconds() / 60.0, 1)
+            out.append({
+                "subject_a": si, "subject_b": sj, "tower_id": twi,
+                "latitude": lai, "longitude": loi,
+                "time_a": ti, "time_b": tj, "gap_min": gap_min,
+                "confidence": "High" if gap_min < 5 else "Medium" if gap_min < 15 else "Low",
+            })
+    out.sort(key=lambda m: m["gap_min"])
+    pairs = {tuple(sorted((m["subject_a"], m["subject_b"]))) for m in out}
+    return {"total": len(out), "distinct_pairs": len(pairs), "meetings": out[:limit]}
+
+
 def build_unified_timeline(db, limit: int = 200, case_id=None):
     events = []
 
