@@ -48,6 +48,47 @@ def _to_str(val):
     return str(val)
 
 
+def _harvest_towers(db: Session, df) -> int:
+    """Grow the permanent, case-independent tower repository from a CDR/IPDR upload. ISP dumps
+    carry tower_id + lat/lng on their rows, so every case teaches the global `towers` table the
+    towers it touched (with authoritative operator coordinates). Upserts by tower_id: inserts new
+    towers, back-fills coordinates only when missing, and NEVER clobbers an existing tower's
+    city/state. Returns the number of newly-created towers."""
+    if "tower_id" not in df.columns:
+        return 0
+    keep = [c for c in ("tower_id", "latitude", "longitude") if c in df.columns]
+    sub = df[keep].dropna(subset=["tower_id"]).drop_duplicates()  # collapse to distinct towers (small)
+    if sub.empty:
+        return 0
+    has_lat, has_lng = "latitude" in sub.columns, "longitude" in sub.columns
+    # tower_id -> (lat, lng); prefer a row that actually has coordinates
+    seen: dict = {}
+    for _, row in sub.iterrows():
+        tid = _to_str(row.get("tower_id"))
+        if not tid:
+            continue
+        lat = _to_float(row.get("latitude")) if has_lat else None
+        lng = _to_float(row.get("longitude")) if has_lng else None
+        cur = seen.get(tid)
+        if cur is None or (cur[0] is None and lat is not None):
+            seen[tid] = (lat, lng)
+    if not seen:
+        return 0
+    existing = {t.tower_id: t for t in db.query(Tower).filter(Tower.tower_id.in_(list(seen.keys()))).all()}
+    added = 0
+    for tid, (lat, lng) in seen.items():
+        t = existing.get(tid)
+        if t is None:
+            db.add(Tower(tower_id=tid, latitude=lat, longitude=lng))
+            added += 1
+        else:
+            if t.latitude is None and lat is not None:
+                t.latitude = lat
+            if t.longitude is None and lng is not None:
+                t.longitude = lng
+    return added
+
+
 @router.post("/cdr", response_model=UploadResponse)
 async def upload_cdr(
     file: UploadFile = File(...),
@@ -107,6 +148,7 @@ async def upload_cdr(
             )
 
         db.add_all(records)
+        _harvest_towers(db, df)  # grow the permanent tower repository from this case's rows
         db.commit()
 
         return UploadResponse(success=True, records_imported=len(records))
@@ -180,6 +222,7 @@ async def upload_ipdr(
             )
 
         db.add_all(records)
+        _harvest_towers(db, df)  # grow the permanent tower repository from this case's rows
         db.commit()
 
         return UploadResponse(success=True, records_imported=len(records))

@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
@@ -15,6 +16,9 @@ from app.core.database import get_db
 from app.models.tower import Tower
 from app.schemas.tower import TowerRead
 from app.schemas.upload import UploadResponse
+from app.services.tower_service import rebuild_tower_repo
+from app.services.tower_service import tower_repo_list
+from app.services.tower_service import tower_repo_stats
 from app.utils.validators import ensure_columns
 
 router = APIRouter()
@@ -57,6 +61,30 @@ async def upload_towers(
     finally:
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+@router.get("/repo/stats")
+def repo_stats(db: Session = Depends(get_db)):
+    """Headline stats for the permanent tower repository (total, coords coverage, by state)."""
+    return tower_repo_stats(db)
+
+
+@router.get("/repo")
+def repo_list(
+    db: Session = Depends(get_db),
+    search: str = Query(default=""),
+    limit: int = Query(default=300, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
+):
+    """Searchable, paginated listing of the tower repository."""
+    return tower_repo_list(db, search=search, limit=limit, offset=offset)
+
+
+@router.post("/repo/rebuild")
+def repo_rebuild(db: Session = Depends(get_db)):
+    """Backfill the tower repository from CDR/IPDR records already loaded (fills coordinates from
+    the records' own tower_id+lat/lng). Idempotent; never clobbers existing data."""
+    return rebuild_tower_repo(db)
 
 
 @router.get("/", response_model=list[TowerRead])

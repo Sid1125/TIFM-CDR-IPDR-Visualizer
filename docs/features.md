@@ -74,6 +74,10 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Description:** Upload a tower location CSV file. Merges with existing towers using upsert semantics (by `tower_id`).
 - **Tech:** `POST /upload/towers`, Pandas CSV parsing, `db.merge()` for upsert
 
+### Permanent Tower Repository (auto-harvested)
+- **Description:** The `towers` table is a **global, case-independent** master keyed by `tower_id` (no `case_id`), shared across every case and never wiped by case delete or `/records/reset`. Every CDR/IPDR upload now **auto-harvests** towers from the rows' own `tower_id`+lat/lng, so each case teaches the repository the towers it touched — using the operators' authoritative coordinates. Upserts **insert** new towers and **back-fill** missing coordinates but **never clobber** existing coordinates or city/state. A one-time **Rebuild from records** action backfills coordinates from CDR/IPDR records already loaded (for towers registered before harvesting). A dedicated **Tower Repo tab** shows totals, coordinate coverage, coverage-by-state bars, a searchable listing (tower_id / city / state, with click-to-map), and an "Import master CSV" button (e.g. an OpenCellID India export or an operator/TRAI master).
+- **Tech:** `_harvest_towers()` in `api/upload.py` (called inside `upload_cdr`/`upload_ipdr`); `tower_repo_stats()` / `tower_repo_list()` / `rebuild_tower_repo()` in `services/tower_service.py`; endpoints `GET /towers/repo/stats`, `GET /towers/repo`, `POST /towers/repo/rebuild`. Frontend `renderTowerRepo()`/`renderTowerRepoView()` + `.tr-*` styles. Tested in `backend/tests/test_tower_repo.py` (harvest insert/backfill/no-clobber, missing-column guard, stats/search, rebuild).
+
 ### Replace-on-Upload Strategy
 - **Description:** CDR and IPDR uploads use a strict replace strategy: old records are deleted before new ones are inserted. Tower uploads use merge/upsert.
 - **Tech:** `DELETE FROM cdr_records` / `DELETE FROM ipdr_records` then `add_all()`
@@ -804,6 +808,12 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - `GET /geo/records` — All geo-tagged records (CDR + IPDR) with optional subject filter
 - `GET /geo/subjects` — Located parties that have geo-tagged records (CDR a-party + msisdn, IPDR source_ip; excludes remote endpoints like DNS/CDN destinations)
 - `GET /geo/towers` — All tower locations with metadata
+
+### Tower Repository (4 endpoints)
+- `GET /towers/` — Full tower list (global, case-independent)
+- `GET /towers/repo/stats` — Repository headline stats: total, coordinate coverage, states/cities covered, coverage-by-state
+- `GET /towers/repo?search=&limit=&offset=` — Searchable, paginated tower listing (by tower_id / city / state)
+- `POST /towers/repo/rebuild` — Backfill tower coordinates from CDR/IPDR records already loaded (idempotent, never clobbers)
 
 ### Investigation (5 endpoints)
 - `GET /investigation/timeline` — Unified CDR/IPDR/Tower timeline

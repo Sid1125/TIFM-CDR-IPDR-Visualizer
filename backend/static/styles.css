@@ -278,6 +278,31 @@ a{color:var(--accent);text-decoration:none}
 .xc-act-label{font-weight:700;color:var(--accent);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.03em;margin-right:4px}
 .xc-act-extra{color:var(--muted);font-size:0.68rem;margin-top:2px}
 
+/* Tower Repository tab */
+.tr-toolbar{display:flex;align-items:center;gap:10px;padding:0 0 12px;margin-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tr-sub{font-size:0.72rem;color:var(--muted)}
+.tr-toolbar #trSearch{font-size:0.78rem;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);min-width:220px}
+.tr-empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:0.9rem}
+.tr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.tr-stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.tr-stat.ok{border-left:3px solid var(--success)}
+.tr-stat.warn{border-left:3px solid var(--warn)}
+.tr-stat-v{font-size:1.6rem;font-weight:700;color:var(--text);line-height:1.1}
+.tr-stat-l{font-size:0.74rem;font-weight:600;margin-top:2px}
+.tr-stat-d{font-size:0.68rem;color:var(--muted)}
+.tr-sec{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700;margin:18px 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.tr-states{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 16px}
+.tr-state{display:flex;align-items:center;gap:8px;font-size:0.74rem}
+.tr-state-n{width:60px;flex-shrink:0;color:var(--text);font-weight:600}
+.tr-bar{flex:1;height:8px;background:var(--accent-light);border-radius:4px;overflow:hidden}
+.tr-bar-fill{display:block;height:100%;background:var(--accent)}
+.tr-state-c{width:48px;text-align:right;color:var(--muted)}
+.tr-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px}
+.tr-table{width:100%;font-size:0.76rem}
+.tr-table th{position:sticky;top:0;background:var(--surface);z-index:1}
+.tr-miss{color:var(--warn)}
+.tr-note{font-size:0.7rem;color:var(--muted);padding:6px 2px}
+
 /* AI INSIGHTS TAB */
 /* ---- AI Insights Tab ---- */
 .ai-toolbar{display:flex;gap:6px;padding:4px 0;flex-shrink:0}
