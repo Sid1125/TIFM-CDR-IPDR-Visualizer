@@ -18,7 +18,7 @@ device hits, never merged into the phone's analytics.
 """
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import Iterable
 
 from sqlalchemy import func, or_
@@ -86,11 +86,124 @@ def _iso(dt):
     return dt.isoformat() if dt is not None else None
 
 
+def _fmt_bytes(b):
+    b = float(b or 0)
+    for unit in ("B", "KB", "MB", "GB"):
+        if b < 1024 or unit == "GB":
+            return f"{b:.0f} {unit}" if unit == "B" else f"{b:.1f} {unit}"
+        b /= 1024
+    return f"{b:.1f} GB"
+
+
+# Cap rows scanned when summarising a subject's activity in another case (the headline
+# record_count/date-range is already exact via _count_range; this only feeds distributions).
+_ACT_CAP = 5000
+
+
+def _phone_activity(db: Session, cid: str, numbers, imeis, imsis) -> dict:
+    """What a phone subject was *doing* in another case: call/SMS split, contacts, towers,
+    data sessions, peak hour."""
+    parts = [CDRRecord.a_party_number.in_(numbers), CDRRecord.b_party_number.in_(numbers),
+             CDRRecord.msisdn.in_(numbers)]
+    if imeis:
+        parts.append(CDRRecord.imei.in_(imeis))
+    if imsis:
+        parts.append(CDRRecord.imsi.in_(imsis))
+    rows = (
+        db.query(CDRRecord.a_party_number, CDRRecord.b_party_number, CDRRecord.call_type,
+                 CDRRecord.tower_id, CDRRecord.start_time)
+        .filter(CDRRecord.case_id == cid, or_(*parts)).limit(_ACT_CAP).all()
+    )
+    voice = sms = other = 0
+    contacts: Counter = Counter()
+    towers: Counter = Counter()
+    hours: Counter = Counter()
+    for a, b, ct, tw, st in rows:
+        c = (ct or "").lower()
+        if "sms" in c or "text" in c:
+            sms += 1
+        elif "voice" in c or "call" in c:
+            voice += 1
+        else:
+            other += 1
+        cp = b if a in numbers else (a if b in numbers else b)
+        if cp:
+            contacts[cp] += 1
+        if tw:
+            towers[tw] += 1
+        if st is not None:
+            hours[st.hour] += 1
+    data_parts = [IPDRRecord.msisdn.in_(numbers)]
+    if imeis:
+        data_parts.append(IPDRRecord.imei.in_(imeis))
+    if imsis:
+        data_parts.append(IPDRRecord.imsi.in_(imsis))
+    data_sessions = (
+        db.query(func.count(IPDRRecord.id)).filter(IPDRRecord.case_id == cid, or_(*data_parts)).scalar() or 0
+    )
+    peak = max(hours, key=hours.get) if hours else None
+    bits = []
+    if voice:
+        bits.append(f"{voice} voice")
+    if sms:
+        bits.append(f"{sms} SMS")
+    if other:
+        bits.append(f"{other} other")
+    bits.append(f"{len(contacts)} contact" + ("" if len(contacts) == 1 else "s"))
+    bits.append(f"{len(towers)} tower" + ("" if len(towers) == 1 else "s"))
+    if data_sessions:
+        bits.append(f"{data_sessions} data session" + ("" if data_sessions == 1 else "s"))
+    if peak is not None:
+        bits.append(f"peak {peak:02d}:00")
+    return {
+        "kind": "phone", "voice": voice, "sms": sms, "other": other,
+        "contacts": len(contacts), "top_contacts": contacts.most_common(3),
+        "towers": len(towers), "top_towers": towers.most_common(3),
+        "data_sessions": data_sessions, "peak_hour": peak, "text": " · ".join(bits),
+    }
+
+
+def _ip_activity(db: Session, cid: str, ip: str) -> dict:
+    """What an IP subject was doing in another case: protocols, destinations, data volume."""
+    rows = (
+        db.query(IPDRRecord.source_ip, IPDRRecord.destination_ip, IPDRRecord.protocol,
+                 IPDRRecord.bytes_uploaded, IPDRRecord.bytes_downloaded, IPDRRecord.tower_id)
+        .filter(IPDRRecord.case_id == cid, or_(IPDRRecord.source_ip == ip, IPDRRecord.destination_ip == ip))
+        .limit(_ACT_CAP).all()
+    )
+    protos: Counter = Counter()
+    dests: Counter = Counter()
+    towers: Counter = Counter()
+    up = down = 0
+    for s, d, p, bu, bd, tw in rows:
+        protos[p or "Unknown"] += 1
+        cp = d if s == ip else s
+        if cp:
+            dests[cp] += 1
+        up += bu or 0
+        down += bd or 0
+        if tw:
+            towers[tw] += 1
+    bits = []
+    if protos:
+        bits.append("/".join(f"{p}×{c}" for p, c in protos.most_common(3)))
+    bits.append(f"{len(dests)} destination" + ("" if len(dests) == 1 else "s"))
+    bits.append(f"↑{_fmt_bytes(up)} ↓{_fmt_bytes(down)}")
+    if towers:
+        bits.append(f"{len(towers)} tower" + ("" if len(towers) == 1 else "s"))
+    return {
+        "kind": "ip", "protocols": protos.most_common(5), "top_dest": dests.most_common(3),
+        "bytes_up": up, "bytes_down": down, "towers": len(towers), "text": " · ".join(bits),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Per-subject detail
 # ---------------------------------------------------------------------------
-def subject_cross_case(db: Session, case_id: str, subject: str) -> dict:
-    """Find every OTHER case the given subject (or its handset/SIM) appears in."""
+def subject_cross_case(db: Session, case_id: str, subject: str, with_activity: bool = False) -> dict:
+    """Find every OTHER case the given subject (or its handset/SIM) appears in. When
+    `with_activity` is set, each match is enriched with an activity summary of what the subject
+    was doing in that case (used by the Cross-Case tab; skipped for the lighter panels)."""
     subject = (subject or "").strip()
     if not case_id or not subject:
         return {"subject": subject, "kind": None, "matches": []}
@@ -109,7 +222,7 @@ def subject_cross_case(db: Session, case_id: str, subject: str) -> dict:
         is not None
     )
     if is_phone:
-        return _phone_cross_case(db, case_id, subject)
+        return _phone_cross_case(db, case_id, subject, with_activity)
 
     is_ip = (
         db.query(IPDRRecord.id)
@@ -121,12 +234,12 @@ def subject_cross_case(db: Session, case_id: str, subject: str) -> dict:
         is not None
     )
     if is_ip:
-        return _ip_cross_case(db, case_id, subject)
+        return _ip_cross_case(db, case_id, subject, with_activity)
 
     return {"subject": subject, "kind": None, "matches": []}
 
 
-def _phone_cross_case(db: Session, case_id: str, subject: str) -> dict:
+def _phone_cross_case(db: Session, case_id: str, subject: str, with_activity: bool = False) -> dict:
     # Gather the subject's identifiers WITHIN the current case (number + handsets + SIMs).
     numbers = {subject}
     imeis: set = set()
@@ -209,11 +322,14 @@ def _phone_cross_case(db: Session, case_id: str, subject: str) -> dict:
             "first_seen": _iso(fseen),
             "last_seen": _iso(lseen),
         })
+    if with_activity:
+        for m in matches:
+            m["activity"] = _phone_activity(db, m["case_id"], numbers, imeis, imsis)
     matches.sort(key=lambda m: ((m["record_count"] or 0), m["last_seen"] or ""), reverse=True)
     return {"subject": subject, "kind": "phone", "matches": matches}
 
 
-def _ip_cross_case(db: Session, case_id: str, subject: str) -> dict:
+def _ip_cross_case(db: Session, case_id: str, subject: str, with_activity: bool = False) -> dict:
     cases: dict = {}
 
     def touch(cid):
@@ -247,6 +363,9 @@ def _ip_cross_case(db: Session, case_id: str, subject: str) -> dict:
             "first_seen": _iso(fseen),
             "last_seen": _iso(lseen),
         })
+    if with_activity:
+        for m in matches:
+            m["activity"] = _ip_activity(db, m["case_id"], subject)
     matches.sort(key=lambda m: (m["record_count"] or 0), reverse=True)
     return {"subject": subject, "kind": "ip", "matches": matches}
 
@@ -346,6 +465,7 @@ def case_cross_case_overview(db: Session, case_id: str, limit: int = 100) -> dic
             "other_case_count": len(cids),
             "top_match_type": top,
             "confidence": "high",
+            "_cids": cids,
         })
 
     # --- IPs: current case source IPs ---
@@ -368,11 +488,21 @@ def case_cross_case_overview(db: Session, case_id: str, limit: int = 100) -> dic
             "other_case_count": len(cids),
             "top_match_type": "ip",
             "confidence": "low",
+            "_cids": set(cids),
         })
 
     total = len(hits)
     hits.sort(key=lambda h: (h["other_case_count"], h["confidence"] == "high", h["subject"]), reverse=True)
-    return {"hits": hits[:limit], "total": total}
+    hits = hits[:limit]
+    # Resolve the actual case names so the dashboard can name them (not just "N other cases").
+    all_cids: set = set()
+    for h in hits:
+        all_cids |= h["_cids"]
+    names = _case_names(db, all_cids)
+    for h in hits:
+        h["other_cases"] = [{"case_id": c, "case_name": names.get(c, f"Case {c}")}
+                            for c in sorted(h.pop("_cids"))]
+    return {"hits": hits, "total": total}
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +536,7 @@ def case_cross_case_report(db: Session, case_id: str, limit: int = 200) -> dict:
     high = low = 0
 
     for h in hits:
-        detail = subject_cross_case(db, case_id, h["subject"])
+        detail = subject_cross_case(db, case_id, h["subject"], with_activity=True)
         matches = detail["matches"]
         if not matches:
             continue
@@ -435,6 +565,7 @@ def case_cross_case_report(db: Session, case_id: str, limit: int = 200) -> dict:
                 "match_types": m["match_types"], "confidence": m["confidence"], "role": m["role"],
                 "record_count": m["record_count"], "first_seen": m["first_seen"],
                 "last_seen": m["last_seen"], "matched_values": m["matched_values"],
+                "activity": m.get("activity"),
             })
             if m["confidence"] == "high":
                 bc["high_count"] += 1

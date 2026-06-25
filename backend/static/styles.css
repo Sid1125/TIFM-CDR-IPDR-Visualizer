@@ -254,8 +254,10 @@ a{color:var(--accent);text-decoration:none}
 .xc-case-name{font-weight:700;color:var(--text)}
 .xc-case-meta{font-size:0.72rem;color:var(--muted);flex:1}
 .xc-case-subs{padding:4px 0}
-.xc-case-sub{display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;border-top:1px solid var(--line);font-size:0.78rem}
+.xc-case-sub{display:flex;flex-direction:column;gap:2px;padding:5px 12px;cursor:pointer;border-top:1px solid var(--line);font-size:0.78rem}
 .xc-case-sub:hover{background:var(--accent-light)}
+.xc-case-sub-main{display:flex;align-items:center;gap:8px}
+.xc-act-mini{font-size:0.7rem;color:var(--muted);padding-left:16px}
 .xc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .xc-sub-id{font-weight:600;color:var(--text);cursor:pointer}
 .xc-sub-meta{color:var(--muted);font-size:0.7rem;margin-left:auto;white-space:nowrap}
@@ -272,6 +274,9 @@ a{color:var(--accent);text-decoration:none}
 .xc-match:last-child{border-bottom:none}
 .xc-conf{font-size:0.66rem;font-weight:700;text-transform:uppercase}
 .xc-vals{font-size:0.68rem;color:var(--muted);width:100%;padding-left:2px}
+.xc-act{width:100%;font-size:0.72rem;color:var(--text);background:var(--accent-light);border-radius:6px;padding:5px 8px;margin-top:3px}
+.xc-act-label{font-weight:700;color:var(--accent);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.03em;margin-right:4px}
+.xc-act-extra{color:var(--muted);font-size:0.68rem;margin-top:2px}
 
 /* AI INSIGHTS TAB */
 /* ---- AI Insights Tab ---- */

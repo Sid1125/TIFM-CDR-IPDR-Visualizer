@@ -1571,10 +1571,12 @@ async function renderCrossCaseHits(){
     const rows=hits.map(h=>{
       const conf=h.confidence==='high'?'var(--success)':'var(--warn)';
       const label=h.kind==='ip'?'IP':(h.top_match_type==='imei'?'handset (IMEI)':h.top_match_type==='imsi'?'SIM (IMSI)':'number');
+      const cs=h.other_cases||[];
+      const names=cs.slice(0,3).map(c=>'<b>'+esc(c.case_name)+'</b>').join(', ')+(cs.length>3?' +'+(cs.length-3)+' more':'');
       return '<div class="xcase-row" data-sub="'+esc(h.subject)+'" onclick="showProfile(this.dataset.sub)" title="Open subject profile">'
         +'<span class="xcase-dot" style="background:'+conf+'"></span>'
         +'<span class="xcase-sub">'+esc(h.subject)+'</span>'
-        +'<span class="xcase-meta">in <b>'+h.other_case_count+'</b> other case'+(h.other_case_count===1?'':'s')+' &middot; '+label+(h.confidence==='low'?' &middot; low-confidence':'')+'</span></div>';
+        +'<span class="xcase-meta">also in '+(names||('<b>'+h.other_case_count+'</b> other case'+(h.other_case_count===1?'':'s')))+' &middot; '+label+(h.confidence==='low'?' &middot; low-confidence':'')+'</span></div>';
     }).join('');
     el.innerHTML='<div class="xcase-head"><span class="xcase-title">&#9888; Cross-case hits</span>'
       +'<span class="xcase-sub2">'+data.total+' subject'+(data.total===1?'':'s')+' from this case also appear in other cases</span></div>'
@@ -1618,6 +1620,20 @@ function _xcBadge(t){
   const map={number:['#2c6f79','number'],imei:['#8b5cf6','IMEI'],imsi:['#3a7d5a','IMSI'],ip:['#d4a017','IP']};
   const m=map[t]||['#6b7280',t];
   return '<span class="xc-badge" style="background:'+m[0]+'">'+m[1]+'</span>';
+}
+// "What the subject was doing in that case" — headline one-liner + a top-contacts/towers detail line.
+function _xcActivity(act,full){
+  if(!act||!act.text)return '';
+  if(!full)return '<div class="xc-act-mini">'+esc(act.text)+'</div>';
+  const extra=[];
+  if(act.kind==='phone'){
+    if(act.top_contacts&&act.top_contacts.length)extra.push('contacts: '+act.top_contacts.map(c=>esc(c[0])+' ('+c[1]+')').join(', '));
+    if(act.top_towers&&act.top_towers.length)extra.push('towers: '+act.top_towers.map(c=>esc(c[0])+' ('+c[1]+')').join(', '));
+  }else if(act.kind==='ip'){
+    if(act.top_dest&&act.top_dest.length)extra.push('destinations: '+act.top_dest.map(c=>esc(c[0])+' ('+c[1]+')').join(', '));
+  }
+  return '<div class="xc-act"><span class="xc-act-label">Activity in this case:</span> '+esc(act.text)
+    +(extra.length?'<div class="xc-act-extra">'+extra.join(' &middot; ')+'</div>':'')+'</div>';
 }
 async function renderCrossCaseTab(){
   const el=D.crossCaseTab;if(!el)return;
@@ -1663,10 +1679,11 @@ function renderCrossCaseReport(rep){
       const conf=su.confidence==='high'?'var(--success)':'var(--warn)';
       const badges=(su.match_types||[su.match_type]).map(_xcBadge).join('');
       return '<div class="xc-case-sub" onclick="openInCase(\''+esc(c.case_id)+'\',\''+esc(su.subject)+'\')" title="Open '+esc(su.subject)+' in '+esc(c.case_name)+'">'
-        +'<span class="xc-dot" style="background:'+conf+'"></span>'
+        +'<div class="xc-case-sub-main"><span class="xc-dot" style="background:'+conf+'"></span>'
         +'<span class="xc-sub-id">'+esc(su.subject)+'</span>'+badges
         +(su.role==='counterpart'?'<span class="xc-role">counterpart</span>':'')
-        +'<span class="xc-sub-meta">'+su.record_count+' rec &middot; '+(su.first_seen?fmtd(su.first_seen):'?')+(su.last_seen?' → '+fmtd(su.last_seen):'')+'</span></div>';
+        +'<span class="xc-sub-meta">'+su.record_count+' rec &middot; '+(su.first_seen?fmtd(su.first_seen):'?')+(su.last_seen?' → '+fmtd(su.last_seen):'')+'</span></div>'
+        +_xcActivity(su.activity,false)+'</div>';
     }).join('')+'</div></div>';
   });
 
@@ -1688,7 +1705,7 @@ function renderCrossCaseReport(rep){
         +'<span class="case-link'+(m.confidence==='low'?' low':'')+'" onclick="openInCase(\''+esc(m.case_id)+'\',\''+esc(su.subject)+'\')">'+esc(m.case_name)+' &rarr;</span>'
         +badges+'<span class="xc-conf" style="color:'+mc+'">'+m.confidence+'</span>'
         +(m.role==='counterpart'?'<span class="xc-role">counterpart</span>':'')
-        +'<span class="xc-sub-meta">'+m.record_count+' rec &middot; '+(m.first_seen?fmtd(m.first_seen):'?')+(m.last_seen?' → '+fmtd(m.last_seen):'')+'</span>'+vals+'</div>';
+        +'<span class="xc-sub-meta">'+m.record_count+' rec &middot; '+(m.first_seen?fmtd(m.first_seen):'?')+(m.last_seen?' → '+fmtd(m.last_seen):'')+'</span>'+vals+_xcActivity(m.activity,true)+'</div>';
     }).join('')+'</div></div>';
   });
   h+='</div>';
