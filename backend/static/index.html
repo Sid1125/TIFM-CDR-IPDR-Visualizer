@@ -84,6 +84,9 @@
     <!-- Key metrics -->
     <div class="dash-cards" id="dashCards"></div>
 
+    <!-- Cross-case hits: subjects in this case seen in other cases -->
+    <div class="xcase-panel" id="crossCaseHits" style="display:none;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden"></div>
+
     <!-- Case Summary -->
     <div class="case-summary" id="caseSummary" style="margin-bottom:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden">
       <div class="cs-head" onclick="const b=this.nextElementSibling;const a=this.querySelector('.cs-arrow');const o=b.style.display!=='none';b.style.display=o?'none':'block';a.textContent=o?'&#9654;':'&#9660;';this.classList.toggle('open',!o)">

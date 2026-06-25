@@ -118,6 +118,10 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Description:** Scores the loaded dataset 0-100% based on data completeness penalties: missing tower (-5 each), missing coordinates (-8 each), missing duration (-10 each), invalid timestamps (-15 each), unknown protocols (-3 each). Displays score, classification (Excellent/Good/Fair/Poor), and per-category penalty breakdown.
 - **Tech:** `computeQualityMetrics()`, `renderQualityCard()`, penalty accumulator with category tracking
 
+### Cross-Case Hits Panel
+- **Description:** When the case is opened, a panel lists this case's subjects that **also appear in other cases** (matched by number + handset IMEI / SIM IMSI, or low-confidence IP), each row showing the other-case count and clickable to the subject profile. Hidden when there are no cross-case matches. See §11 Cross-Case Subject/Suspect Linking.
+- **Tech:** `renderCrossCaseHits()` fetches `GET /cross-case/overview?case_id=`
+
 ### Compare Periods
 - **Description:** Two date-range selectors (Period A and Period B) with a Compare button. Analyzes differences: volume change %, new/lost/shared contacts, new subjects, new towers, service usage changes (top 8 deltas). Results displayed as a delta grid with positive/negative coloring.
 - **Tech:** `runComparePeriods()`, date inputs, per-period data filtering, `Set` operations for new/lost/shared entity detection, delta percentage calculation
@@ -432,6 +436,10 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Description:** Top session services with color indicators from the service classification engine. Shows service name, confidence %, and session count.
 - **Tech:** Service color lookup, session classification from `classifySession()`
 
+### Cross-Case Links
+- **Description:** An "Also seen in N other cases" panel showing every other case this subject (or its handset/SIM/IP) appears in — one clickable chip per case with match type, confidence and date span. Clicking jumps to that case and reopens the subject. Shows "No prior occurrences" when isolated. See §11 Cross-Case Subject/Suspect Linking.
+- **Tech:** `fillProfileCrossCase(sub)` fetches `GET /cross-case/subject`, chips call `openInCase(caseId, sub)`
+
 ### Detected Co-locations
 - **Description:** Meeting events where this subject participated, showing counterpart, tower, time gap, score, and a "View" button opening a meeting detail overlay.
 - **Tech:** `detectMeetings()` filtered to subject, `showMeetingOverlay()` for detail
@@ -583,6 +591,14 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 ### Identity Test Suite
 - **Description:** 38 assertions across 12 test scenarios in `tests/identity.test.js`: A→B→A re-appearance, SIM swap, device change, combined change, partial changes, no-change record aggregation, empty input, single record, complex A→B→C→A, sequential SIM-then-device change, MSISDN accumulation.
 - **Tech:** Node.js standalone test, extracted function from `app.js`, `assert()` helper, `process.exit(failed ? 1 : 0)`
+
+### Cross-Case Subject/Suspect Linking
+- **Description:** Suspects reoffend, but every other view in ARGUS is single-case scoped, so a subject's history in *other* cases was invisible. Cross-case linking detects when a subject in the current case (or the handset/SIM behind it, or its IP) also appears in **previously loaded cases**, so the LEA sees prior history the moment a case is opened.
+  - **Match rule (high-confidence):** a phone subject is linked by its **number** *and* by shared **IMEI** (handset) and **IMSI** (SIM) — so a suspect who swaps SIMs but keeps the phone (or swaps phones but keeps the SIM) is still caught. Number/device matches are flagged **high** confidence.
+  - **IP matches (low-confidence):** IP subjects are linked by source/destination IP but flagged **low** confidence with a "dynamic IP — verify the timeframe" caveat, because ISPs reassign addresses over time.
+  - **CDR/IPDR separation preserved:** this is an **identity/intelligence** lookup, *not* analytic attribution. A phone subject may legitimately match IPDR rows in another case via its IMEI/IMSI/MSISDN (same handset did data sessions there) — surfaced as a typed device hit, never merged into the phone's analytics. Phone identifiers never match an IP row and vice-versa.
+  - **Two surfaces:** (1) a **dashboard "Cross-case hits" panel** listing this case's subjects that recur elsewhere, sorted by other-case count, each opening the subject profile; (2) a **profile-modal panel** ("Also seen in N other cases") with one clickable chip per case showing match type, confidence, record count and date span — clicking jumps to that case and reopens the subject there.
+- **Tech:** Server-side `backend/app/services/cross_case_service.py` (`subject_cross_case`, `case_cross_case_overview`) — set-based, index-backed, chunked `IN()` lookups over the per-column identity indexes (`msisdn`/`imei`/`imsi`/`a_party_number`/`source_ip`), no full-case load. Endpoints `GET /cross-case/subject` and `GET /cross-case/overview`. Frontend `renderCrossCaseHits()`, `fillProfileCrossCase()`, `openInCase()`; `.case-link` / `.xcase-*` styles reuse the `twr()` chip pattern. Tested in `backend/tests/test_cross_case.py` (number + SIM-swap-by-IMEI links, isolated-subject negative, IP low-confidence, CDR/IPDR separation, overview counts).
 
 ---
 
@@ -823,6 +839,10 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - `POST /cases` — Create a new case
 - `PUT /cases/{id}` — Update a case
 - `DELETE /cases/{id}` — Delete a case and cascade-delete its records
+
+### Cross-Case Linking (2 endpoints)
+- `GET /cross-case/subject?case_id=&subject=` — Every other case a subject (or its handset IMEI / SIM IMSI / IP) appears in, with per-case match type, confidence (high for number/device, low for IP), record count and date span
+- `GET /cross-case/overview?case_id=` — This case's subjects that also appear in other cases (dashboard "Cross-case hits" panel), bounded list sorted by other-case count
 
 ### AI/TIFM (7 endpoints)
 - `POST /ai/analyze` — Run TIFM multi-agent analysis on case data

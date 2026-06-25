@@ -8,7 +8,7 @@ const D={
   shell:$('shell'),auth:$('authOverlay'),loginForm:$('loginForm'),loginUser:$('loginUsername'),loginPass:$('loginPassword'),loginStatus:$('loginStatus'),
   sessionUser:$('sessionUser'),sessionStatus:$('sessionStatus'),logoutBtn:$('logoutBtn'),
   importStatus:$('importStatus'),cdrFile:$('cdrFile'),ipdrFile:$('ipdrFile'),towerFile:$('towerFile'),
-  dashCards:$('dashCards'),dashGraph:$('dashGraph'),dashPie:$('dashPieChart'),dashHeat:$('dashHeatmap'),dashBar:$('dashBarChart'),dashMatrix:$('dashMatrix'),
+  dashCards:$('dashCards'),crossCaseHits:$('crossCaseHits'),dashGraph:$('dashGraph'),dashPie:$('dashPieChart'),dashHeat:$('dashHeatmap'),dashBar:$('dashBarChart'),dashMatrix:$('dashMatrix'),
   graphSubject:$('graphSubject'),graphLimit:$('graphLimit'),graphSearch:$('graphSearchInput'),graphReset:$('graphResetZoom'),graphCenter:$('graphCenterBtn'),graphStats:$('graphStats'),graphSvg:$('graphSvgContainer'),graphSidebar:$('graphSidebar'),graphDetails:$('graphNodeDetails'),
   mapSubject:$('mapSubject'),mapMode:$('mapMode'),mapGo:$('mapGoBtn'),mapFit:$('mapFitBtn'),geoFenceBtn:$('geoFenceBtn'),mapStage:$('mapStage'),mapSidebar:$('mapSidebar'),mapAnalysis:$('mapAnalysis'),mapTimeBar:$('mapTimelineBar'),mapTimeLabel:$('mapTimeLabel'),mapTimeSlider:$('mapTimeSlider'),mapTimePlay:$('mapTimePlay'),
   tlSearch:$('tlSearch'),tlType:$('tlType'),tlPlayBtn:$('tlPlayBtn'),tlCompare:$('tlCompare'),tlCount:$('tlCount'),tlContainer:$('tlContainer'),
@@ -1152,6 +1152,7 @@ function renderDashboard(){
 
   renderCaseSummary();
   renderQualityCard();
+  renderCrossCaseHits();
   if(D.compareBar)D.compareBar.style.display='flex';
   // Pre-fill date inputs with data range
   if(!D.cpStartA.value||!D.cpStartB.value){
@@ -1549,6 +1550,67 @@ function twr(id){
   const s=esc(String(id));
   return '<span class="twr-link" data-tower="'+s+'" onclick="event.stopPropagation();showTower(this.dataset.tower)" title="Show tower '+s+' on map">'+s+'</span>';
 }
+
+// ====== CROSS-CASE LINKING ======
+// Suspects reoffend. These surface a subject's history in OTHER cases (matched by number +
+// handset IMEI / SIM IMSI; IP matches flagged low-confidence). Identity lookup only — the
+// CDR/IPDR analytic separation elsewhere is untouched.
+const _XTYPE={number:'number',imei:'IMEI',imsi:'IMSI',ip:'IP'};
+function _xtypes(m){return (m.match_types&&m.match_types.length?m.match_types:[m.match_type]).map(t=>_XTYPE[t]||t).join('+');}
+
+// Dashboard panel: this case's subjects that also appear in other cases.
+async function renderCrossCaseHits(){
+  const el=D.crossCaseHits;if(!el)return;
+  if(!activeCaseId){el.style.display='none';el.innerHTML='';return;}
+  try{
+    const data=await API.get('/cross-case/overview?case_id='+encodeURIComponent(activeCaseId));
+    const hits=(data&&data.hits)||[];
+    if(!hits.length){el.style.display='none';el.innerHTML='';return;}
+    const rows=hits.map(h=>{
+      const conf=h.confidence==='high'?'var(--success)':'var(--warn)';
+      const label=h.kind==='ip'?'IP':(h.top_match_type==='imei'?'handset (IMEI)':h.top_match_type==='imsi'?'SIM (IMSI)':'number');
+      return '<div class="xcase-row" data-sub="'+esc(h.subject)+'" onclick="showProfile(this.dataset.sub)" title="Open subject profile">'
+        +'<span class="xcase-dot" style="background:'+conf+'"></span>'
+        +'<span class="xcase-sub">'+esc(h.subject)+'</span>'
+        +'<span class="xcase-meta">in <b>'+h.other_case_count+'</b> other case'+(h.other_case_count===1?'':'s')+' &middot; '+label+(h.confidence==='low'?' &middot; low-confidence':'')+'</span></div>';
+    }).join('');
+    el.innerHTML='<div class="xcase-head"><span class="xcase-title">&#9888; Cross-case hits</span>'
+      +'<span class="xcase-sub2">'+data.total+' subject'+(data.total===1?'':'s')+' from this case also appear in other cases</span></div>'
+      +'<div class="xcase-list">'+rows+'</div>';
+    el.style.display='block';
+  }catch(e){el.style.display='none';el.innerHTML='';}
+}
+
+// Profile-modal panel (filled async after the modal is shown).
+async function fillProfileCrossCase(sub){
+  const el=document.getElementById('profileCrossCase');if(!el)return;
+  try{
+    const data=await API.get('/cross-case/subject?case_id='+encodeURIComponent(activeCaseId)+'&subject='+encodeURIComponent(sub));
+    const matches=(data&&data.matches)||[];
+    if(!matches.length){el.innerHTML='<h4>Cross-case links</h4><div style="font-size:0.74rem;color:var(--muted)">No prior occurrences in other cases.</div>';return;}
+    const chips=matches.map(m=>{
+      const low=m.confidence==='low';
+      const types=_xtypes(m);
+      const span=(m.first_seen?fmtd(m.first_seen):'?')+(m.last_seen?(' → '+fmtd(m.last_seen)):'');
+      const title=low?'Dynamic IP — verify the timeframe before linking':('Matched on '+types+(m.role==='counterpart'?' (as counterpart)':''));
+      return '<span class="case-link'+(low?' low':'')+'" data-case="'+esc(m.case_id)+'" data-sub="'+esc(sub)+'" onclick="openInCase(this.dataset.case,this.dataset.sub)" title="'+esc(title)+'">'
+        +esc(m.case_name)+' — '+types+(low?' (low)':'')+' &middot; '+m.record_count+' rec'+(m.record_count===1?'':'s')+' &middot; '+span+'</span>';
+    }).join('');
+    el.innerHTML='<h4 class="alert">Also seen in '+matches.length+' other case'+(matches.length===1?'':'s')+'</h4><div class="prof-tags">'+chips+'</div>';
+  }catch(e){el.innerHTML='<h4>Cross-case links</h4><div style="font-size:0.74rem;color:var(--danger)">Lookup failed.</div>';}
+}
+
+// Jump to another case and reopen the subject's profile there.
+async function openInCase(caseId,sub){
+  if(!caseId)return;
+  D.profile.style.display='none';
+  setActiveCase(caseId);
+  if(D.caseSelector){try{D.caseSelector.value=String(caseId);}catch(e){}}
+  await loadCaseData();
+  await loadCases();
+  if(sub)showProfile(sub);
+}
+
 let geoRecords=[],geoSubjects=[];
 async function loadGeoData(){
   const cq=activeCaseId?'?case_id='+activeCaseId:'';
@@ -2550,6 +2612,7 @@ function showProfile(sub){
     </div>
     ${towers.size?`<div class="prof-section"><h4>Towers (${towers.size})</h4>
       <div class="prof-tags">${[...towers].slice(0,15).map(t=>'<span class="prof-tag" data-tower="'+esc(t)+'" onclick="showTower(this.dataset.tower)" title="Show on map" style="cursor:pointer">'+esc(t)+'</span>').join('')}</div></div>`:''}
+    <div class="prof-section" id="profileCrossCase"><h4>Cross-case links</h4><div style="font-size:0.74rem;color:var(--muted)">Checking other cases…</div></div>
     ${meetings.length?`<div class="prof-section"><h4 class="alert">Detected co-locations (${meetings.length})</h4>
       <div class="prof-list">${meetings.slice(0,8).map((m,mi)=>{
         const confColor=m.gapLevel==='high'?'var(--success)':m.gapLevel==='medium'?'var(--warn)':'var(--muted)';
@@ -2567,6 +2630,7 @@ function showProfile(sub){
       ${rows.slice(-10).reverse().map(r=>`<div class="evt" onclick="mapInstance&&mapInstance.setView([${r.lat||0},${r.lng||0}],13)"><span class="evt-time">${fmt(r.ts)}</span> <span class="evt-loc">${esc(r.type)} ${esc(r.cnt||'')} ${r.cll||''}</span></div>`).join('')}</div>
   `;
   D.profile.style.display='flex';
+  fillProfileCrossCase(sub);
 }
 D.profileClose.addEventListener('click',()=>D.profile.style.display='none');
 D.profile.addEventListener('click',e=>{if(e.target===D.profile)D.profile.style.display='none'});

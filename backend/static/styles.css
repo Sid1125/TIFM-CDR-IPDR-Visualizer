@@ -215,6 +215,22 @@ a{color:var(--accent);text-decoration:none}
 .twr-link{color:var(--accent);cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
 .twr-link:hover{text-decoration:underline solid;filter:brightness(1.15)}
 
+/* Cross-case linking: jump-to-other-case chips (profile) + dashboard hits panel */
+.case-link{display:inline-block;padding:3px 9px;border-radius:5px;background:var(--accent-light);color:var(--accent);cursor:pointer;border:1px solid transparent;font-size:0.72rem;text-decoration:underline dotted;text-underline-offset:2px}
+.case-link:hover{filter:brightness(1.1);border-color:var(--accent)}
+.case-link.low{background:transparent;color:var(--muted);border:1px dashed var(--line)}
+.case-link.low:hover{color:var(--warn);border-color:var(--warn)}
+.xcase-panel .xcase-head{display:flex;align-items:baseline;gap:10px;padding:9px 16px;background:var(--accent-light);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.xcase-panel .xcase-title{font-weight:700;font-size:0.82rem;color:var(--danger)}
+.xcase-panel .xcase-sub2{font-size:0.72rem;color:var(--muted)}
+.xcase-list{max-height:200px;overflow-y:auto}
+.xcase-row{display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--line);cursor:pointer;font-size:0.78rem}
+.xcase-row:last-child{border-bottom:none}
+.xcase-row:hover{background:var(--accent-light)}
+.xcase-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.xcase-sub{font-weight:600;color:var(--text)}
+.xcase-meta{color:var(--muted);font-size:0.72rem}
+
 /* AI INSIGHTS TAB */
 /* ---- AI Insights Tab ---- */
 .ai-toolbar{display:flex;gap:6px;padding:4px 0;flex-shrink:0}

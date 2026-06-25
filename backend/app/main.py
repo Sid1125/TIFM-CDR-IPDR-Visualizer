@@ -19,6 +19,7 @@ from app.api.upload import router as upload_router
 from app.api.towers import router as towers_router
 from app.api.annotations import router as annotations_router
 from app.api.cases import router as cases_router
+from app.api.cross_case import router as cross_case_router
 from app.api.ai import router as ai_router
 from app.core.config import settings
 from app.core.database import Base
@@ -97,5 +98,6 @@ app.include_router(timeline_router, prefix="/timeline", tags=["Timeline"], depen
 app.include_router(stats_router, prefix="/stats", tags=["Statistics"], dependencies=[Depends(get_current_user)])
 app.include_router(annotations_router, prefix="/annotations", tags=["Annotations"], dependencies=[Depends(get_current_user)])
 app.include_router(cases_router, prefix="/cases", tags=["Cases"], dependencies=[Depends(get_current_user)])
+app.include_router(cross_case_router, prefix="/cross-case", tags=["Cross-case"], dependencies=[Depends(get_current_user)])
 app.include_router(ai_router, prefix="/ai", tags=["AI"], dependencies=[Depends(get_current_user)])
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
