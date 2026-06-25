@@ -908,10 +908,12 @@ function recPortFamily(r){
 // parallel sessions instead of fragmenting, and each track splits on a family-adaptive
 // idle gap rather than one fixed threshold.
 function reconstructSessions(entity){
-  // IPDR rows identify the subject by msisdn; sub/cnt hold the source/destination IPs.
-  // Matching on msisdn (or an IP entity) is required — filtering by sub/cnt alone never
-  // matches a phone-number subject, which silently produced zero sessions.
-  const ipdrs=allRows.filter(r=>r.type==='IPDR'&&(r.msisdn===entity||r.sub===entity||r.cnt===entity)).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  // IPDR data sessions belong to IP subjects (source/destination IP), not to phone numbers —
+  // CDR/IPDR are kept strictly separate, so a phone (CDR) subject is voice/SMS only and has no
+  // data sessions of its own. Match the entity only as a source/destination IP; do NOT join
+  // via msisdn (that pulled a subscriber's IPDR data into their CDR-phone timeline and showed
+  // IPDR services where only voice should appear, and double-counted sessions).
+  const ipdrs=allRows.filter(r=>r.type==='IPDR'&&(r.sub===entity||r.cnt===entity)).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
   if(!ipdrs.length)return[];
   const open={};const sessions=[];
   const flush=k=>{const o=open[k];if(o&&o.recs.length){const cls=classifySession(o.recs);if(cls)sessions.push(cls)}delete open[k]};
