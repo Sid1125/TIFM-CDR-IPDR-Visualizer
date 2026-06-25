@@ -25,6 +25,7 @@ const D={
   darkModeBtn:$('darkModeBtn'),exportBtn:$('exportBtn'),caseSelector:$('caseSelector'),
   svcSearchInput:$('svcSearchInput'),svcMinConf:$('svcMinConf'),svcCount:$('svcCount'),svcBursts:$('svcBursts'),svcCardGrid:$('svcCardGrid'),
   corrSubA:$('corrSubA'),corrSubB:$('corrSubB'),corrGoBtn:$('corrGoBtn'),corrSwapBtn:$('corrSwapBtn'),corrResults:$('corrResults'),
+  crossCaseTab:$('crossCaseTab'),xcRefreshBtn:$('xcRefreshBtn'),
   csGrid:$('csGrid'),csMeta:$('csMeta'),csBody:$('csBody'),
   cpStartA:$('cpStartA'),cpEndA:$('cpEndA'),cpStartB:$('cpStartB'),cpEndB:$('cpEndB'),cpGoBtn:$('cpGoBtn'),cpCloseBtn:$('cpCloseBtn'),cpStatus:$('cpStatus'),cpResults:$('cpResults'),compareBar:$('compareBar'),
 };
@@ -997,6 +998,7 @@ function switchTab(tab){
   if(tab==='charts')renderCharts();
   if(tab==='services')renderServicesTab();
   if(tab==='correlation')renderCorrelationTab();
+  if(tab==='crosscase')renderCrossCaseTab();
   if(tab==='inferences')renderInferences();
   if(tab==='records')renderRecords();
   if(tab==='ai')renderAiInsights();
@@ -1610,6 +1612,89 @@ async function openInCase(caseId,sub){
   await loadCases();
   if(sub)showProfile(sub);
 }
+
+// ---- Cross-Case tab (full dossier) ----
+function _xcBadge(t){
+  const map={number:['#2c6f79','number'],imei:['#8b5cf6','IMEI'],imsi:['#3a7d5a','IMSI'],ip:['#d4a017','IP']};
+  const m=map[t]||['#6b7280',t];
+  return '<span class="xc-badge" style="background:'+m[0]+'">'+m[1]+'</span>';
+}
+async function renderCrossCaseTab(){
+  const el=D.crossCaseTab;if(!el)return;
+  if(!activeCaseId){el.innerHTML='<div class="xc-empty">No case selected.</div>';return;}
+  el.innerHTML='<div class="xc-empty">Analysing cross-case links…</div>';
+  try{
+    const rep=await API.get('/cross-case/report?case_id='+encodeURIComponent(activeCaseId));
+    renderCrossCaseReport(rep);
+  }catch(e){el.innerHTML='<div class="xc-empty" style="color:var(--danger)">Failed to load cross-case report: '+esc(e.message||String(e))+'</div>';}
+}
+function renderCrossCaseReport(rep){
+  const el=D.crossCaseTab;if(!el)return;
+  const s=(rep&&rep.summary)||{};const cur=(rep&&rep.current_case)||{};
+  if(!s.recurring_subjects){
+    el.innerHTML='<div class="xc-empty"><div style="font-size:1.3rem;margin-bottom:8px;color:var(--text)">No cross-case links</div>'
+      +'<div>None of <b>'+esc(cur.name||'this case')+'</b>&rsquo;s subjects appear in any other loaded case.</div>'
+      +'<div style="margin-top:6px;color:var(--muted);font-size:0.8rem;max-width:520px">As more cases are loaded, prior occurrences of these subjects &mdash; matched by phone number, handset IMEI, SIM IMSI, or IP &mdash; will surface here.</div></div>';
+    return;
+  }
+  const mt=s.by_match_type||{};
+  const stats=[
+    {l:'Recurring subjects',v:s.recurring_subjects,d:'from this case seen elsewhere'},
+    {l:'Linked cases',v:s.linked_cases,d:'other cases involved'},
+    {l:'High-confidence',v:s.high_confidence,d:'number / handset / SIM',cls:'ok'},
+    {l:'Low-confidence',v:s.low_confidence,d:'IP only — verify timeframe',cls:'warn'},
+    {l:'Link pairs',v:s.link_pairs,d:'subject ↔ case connections'},
+  ];
+  let h='<div class="xc-report">';
+  h+='<div class="xc-head"><b>'+esc(cur.name||'')+'</b> cross-referenced against all other loaded cases'
+     +(s.truncated?' <span class="xc-warn-tag">top '+s.recurring_subjects+' subjects shown</span>':'')+'</div>';
+  h+='<div class="xc-stats">'+stats.map(c=>'<div class="xc-stat '+(c.cls||'')+'"><div class="xc-stat-v">'+c.v+'</div><div class="xc-stat-l">'+esc(c.l)+'</div><div class="xc-stat-d">'+esc(c.d)+'</div></div>').join('')+'</div>';
+  h+='<div class="xc-mix">Strongest link per subject: &nbsp;'
+     +['number','imei','imsi','ip'].map(t=>mt[t]?_xcBadge(t)+' <b>'+mt[t]+'</b>':'').filter(Boolean).join(' &nbsp;&middot;&nbsp; ')+'</div>';
+
+  h+='<h4 class="xc-sec">Linked cases ('+rep.by_case.length+')</h4>';
+  rep.by_case.forEach(c=>{
+    h+='<div class="xc-case-card"><div class="xc-case-head">'
+      +'<span class="xc-case-name">'+esc(c.case_name)+'</span>'
+      +'<span class="xc-case-meta">'+c.shared_subject_count+' shared subject'+(c.shared_subject_count===1?'':'s')
+      +' &middot; '+c.high_count+' high'+(c.low_count?' / '+c.low_count+' low':'')+'</span>'
+      +'<button class="case-link" onclick="openInCase(\''+esc(c.case_id)+'\',\'\')">Open case &rarr;</button></div>';
+    h+='<div class="xc-case-subs">'+c.subjects.map(su=>{
+      const conf=su.confidence==='high'?'var(--success)':'var(--warn)';
+      const badges=(su.match_types||[su.match_type]).map(_xcBadge).join('');
+      return '<div class="xc-case-sub" onclick="openInCase(\''+esc(c.case_id)+'\',\''+esc(su.subject)+'\')" title="Open '+esc(su.subject)+' in '+esc(c.case_name)+'">'
+        +'<span class="xc-dot" style="background:'+conf+'"></span>'
+        +'<span class="xc-sub-id">'+esc(su.subject)+'</span>'+badges
+        +(su.role==='counterpart'?'<span class="xc-role">counterpart</span>':'')
+        +'<span class="xc-sub-meta">'+su.record_count+' rec &middot; '+(su.first_seen?fmtd(su.first_seen):'?')+(su.last_seen?' → '+fmtd(su.last_seen):'')+'</span></div>';
+    }).join('')+'</div></div>';
+  });
+
+  h+='<h4 class="xc-sec">Recurring subjects ('+rep.subjects.length+')</h4>';
+  rep.subjects.forEach(su=>{
+    const conf=su.confidence==='high'?'var(--success)':'var(--warn)';
+    h+='<div class="xc-subj"><div class="xc-subj-head" onclick="this.parentNode.classList.toggle(\'open\')">'
+      +'<span class="xc-arrow">&#9656;</span>'
+      +'<span class="xc-dot" style="background:'+conf+'"></span>'
+      +'<span class="xc-sub-id" onclick="event.stopPropagation();showProfile(\''+esc(su.subject)+'\')" title="Open profile">'+esc(su.subject)+'</span>'
+      +'<span class="xc-kind">'+(su.kind==='ip'?'IP':'phone')+'</span>'
+      +_xcBadge(su.strongest_match)
+      +'<span class="xc-sub-meta">seen in '+su.other_case_count+' other case'+(su.other_case_count===1?'':'s')+'</span></div>';
+    h+='<div class="xc-subj-body">'+su.matches.map(m=>{
+      const mc=m.confidence==='high'?'var(--success)':'var(--warn)';
+      const badges=(m.match_types||[m.match_type]).map(_xcBadge).join('');
+      const vals=(m.matched_values&&m.matched_values.length)?'<span class="xc-vals">matched: '+m.matched_values.map(esc).join(', ')+'</span>':'';
+      return '<div class="xc-match">'
+        +'<span class="case-link'+(m.confidence==='low'?' low':'')+'" onclick="openInCase(\''+esc(m.case_id)+'\',\''+esc(su.subject)+'\')">'+esc(m.case_name)+' &rarr;</span>'
+        +badges+'<span class="xc-conf" style="color:'+mc+'">'+m.confidence+'</span>'
+        +(m.role==='counterpart'?'<span class="xc-role">counterpart</span>':'')
+        +'<span class="xc-sub-meta">'+m.record_count+' rec &middot; '+(m.first_seen?fmtd(m.first_seen):'?')+(m.last_seen?' → '+fmtd(m.last_seen):'')+'</span>'+vals+'</div>';
+    }).join('')+'</div></div>';
+  });
+  h+='</div>';
+  el.innerHTML=h;
+}
+if(D.xcRefreshBtn)D.xcRefreshBtn.addEventListener('click',renderCrossCaseTab);
 
 let geoRecords=[],geoSubjects=[];
 async function loadGeoData(){

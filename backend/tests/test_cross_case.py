@@ -17,6 +17,7 @@ from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower  # noqa: F401
 from app.services.cross_case_service import case_cross_case_overview
+from app.services.cross_case_service import case_cross_case_report
 from app.services.cross_case_service import subject_cross_case
 
 
@@ -125,6 +126,35 @@ class CrossCaseTests(unittest.TestCase):
         names = {m["case_name"] for m in r["matches"]}
         self.assertIn("Case Bravo", names)
         self.assertIn("Case Charlie", names)
+        db.close()
+
+    def test_report_aggregates_summary_and_rollups(self):
+        db = self._db()
+        rep = case_cross_case_report(db, case_id="1")
+        self.assertEqual(rep["current_case"]["name"], "Case Alpha")
+        s = rep["summary"]
+        # subjects A (number/device) and IP 10.0.0.5 recur; B does not
+        self.assertEqual(s["recurring_subjects"], 2)
+        self.assertEqual(s["linked_cases"], 2)          # Bravo + Charlie
+        self.assertEqual(s["high_confidence"], 1)       # A
+        self.assertEqual(s["low_confidence"], 1)        # the IP
+        # per-case rollup carries the shared subjects
+        by_case = {c["case_name"]: c for c in rep["by_case"]}
+        self.assertIn("Case Bravo", by_case)
+        self.assertTrue(any(su["subject"] == "A" for su in by_case["Case Bravo"]["subjects"]))
+        # per-subject detail preserved
+        subj = {x["subject"]: x for x in rep["subjects"]}
+        self.assertIn("A", subj)
+        self.assertEqual(subj["A"]["strongest_match"], "number")
+        db.close()
+
+    def test_report_empty_when_no_links(self):
+        db = self._db()
+        # a fresh case with an isolated-only subject would have no recurring subjects; here case 2
+        # links back to 1, but verify the no-link shape via a subject-less guard
+        rep = case_cross_case_report(db, case_id="")
+        self.assertEqual(rep["summary"]["recurring_subjects"], 0)
+        self.assertEqual(rep["by_case"], [])
         db.close()
 
 

@@ -373,3 +373,85 @@ def case_cross_case_overview(db: Session, case_id: str, limit: int = 100) -> dic
     total = len(hits)
     hits.sort(key=lambda h: (h["other_case_count"], h["confidence"] == "high", h["subject"]), reverse=True)
     return {"hits": hits[:limit], "total": total}
+
+
+# ---------------------------------------------------------------------------
+# Full report (dedicated Cross-Case tab)
+# ---------------------------------------------------------------------------
+def case_cross_case_report(db: Session, case_id: str, limit: int = 200) -> dict:
+    """A comprehensive cross-case dossier for the current case: every recurring subject expanded
+    to its full per-case match detail, plus a per-linked-case rollup and headline summary. Powers
+    the Cross-Case tab. Bounded to `limit` recurring subjects (flagged `truncated` if exceeded)."""
+    cur_name = _case_names(db, [case_id]).get(case_id, f"Case {case_id}") if case_id else ""
+    empty = {
+        "current_case": {"id": case_id, "name": cur_name},
+        "summary": {"recurring_subjects": 0, "linked_cases": 0, "high_confidence": 0,
+                    "low_confidence": 0, "by_match_type": {"number": 0, "imei": 0, "imsi": 0, "ip": 0},
+                    "link_pairs": 0, "truncated": False},
+        "by_case": [], "subjects": [],
+    }
+    if not case_id:
+        return empty
+
+    ov = case_cross_case_overview(db, case_id, limit=limit)
+    hits = ov["hits"]
+    if not hits:
+        return empty
+
+    subjects = []
+    by_case: dict = {}
+    by_mt = {"number": 0, "imei": 0, "imsi": 0, "ip": 0}
+    linked_cases: set = set()
+    link_pairs = 0
+    high = low = 0
+
+    for h in hits:
+        detail = subject_cross_case(db, case_id, h["subject"])
+        matches = detail["matches"]
+        if not matches:
+            continue
+        all_types: set = set()
+        for m in matches:
+            all_types.update(m.get("match_types") or [m["match_type"]])
+        strongest = sorted(all_types, key=lambda t: _TYPE_PRIORITY.get(t, 9))[0]
+        conf = "high" if any(m["confidence"] == "high" for m in matches) else "low"
+        by_mt[strongest] = by_mt.get(strongest, 0) + 1
+        if conf == "high":
+            high += 1
+        else:
+            low += 1
+        subjects.append({
+            "subject": h["subject"], "kind": detail["kind"], "confidence": conf,
+            "strongest_match": strongest, "other_case_count": len(matches), "matches": matches,
+        })
+        for m in matches:
+            linked_cases.add(m["case_id"])
+            link_pairs += 1
+            bc = by_case.setdefault(m["case_id"], {
+                "case_id": m["case_id"], "case_name": m["case_name"],
+                "subjects": [], "high_count": 0, "low_count": 0})
+            bc["subjects"].append({
+                "subject": h["subject"], "kind": detail["kind"], "match_type": m["match_type"],
+                "match_types": m["match_types"], "confidence": m["confidence"], "role": m["role"],
+                "record_count": m["record_count"], "first_seen": m["first_seen"],
+                "last_seen": m["last_seen"], "matched_values": m["matched_values"],
+            })
+            if m["confidence"] == "high":
+                bc["high_count"] += 1
+            else:
+                bc["low_count"] += 1
+
+    by_case_list = sorted(by_case.values(), key=lambda c: len(c["subjects"]), reverse=True)
+    for c in by_case_list:
+        c["shared_subject_count"] = len(c["subjects"])
+        c["subjects"].sort(key=lambda s: (s["confidence"] == "high", s["record_count"] or 0), reverse=True)
+
+    return {
+        "current_case": {"id": case_id, "name": cur_name},
+        "summary": {
+            "recurring_subjects": len(subjects), "linked_cases": len(linked_cases),
+            "high_confidence": high, "low_confidence": low, "by_match_type": by_mt,
+            "link_pairs": link_pairs, "truncated": ov["total"] > len(hits),
+        },
+        "by_case": by_case_list, "subjects": subjects,
+    }

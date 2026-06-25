@@ -47,6 +47,7 @@
       <button class="topbar-tab" data-tab="charts">Charts</button>
       <button class="topbar-tab" data-tab="services">Services</button>
       <button class="topbar-tab" data-tab="correlation">Correlation</button>
+      <button class="topbar-tab" data-tab="crosscase">Cross-Case</button>
       <button class="topbar-tab" data-tab="inferences">Inferences</button>
       <button class="topbar-tab" data-tab="records">Records</button>
       <button class="topbar-tab" data-tab="ai">AI Insights</button>
@@ -234,6 +235,17 @@
     </div>
     <div id="corrResults" class="corr-results" style="flex:1;overflow:auto">
       <div style="padding:40px;text-align:center;color:var(--muted)">Select two subjects and click Compare.</div>
+    </div>
+  </section>
+
+  <!-- CROSS-CASE TAB -->
+  <section id="tab-crosscase" class="tab-content">
+    <div class="xc-toolbar">
+      <h3 style="margin:0;flex:1">Cross-Case Subject Linking</h3>
+      <button id="xcRefreshBtn" class="btn-sm" title="Recompute">&#8635; Refresh</button>
+    </div>
+    <div id="crossCaseTab" class="xc-wrap" style="flex:1;overflow:auto">
+      <div class="xc-empty">Open a case to see which of its subjects appear in other cases.</div>
     </div>
   </section>
 

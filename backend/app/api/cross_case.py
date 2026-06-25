@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services.cross_case_service import case_cross_case_overview
+from app.services.cross_case_service import case_cross_case_report
 from app.services.cross_case_service import subject_cross_case
 
 router = APIRouter()
@@ -32,3 +33,14 @@ def case_overview(
     """This case's subjects that also appear in other cases — the dashboard 'Cross-case hits'
     panel so prior history is visible the moment the case is opened."""
     return case_cross_case_overview(db, case_id=case_id, limit=limit)
+
+
+@router.get("/report")
+def case_report(
+    db: Session = Depends(get_db),
+    case_id: str = Query(...),
+    limit: int = Query(default=200, ge=1, le=1000),
+):
+    """Full cross-case dossier for the dedicated Cross-Case tab: every recurring subject with its
+    per-case match detail, a per-linked-case rollup, and headline summary."""
+    return case_cross_case_report(db, case_id=case_id, limit=limit)
