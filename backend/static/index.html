@@ -42,6 +42,7 @@
       <select id="caseSelector" style="padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);font-size:0.78rem;margin-right:12px;max-width:180px"><option value="">No case</option></select>
       <button class="topbar-tab active" data-tab="dashboard">Dashboard</button>
       <button class="topbar-tab" data-tab="story">Story</button>
+      <button class="topbar-tab" data-tab="evidence">Evidence <span id="evidenceTabCount" class="tab-badge">0</span></button>
       <button class="topbar-tab" data-tab="graph">Network Graph</button>
       <button class="topbar-tab" data-tab="map">Tower Map</button>
       <button class="topbar-tab" data-tab="timeline">Timeline</button>
@@ -273,6 +274,11 @@
     </div>
   </section>
 
+  <!-- EVIDENCE TAB -->
+  <section id="tab-evidence" class="tab-content">
+    <div id="evidenceTab" class="evt-wrap"></div>
+  </section>
+
   <!-- CROSS-CASE TAB -->
   <section id="tab-crosscase" class="tab-content">
     <div class="xc-toolbar">
@@ -281,6 +287,7 @@
         <button id="xcViewList" class="btn-sm active" data-view="list">List</button>
         <button id="xcViewGraph" class="btn-sm" data-view="graph">Graph</button>
       </div>
+      <button id="xcGraphCaptureBtn" class="btn-sm" title="Capture the link graph into the evidence folder" style="display:none">&#9733; Pin graph</button>
       <button id="xcRefreshBtn" class="btn-sm" title="Recompute">&#8635; Refresh</button>
     </div>
     <div id="crossCaseTab" class="xc-wrap" style="flex:1;overflow:auto">

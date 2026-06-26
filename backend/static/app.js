@@ -31,6 +31,7 @@ const D={
   xcViewList:$('xcViewList'),xcViewGraph:$('xcViewGraph'),crossCaseGraph:$('crossCaseGraph'),xcGraphSvg:$('xcGraphSvg'),xcGraphDetails:$('xcGraphDetails'),xcGraphStats:$('xcGraphStats'),
   storySubject:$('storySubject'),storyFilters:$('storyFilters'),storyNarrative:$('storyNarrative'),storyTimeline:$('storyTimeline'),storyRefreshBtn:$('storyRefreshBtn'),
   evidenceToggleBtn:$('evidenceToggleBtn'),evidenceCount:$('evidenceCount'),evidencePanel:$('evidencePanel'),evidenceList:$('evidenceList'),evidenceClearBtn:$('evidenceClearBtn'),
+  evidenceTab:$('evidenceTab'),evidenceTabCount:$('evidenceTabCount'),xcGraphCaptureBtn:$('xcGraphCaptureBtn'),
   towerRepo:$('towerRepo'),trSearch:$('trSearch'),trImportBtn:$('trImportBtn'),trImportFile:$('trImportFile'),trRefreshBtn:$('trRefreshBtn'),trRebuildBtn:$('trRebuildBtn'),trGeocodeBtn:$('trGeocodeBtn'),
   csGrid:$('csGrid'),csMeta:$('csMeta'),csBody:$('csBody'),
   cpStartA:$('cpStartA'),cpEndA:$('cpEndA'),cpStartB:$('cpStartB'),cpEndB:$('cpEndB'),cpGoBtn:$('cpGoBtn'),cpCloseBtn:$('cpCloseBtn'),cpStatus:$('cpStatus'),cpResults:$('cpResults'),compareBar:$('compareBar'),
@@ -172,6 +173,7 @@ async function loadCaseData(){
     // Charts and Records are already re-rendered just above, so only refresh the others.
     if(state.tab&&!['dashboard','charts','records'].includes(state.tab))switchTab(state.tab);
     if(activeCaseId){const cn=(state.cases||[]).find(c=>String(c.id)===String(activeCaseId));auditView('view_case',{case_id:activeCaseId,case_name:cn?cn.name:null});}
+    try{updateEvidenceCount();}catch(e){}
   }catch(e){console.error(e)}
 }
 function nCdr(r){
@@ -1007,6 +1009,7 @@ function switchTab(tab){
   if(tab==='services')renderServicesTab();
   if(tab==='correlation')renderCorrelationTab();
   if(tab==='story')renderStory();
+  if(tab==='evidence')renderEvidenceTab();
   if(tab==='crosscase'){xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();}
   if(tab==='inferences')renderInferences();
   if(tab==='records')renderRecords();
@@ -1837,10 +1840,12 @@ function setXcView(v){
   if(D.xcViewGraph)D.xcViewGraph.classList.toggle('active',v==='graph');
   if(D.crossCaseTab)D.crossCaseTab.style.display=v==='list'?'':'none';
   if(D.crossCaseGraph)D.crossCaseGraph.style.display=v==='graph'?'flex':'none';
+  if(D.xcGraphCaptureBtn)D.xcGraphCaptureBtn.style.display=v==='graph'?'':'none';
   if(v==='graph')renderCrossCaseGraph();else renderCrossCaseTab();
 }
 if(D.xcViewList)D.xcViewList.addEventListener('click',()=>setXcView('list'));
 if(D.xcViewGraph)D.xcViewGraph.addEventListener('click',()=>setXcView('graph'));
+if(D.xcGraphCaptureBtn)D.xcGraphCaptureBtn.addEventListener('click',()=>captureSvgToEvidence(D.xcGraphSvg,'Cross-case link graph'));
 
 let xcGraphSim=null;
 async function renderCrossCaseGraph(){
@@ -1914,6 +1919,9 @@ const EVK={
   identity:{c:'#8b5cf6',g:'↻',l:'Identity change'},
   crosscase:{c:'#d4a017',g:'⇌',l:'Cross-case'},
   ai:{c:'#c0392b',g:'⚠',l:'AI finding'},
+  chart:{c:'#2c6f79',g:'▦',l:'Chart snapshot'},
+  graph:{c:'#7b4f9c',g:'◈',l:'Graph snapshot'},
+  note:{c:'#888',g:'●',l:'Note'},
 };
 let _storyEvents=[],_storyKinds=null,_storyXcaseCache={};
 function _fmtDT(v){try{return new Date(v).toLocaleString([], {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return String(v)}}
@@ -2071,32 +2079,92 @@ function renderStoryTimeline(){
 function evKey(){return 'argus_evidence_'+(activeCaseId||'none')}
 function evLoad(){try{return JSON.parse(localStorage.getItem(evKey())||'[]')}catch(e){return[]}}
 function evSave(list){try{localStorage.setItem(evKey(),JSON.stringify(list))}catch(e){}}
-function updateEvidenceCount(){if(D.evidenceCount)D.evidenceCount.textContent=evLoad().length;}
+function updateEvidenceCount(){const c=evLoad().length;if(D.evidenceCount)D.evidenceCount.textContent=c;if(D.evidenceTabCount){D.evidenceTabCount.textContent=c;D.evidenceTabCount.style.display=c?'':'none';}}
 function pinEvidence(item){
   const list=evLoad();const sig=item.sig||(item.kind+'|'+item.label);
   if(list.some(x=>x.sig===sig))return false;
-  list.push({id:'ev_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),sig,addedAt:new Date().toISOString(),kind:item.kind||'note',label:item.label||'',detail:item.detail||'',ts:item.ts?new Date(item.ts).toISOString():null,subject:item.subject||null});
-  evSave(list);updateEvidenceCount();renderEvidence();return true;
+  list.push({id:'ev_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),sig,addedAt:new Date().toISOString(),kind:item.kind||'note',label:item.label||'',detail:item.detail||'',ts:item.ts?new Date(item.ts).toISOString():null,subject:item.subject||null,image:item.image||null});
+  evSave(list);updateEvidenceCount();renderEvidence();if(state.tab==='evidence')renderEvidenceTab();return true;
 }
-function unpinEvidence(id){evSave(evLoad().filter(x=>x.id!==id));updateEvidenceCount();renderEvidence();renderStoryTimeline();}
+function unpinEvidence(id){evSave(evLoad().filter(x=>x.id!==id));updateEvidenceCount();renderEvidence();if(typeof renderStoryTimeline==='function')renderStoryTimeline();}
 function unpinEvidenceBySig(sig){evSave(evLoad().filter(x=>x.sig!==sig));updateEvidenceCount();renderEvidence();}
 function renderEvidence(){
   if(!D.evidenceList)return;updateEvidenceCount();
   const list=evLoad();
-  if(!list.length){D.evidenceList.innerHTML='<div class="story-muted" style="padding:16px">Pin findings (☆) from the timeline to build an evidence folder. It is included in the dossier.</div>';return;}
+  if(!list.length){D.evidenceList.innerHTML='<div class="story-muted" style="padding:16px">Pin findings (☆) from the timeline, or capture chart/graph snapshots, to build an evidence folder. It feeds the Evidence tab and the dossier.</div>';return;}
   D.evidenceList.innerHTML=list.slice().reverse().map(it=>{const m=EVK[it.kind]||{c:'#888',g:'●',l:it.kind};
     return '<div class="evidence-item" style="--ec:'+m.c+'"><div class="evidence-item-h"><span class="story-ev-dot">'+m.g+'</span><b>'+esc(it.label)+'</b>'
       +'<button class="evidence-rm" data-id="'+it.id+'" title="Remove">&times;</button></div>'
       +(it.detail?'<div class="story-ev-detail">'+esc(it.detail)+'</div>':'')
+      +(it.image?'<img class="evidence-thumb" src="'+it.image+'">':'')
       +'<div class="evidence-meta">'+(it.ts?_fmtDT(it.ts)+' · ':'')+(it.subject?esc(it.subject)+' · ':'')+'pinned '+_fmtDT(it.addedAt)+'</div></div>';
   }).join('');
   D.evidenceList.querySelectorAll('.evidence-rm').forEach(b=>b.onclick=()=>unpinEvidence(b.dataset.id));
 }
 
+// ---- Snapshot capture → evidence ----
+function toast(msg){let t=document.getElementById('argusToast');if(!t){t=document.createElement('div');t.id='argusToast';t.className='argus-toast';document.body.appendChild(t);}t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
+function _flashPinned(msg){updateEvidenceCount();renderEvidence();toast(msg||'Pinned to evidence.');}
+function captureCanvasToEvidence(cv,title){
+  try{if(!cv||cv.tagName!=='CANVAS'){alert('No chart to capture.');return;}
+    const url=cv.toDataURL('image/png');if(!url||url.length<2000){alert('Nothing to capture yet — render the chart first.');return;}
+    pinEvidence({kind:'chart',label:title||'Chart',detail:'Chart snapshot · '+(activeCaseId?'case '+activeCaseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'chart|'+title+'|'+Date.now()});
+    _flashPinned('Pinned “'+title+'” to evidence.');
+  }catch(e){alert('Capture failed: '+(e.message||e));}
+}
+function captureSvgToEvidence(host,title){
+  const svg=host&&host.querySelector?host.querySelector('svg'):null;if(!svg){alert('No graph to capture — switch to the graph view first.');return;}
+  const w=Math.round(svg.clientWidth||host.clientWidth||800),hh=Math.round(svg.clientHeight||host.clientHeight||520);
+  const clone=svg.cloneNode(true);clone.setAttribute('width',w);clone.setAttribute('height',hh);clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  const xml=new XMLSerializer().serializeToString(clone);
+  const img=new Image();
+  img.onload=function(){try{const c=document.createElement('canvas');c.width=w;c.height=hh;const ctx=c.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,hh);ctx.drawImage(img,0,0);const url=c.toDataURL('image/png');
+      pinEvidence({kind:'graph',label:title||'Graph',detail:'Graph snapshot · '+(activeCaseId?'case '+activeCaseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'graph|'+title+'|'+Date.now()});
+      _flashPinned('Pinned “'+title+'” to evidence.');
+    }catch(e){alert('Capture failed: '+(e.message||e));}};
+  img.onerror=function(){alert('Capture failed (could not rasterize the graph).');};
+  img.src='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(xml)));
+}
+// Add a "★ Pin" capture control to each chart card (idempotent).
+function installChartCaptureButtons(){
+  document.querySelectorAll('#tab-charts .card').forEach(card=>{
+    const h=card.querySelector('h3');const cv=card.querySelector('canvas');
+    if(!h||!cv||h.querySelector('.cap-btn'))return;
+    const b=document.createElement('button');b.className='cap-btn';b.textContent='★ Pin';b.title='Capture this chart into the evidence folder';
+    b.onclick=()=>captureCanvasToEvidence(cv,h.textContent.replace(/[★\s]*Pin$/,'').trim());
+    h.appendChild(b);
+  });
+}
+
 if(D.storySubject)D.storySubject.addEventListener('change',renderStory);
 if(D.storyRefreshBtn)D.storyRefreshBtn.addEventListener('click',()=>{_storyXcaseCache={};_infReport=null;renderStory();});
 if(D.evidenceToggleBtn)D.evidenceToggleBtn.addEventListener('click',()=>{const p=D.evidencePanel;p.style.display=p.style.display==='none'?'':'none';renderEvidence();});
-if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();renderStoryTimeline();}});
+if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();renderStoryTimeline();renderEvidenceTab();}});
+
+// ---- Dedicated Evidence tab (full view of everything saved) ----
+function renderEvidenceTab(){
+  const box=D.evidenceTab;if(!box)return;updateEvidenceCount();
+  const list=evLoad();
+  const head='<div class="evt-bar"><div><b>'+n(list.length)+'</b> saved item'+(list.length===1?'':'s')+(activeCaseId?' · case '+esc(activeCaseId):'')+'</div>'
+    +'<div style="flex:1"></div>'
+    +'<button class="btn-sm" id="evtDossierBtn">Open dossier</button>'
+    +'<button class="btn-sm" id="evtExportBtn">Export (.json)</button>'
+    +'<button class="btn-sm btn-danger" id="evtClearBtn">Clear all</button></div>';
+  if(!list.length){box.innerHTML=head+'<div class="evt-empty">No evidence saved for this case yet.<br><span class="story-muted">Pin findings (☆) on the <b>Story</b> tab, or use <b>★ Pin</b> on any chart, or capture the <b>Cross-Case</b> graph — they all collect here and flow into the court dossier.</span></div>';}
+  else{
+    box.innerHTML=head+'<div class="evt-grid">'+list.slice().reverse().map(it=>{const m=EVK[it.kind]||{c:'#888',g:'●',l:it.kind};
+      return '<div class="evt-card" style="--ec:'+m.c+'"><div class="evt-card-h"><span class="story-ev-dot">'+m.g+'</span><b>'+esc(it.label||'')+'</b><span class="evt-kind">'+esc(m.l)+'</span>'
+        +'<button class="evidence-rm" data-id="'+it.id+'" title="Remove">&times;</button></div>'
+        +(it.image?'<img class="evt-img" src="'+it.image+'">':'')
+        +(it.detail?'<div class="evt-detail">'+esc(it.detail)+'</div>':'')
+        +'<div class="evidence-meta">'+(it.subject?'Subject '+esc(it.subject)+' · ':'')+(it.ts?_fmtDT(it.ts)+' · ':'')+'pinned '+_fmtDT(it.addedAt)+'</div></div>';
+    }).join('')+'</div>';
+  }
+  box.querySelectorAll('.evidence-rm').forEach(b=>b.onclick=()=>{unpinEvidence(b.dataset.id);renderEvidenceTab();});
+  const cb=box.querySelector('#evtClearBtn');if(cb)cb.onclick=()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();renderEvidenceTab();renderStoryTimeline&&renderStoryTimeline();}};
+  const db=box.querySelector('#evtDossierBtn');if(db)db.onclick=()=>renderDossier();
+  const xb=box.querySelector('#evtExportBtn');if(xb)xb.onclick=()=>{const blob=new Blob([JSON.stringify(evLoad(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ARGUS_evidence_'+(activeCaseId||'case')+'.json';a.click();URL.revokeObjectURL(a.href);};
+}
 
 // ---- Tower Repository tab (permanent, case-independent master of all towers) ----
 async function renderTowerRepo(){
@@ -2865,6 +2933,7 @@ function renderCharts(){
   try{renderChartNewReturning()}catch(e){console.error('newReturning',e)}
   try{renderChartGeoState()}catch(e){console.error('geoState',e)}
   try{renderChartTowerDiversity()}catch(e){console.error('towerDiversity',e)}
+  try{installChartCaptureButtons()}catch(e){}
 }
 
 // ===== Behavioural & investigative charts (shared helpers) =====
@@ -5254,60 +5323,145 @@ async function renderDossier(){
       +'<div class="dc-class-bottom">'+CLASS+'</div>'
       +'</section>';
 
+    // ── Analytical inputs (case-specific) ──
+    const repC=(rep.cdr)||{},repI=(rep.ipdr)||{};
+    const riskMap={};(repC.risk||[]).forEach(r=>{riskMap[r.subject]={score:r.score,band:r.band,kind:'phone'}});(repI.risk||[]).forEach(r=>{if(!riskMap[r.subject])riskMap[r.subject]={score:r.score,band:r.band,kind:'ip'}});
+    // Persons of interest: risk-ranked, falling back to activity.
+    const poiList=subjects.slice().sort((a,b)=>((riskMap[b.s]?riskMap[b.s].score:0)-(riskMap[a.s]?riskMap[a.s].score:0))||(b.n-a.n)).slice(0,8);
+    // Case-only towers (distinct tower_ids appearing in THIS case's records) with activity counts.
+    const tm=towerMeta();const towCount={};allRows.forEach(r=>{if(r.tow)towCount[r.tow]=(towCount[r.tow]||0)+1;});
+    const caseTowers=Object.entries(towCount).map(([tw,c])=>({tw,c,city:(tm[tw]||{}).city,state:(tm[tw]||{}).state})).sort((a,b)=>b.c-a.c);
+    // Identity changes across subjects (SIM / handset swaps).
+    const idChanges=[];(state.subjects||[]).slice(0,400).forEach(s=>{try{(buildIdentityProfile(s).changes||[]).forEach(c=>idChanges.push({sub:s,time:c.time,detail:c.detail,from:c.from,to:c.to,confidence:c.confidence}))}catch(e){}});
+    idChanges.sort((a,b)=>new Date(a.time)-new Date(b.time));
+    const meetingsList=((_meetings&&_meetings.list)||[]).slice().sort((a,b)=>b.score-a.score);
+    const impossible=(repC.impossible_travel||[]);
+    const hidden=(repC.co_presence||[]).filter(p=>p.hidden_link||p.convoy);
+
     // ── Table of contents ──
     h+='<section class="dossier-section"><h2>Contents</h2><ol class="dossier-toc">'
-      +'<li>Executive Summary</li><li>Case Narrative</li><li>Subjects of Interest</li>'
-      +'<li>Communication Analysis</li><li>Cross-Case Links</li><li>Bookmarked Evidence</li>'
-      +'<li>Analytical Charts</li><li>Tower Index</li><li>Appendix A — Methodology &amp; Limitations</li></ol></section>';
+      +'<li>Executive Summary</li><li>Case Narrative</li><li>Persons of Interest</li>'
+      +'<li>Key Findings</li><li>Communication Analysis</li><li>Cross-Case Links</li>'
+      +'<li>Bookmarked Evidence</li><li>Analytical Charts</li><li>Towers in this Case</li>'
+      +'<li>Appendix A — Methodology &amp; Limitations</li></ol></section>';
 
     // ── 1. Executive summary ──
-    h+='<section class="dossier-section"><h2>1. Executive Summary</h2><table class="d-kv">'
+    const headline=[];
+    if(poi)headline.push(n(poi)+' person(s) of interest at High/Critical risk');
+    if(mt.total)headline.push(n(mt.total)+' co-location meeting(s)');
+    if(imposs)headline.push(n(imposs)+' impossible-travel flag(s)');
+    if(idChanges.length)headline.push(n(idChanges.length)+' identity change(s)');
+    if(xcount)headline.push(n(xcount)+' subject(s) linked to other cases');
+    if(hidden.length)headline.push(n(hidden.length)+' hidden link/convoy pattern(s)');
+    h+='<section class="dossier-section"><h2>1. Executive Summary</h2>'
+      +'<p class="d-app">This case comprises <b>'+n(allRows.length)+'</b> telecom records ('+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR) across <b>'+n(state.subjects.length)+'</b> subjects over <b>'+n(spanDays)+'</b> day(s) ('+esc(dr)+'). '
+      +(headline.length?'Automated analysis surfaced: '+headline.join('; ')+'.':'No high-severity anomalies were automatically flagged.')+'</p>'
+      +'<table class="d-kv">'
       +'<tr><td>Evidence window</td><td>'+esc(dr)+' ('+n(spanDays)+' day'+(spanDays===1?'':'s')+')</td></tr>'
-      +'<tr><td>Total records</td><td>'+n(allRows.length)+' — '+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR</td></tr>'
-      +'<tr><td>Distinct subjects</td><td>'+n(state.subjects.length)+'</td></tr>'
-      +'<tr><td>Persons of interest (High/Critical risk)</td><td>'+n(poi)+'</td></tr>'
-      +'<tr><td>Co-location meetings detected</td><td>'+n(mt.total||0)+'</td></tr>'
+      +'<tr><td>Records examined</td><td>'+n(allRows.length)+' — '+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR</td></tr>'
+      +'<tr><td>Distinct subjects / case towers</td><td>'+n(state.subjects.length)+' subjects · '+n(caseTowers.length)+' towers touched</td></tr>'
+      +'<tr><td>Persons of interest (High/Critical)</td><td>'+n(poi)+'</td></tr>'
+      +'<tr><td>Co-location meetings</td><td>'+n(mt.total||0)+'</td></tr>'
       +'<tr><td>Impossible-travel flags</td><td>'+n(imposs)+'</td></tr>'
+      +'<tr><td>Identity changes (SIM/handset)</td><td>'+n(idChanges.length)+'</td></tr>'
       +'<tr><td>Subjects linked to other cases</td><td>'+n(xcount)+'</td></tr>'
-      +'<tr><td>Items bookmarked as evidence</td><td>'+n(ev.length)+'</td></tr>'
+      +'<tr><td>Bookmarked evidence items</td><td>'+n(ev.length)+'</td></tr>'
       +'</table></section>';
 
     // ── 2. Case narrative ──
     let narr='';
     try{if(topSub){const evs=await buildCaseEvents(topSub);narr='<p class="d-narr-lead">Principal subject (by activity): <b>'+esc(topSub)+'</b>.</p>'+buildNarrative(topSub,evs);}else{narr=buildNarrative('__all__',[]);}}catch(e){narr='<div class="d-note">Narrative unavailable.</div>';}
     h+='<section class="dossier-section"><h2>2. Case Narrative</h2><div class="d-narr">'+narr+'</div>'
-      +'<div class="d-note">Auto-reconstructed from the chronological record (first appearance, identity changes, communications, movement, meetings, cross-case links and engine findings). See the Story tab for the full timeline.</div></section>';
+      +'<div class="d-note">Auto-reconstructed from the chronological record. See the Story tab for the full timeline and other subjects.</div></section>';
 
-    // ── 3. Subjects ──
-    h+='<section class="dossier-section"><h2>3. Subjects of Interest</h2>';
-    if(subjects.length){
-      h+='<table class="d-table"><thead><tr><th>#</th><th>Subject</th><th>Type</th><th>Records</th><th>Distinct contacts</th><th>Towers</th></tr></thead><tbody>'
-        +subjects.slice(0,40).map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(r.s)+'</td><td>'+esc(r.type)+'</td><td>'+n(r.n)+'</td><td>'+n(r.c)+'</td><td>'+n(r.t)+'</td></tr>').join('')
-        +'</tbody></table>'+(subjects.length>40?'<div class="d-note">Showing top 40 of '+n(subjects.length)+' subjects by record count.</div>':'');
+    // ── 3. Persons of interest (detailed) ──
+    h+='<section class="dossier-section"><h2>3. Persons of Interest</h2>';
+    if(poiList.length){
+      poiList.forEach((p,i)=>{
+        const sub=p.s;const rk=riskMap[sub];
+        const owned=allRows.filter(r=>r.ts&&(r.sub===sub||r.msisdn===sub));
+        const tms=rowsFor(sub).filter(r=>r.ts).map(r=>new Date(r.ts).getTime());
+        const fs=tms.length?new Date(Math.min(...tms)):null,ls=tms.length?new Date(Math.max(...tms)):null;
+        let idents=[],changes=[];try{const ip=buildIdentityProfile(sub);idents=ip.identities||[];changes=ip.changes||[];}catch(e){}
+        const cc={};owned.filter(r=>r.cnt&&r.cnt!==sub).forEach(r=>cc[r.cnt]=(cc[r.cnt]||0)+1);
+        const topc=Object.entries(cc).sort((a,b)=>b[1]-a[1]).slice(0,5);
+        const tc={};owned.forEach(r=>{if(r.tow)tc[r.tow]=(tc[r.tow]||0)+1});
+        const topt=Object.entries(tc).sort((a,b)=>b[1]-a[1]).slice(0,5);
+        const mts=meetingsList.filter(m=>m.subA===sub||m.subB===sub);
+        const xs=((xrep&&xrep.subjects)||[]).find(x=>x.subject===sub);
+        h+='<div class="d-poi"><div class="d-poi-h"><span class="d-poi-n">POI '+(i+1)+'</span> <b>'+esc(sub)+'</b> <span class="d-poi-type">'+esc(p.type)+'</span>'
+          +(rk?' <span class="d-poi-risk d-risk-'+esc((rk.band||'').toLowerCase())+'">Risk: '+esc(rk.band||'')+' ('+n(rk.score||0)+')</span>':'')+'</div>';
+        h+='<table class="d-kv">'
+          +'<tr><td>Activity</td><td>'+n(p.n)+' records · '+n(p.c)+' contacts · '+n(p.t)+' towers</td></tr>'
+          +'<tr><td>First / last seen</td><td>'+(fs?esc(_fmtDT(fs)):'—')+'  →  '+(ls?esc(_fmtDT(ls)):'—')+'</td></tr>';
+        if(idents.length)h+='<tr><td>Devices / SIMs</td><td>'+idents.slice(0,4).map(d=>'IMEI '+esc(d.imei||'—')+' / IMSI '+esc(d.imsi||'—')).join('<br>')+'</td></tr>';
+        if(topc.length)h+='<tr><td>Top contacts</td><td>'+topc.map(([c,k])=>esc(c)+' ('+n(k)+')').join(', ')+'</td></tr>';
+        if(topt.length)h+='<tr><td>Top towers</td><td>'+topt.map(([t,k])=>{const m=tm[t]||{};return esc(t)+(m.city?' — '+esc(m.city):'')+' ('+n(k)+')';}).join('<br>')+'</td></tr>';
+        if(changes.length)h+='<tr><td>Identity changes</td><td>'+changes.map(c=>esc(c.detail)+' on '+esc(_fmtDT(c.time))).join('<br>')+'</td></tr>';
+        if(mts.length)h+='<tr><td>Meetings</td><td>'+mts.slice(0,5).map(m=>{const o=m.subA===sub?m.subB:m.subA;return 'with '+esc(o)+' @ tower '+esc(m.tow||'?')+' ('+esc(_fmtDT(m.time))+', '+esc(m.gapLevel)+')';}).join('<br>')+(mts.length>5?'<br>… +'+(mts.length-5)+' more':'')+'</td></tr>';
+        if(xs)h+='<tr><td>Cross-case</td><td>also in '+(xs.matches||[]).map(mm=>esc(mm.case_name||mm.case_id)+' ('+((mm.match_types||[mm.match_type]).join('/'))+', '+esc(mm.confidence)+')').join('; ')+'</td></tr>';
+        h+='</table></div>';
+      });
+      if(subjects.length>poiList.length)h+='<div class="d-note">'+n(poiList.length)+' of '+n(subjects.length)+' subjects profiled (risk-ranked). Full subject list available in the platform.</div>';
     }else h+='<div class="d-note">No subjects.</div>';
     h+='</section>';
 
-    // ── 4. Communication analysis ──
-    h+='<section class="dossier-section"><h2>4. Communication Analysis</h2><h3 class="d-h3">Most frequent contacts</h3>';
+    // ── 4. Key findings ──
+    h+='<section class="dossier-section"><h2>4. Key Findings</h2>';
+    // 4.1 meetings
+    h+='<h3 class="d-h3">4.1 Co-location meetings ('+n(mt.total||meetingsList.length)+')</h3>';
+    if(meetingsList.length){
+      h+='<table class="d-table"><thead><tr><th>Subject A</th><th>Subject B</th><th>Tower</th><th>Place</th><th>Time</th><th>Gap</th><th>Confidence</th></tr></thead><tbody>'
+        +meetingsList.slice(0,25).map(m=>{const pl=tm[m.tow]||{};return '<tr><td>'+esc(m.subA)+'</td><td>'+esc(m.subB)+'</td><td>'+esc(m.tow||'?')+'</td><td>'+esc([pl.city,pl.state].filter(Boolean).join(', ')||'—')+'</td><td>'+esc(_fmtDT(m.time))+'</td><td>'+Math.round(m.gap)+'m</td><td>'+esc(m.gapLevel)+'</td></tr>';}).join('')
+        +'</tbody></table>'+(meetingsList.length>25?'<div class="d-note">Showing top 25 by confidence of '+n(mt.total||meetingsList.length)+'.</div>':'');
+    }else h+='<div class="d-note">No co-location meetings detected.</div>';
+    // 4.2 impossible travel
+    h+='<h3 class="d-h3">4.2 Impossible travel / possible cloning ('+n(impossible.length)+')</h3>';
+    if(impossible.length){
+      h+='<table class="d-table"><thead><tr><th>Subject</th><th>From → To tower</th><th>Distance</th><th>Elapsed</th><th>Implied speed</th></tr></thead><tbody>'
+        +impossible.slice(0,20).map(r=>'<tr><td>'+esc(r.subject||'—')+'</td><td>'+esc(r.from_tower||'?')+' → '+esc(r.to_tower||'?')+'</td><td>'+Math.round(r.distance_km||0)+' km</td><td>'+Math.round(r.dt_minutes||0)+' min</td><td>'+Math.round(r.speed_kmh||0)+' km/h</td></tr>').join('')
+        +'</tbody></table>';
+    }else h+='<div class="d-note">No impossible-travel legs flagged.</div>';
+    // 4.3 identity changes
+    h+='<h3 class="d-h3">4.3 Identity changes — SIM / handset swaps ('+n(idChanges.length)+')</h3>';
+    if(idChanges.length){
+      h+='<table class="d-table"><thead><tr><th>Subject</th><th>Change</th><th>From → To</th><th>When</th><th>Confidence</th></tr></thead><tbody>'
+        +idChanges.slice(0,25).map(c=>'<tr><td>'+esc(c.sub)+'</td><td>'+esc(c.detail)+'</td><td>'+esc(c.from||'—')+' → '+esc(c.to||'—')+'</td><td>'+esc(_fmtDT(c.time))+'</td><td>'+esc(c.confidence||'')+'</td></tr>').join('')
+        +'</tbody></table>'+(idChanges.length>25?'<div class="d-note">Showing 25 of '+n(idChanges.length)+'.</div>':'');
+    }else h+='<div class="d-note">No SIM/handset changes detected.</div>';
+    // 4.4 hidden links
+    h+='<h3 class="d-h3">4.4 Hidden links &amp; convoys ('+n(hidden.length)+')</h3>';
+    if(hidden.length){
+      h+='<table class="d-table"><thead><tr><th>Subject</th><th>Peer</th><th>Pattern</th></tr></thead><tbody>'
+        +hidden.slice(0,20).map(p=>'<tr><td>'+esc(p.subject||'—')+'</td><td>'+esc(p.peer||'—')+'</td><td>'+(p.hidden_link?'Hidden link':'')+(p.convoy?(p.hidden_link?' / convoy':'Convoy'):'')+'</td></tr>').join('')
+        +'</tbody></table>';
+    }else h+='<div class="d-note">No hidden-link or convoy patterns flagged.</div>';
+    h+='</section>';
+
+    // ── 5. Communication analysis ──
+    h+='<section class="dossier-section"><h2>5. Communication Analysis</h2><h3 class="d-h3">Most frequent contacts in this case</h3>';
     if(topCnt.length){
       h+='<table class="d-table"><thead><tr><th>#</th><th>Contact</th><th>Interactions</th></tr></thead><tbody>'
         +topCnt.map(([c,k],i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(c)+'</td><td>'+n(k)+'</td></tr>').join('')+'</tbody></table>';
     }else h+='<div class="d-note">None.</div>';
     h+='</section>';
 
-    // ── 5. Cross-case links ──
-    h+='<section class="dossier-section"><h2>5. Cross-Case Links</h2><div id="dossierXcase" class="d-note">Loading…</div></section>';
+    // ── 6. Cross-case links ──
+    h+='<section class="dossier-section"><h2>6. Cross-Case Links</h2><div id="dossierXcase" class="d-note">Loading…</div></section>';
 
-    // ── 6. Bookmarked evidence ──
-    h+='<section class="dossier-section"><h2>6. Bookmarked Evidence</h2>';
+    // ── 7. Bookmarked evidence (with screenshots) ──
+    h+='<section class="dossier-section"><h2>7. Bookmarked Evidence ('+n(ev.length)+')</h2>';
     if(ev.length){
-      h+='<table class="d-table"><thead><tr><th>#</th><th>Type</th><th>Finding</th><th>Detail</th><th>Subject</th><th>When</th></tr></thead><tbody>'
-        +ev.map((it,i)=>{const m=EVK[it.kind]||{l:it.kind};return '<tr><td>'+(i+1)+'</td><td>'+esc(m.l)+'</td><td>'+esc(it.label||'')+'</td><td>'+esc(it.detail||'')+'</td><td>'+esc(it.subject||'—')+'</td><td>'+(it.ts?esc(_fmtDT(it.ts)):'—')+'</td></tr>';}).join('')
-        +'</tbody></table>';
-    }else h+='<div class="d-note">No items have been bookmarked into the evidence folder. Pin findings (☆) on the Story tab to include them here.</div>';
+      h+=ev.map((it,i)=>{const m=EVK[it.kind]||{l:it.kind};
+        return '<div class="d-ev"><div class="d-ev-h"><span class="d-poi-n">E'+(i+1)+'</span> <b>'+esc(it.label||'')+'</b> <span class="d-poi-type">'+esc(m.l)+'</span></div>'
+        +(it.detail?'<div class="d-ev-d">'+esc(it.detail)+'</div>':'')
+        +'<div class="d-note">'+(it.subject?'Subject '+esc(it.subject)+' · ':'')+(it.ts?esc(_fmtDT(it.ts))+' · ':'')+'pinned '+esc(_fmtDT(it.addedAt))+'</div>'
+        +(it.image?'<figure class="d-fig"><img src="'+it.image+'"></figure>':'')+'</div>';
+      }).join('');
+    }else h+='<div class="d-note">No items bookmarked. Pin findings (☆) on the Story tab, or capture chart/graph snapshots, to include them here.</div>';
     h+='</section>';
 
-    // ── 7. Charts ──
+    // ── 8. Charts ──
     const chartList=[['chartDailyTrend','Daily activity trend'],['chartCdrIpdrTime','CDR vs IPDR over time'],['chartActiveSubjects','Most active subjects'],['chartNewReturning','New vs returning contacts'],['chartGeoState','Geographic spread by state'],['chartTowerDiversity','Tower diversity']];
     let chartsHtml='';
     chartList.forEach(([id,title])=>{
@@ -5316,16 +5470,15 @@ async function renderDossier(){
         try{const url=cv.toDataURL('image/png');if(url&&url.length>2000)chartsHtml+='<figure class="d-fig"><img src="'+url+'"><figcaption>'+esc(title)+'</figcaption></figure>';}catch(e){}
       }
     });
-    h+='<section class="dossier-section"><h2>7. Analytical Charts</h2>'+(chartsHtml||'<div class="d-note">No chart snapshots available — open the Charts tab once, then regenerate the dossier.</div>')+'</section>';
+    h+='<section class="dossier-section"><h2>8. Analytical Charts</h2>'+(chartsHtml||'<div class="d-note">No chart snapshots available — open the Charts tab once, then regenerate the dossier.</div>')+'</section>';
 
-    // ── 8. Tower index ──
-    const tows=(state.towers||[]).slice(0,60);
-    h+='<section class="dossier-section"><h2>8. Tower Index</h2>';
-    if(tows.length){
-      h+='<table class="d-table"><thead><tr><th>Tower ID</th><th>City</th><th>State</th><th>Latitude</th><th>Longitude</th></tr></thead><tbody>'
-        +tows.map(t=>'<tr><td>'+esc(t.tower_id)+'</td><td>'+esc(t.city||'—')+'</td><td>'+esc(t.state||'—')+'</td><td>'+(t.latitude!=null?esc(t.latitude):'—')+'</td><td>'+(t.longitude!=null?esc(t.longitude):'—')+'</td></tr>').join('')
-        +'</tbody></table>'+(state.towers.length>60?'<div class="d-note">Showing 60 of '+n(state.towers.length)+' towers.</div>':'');
-    }else h+='<div class="d-note">No towers.</div>';
+    // ── 9. Towers in this case (case-specific, with activity) ──
+    h+='<section class="dossier-section"><h2>9. Towers in this Case</h2>';
+    if(caseTowers.length){
+      h+='<table class="d-table"><thead><tr><th>#</th><th>Tower ID</th><th>City</th><th>State</th><th>Records at tower</th></tr></thead><tbody>'
+        +caseTowers.slice(0,80).map((t,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(t.tw)+'</td><td>'+esc(t.city||'—')+'</td><td>'+esc(t.state||'—')+'</td><td>'+n(t.c)+'</td></tr>').join('')
+        +'</tbody></table>'+(caseTowers.length>80?'<div class="d-note">Showing top 80 of '+n(caseTowers.length)+' towers touched by this case.</div>':'<div class="d-note">'+n(caseTowers.length)+' distinct tower(s) appear in this case&rsquo;s records.</div>');
+    }else h+='<div class="d-note">No tower references in this case&rsquo;s records.</div>';
     h+='</section>';
 
     // ── Appendix ──
