@@ -882,10 +882,16 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
   #dossier{display:block!important;position:static!important;overflow:visible!important;background:#fff}
   #dossier,#dossier *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   .no-print{display:none!important}
-  #dossierBody{max-width:none;margin:0;padding:0;box-shadow:none;font-size:11pt}
+  /* Margin lives on the element as real padding so it is ALWAYS honoured — even when the print
+     dialog's page margins are set to "None" (in which case @page is ignored). This is what keeps
+     body text off the paper edge and prevents right-edge clipping. */
+  #dossierBody{max-width:none;margin:0;padding:10mm 14mm;box-shadow:none;font-size:11pt;overflow-wrap:break-word;word-break:break-word}
   .dossier-section{page-break-inside:auto}
   .d-table,.d-fig,.dc-control,.d-poi,.d-ev{page-break-inside:avoid}
-  @page{margin:16mm;@bottom-center{content:"RESTRICTED — FOR OFFICIAL USE ONLY";font-family:Arial;font-size:8pt;color:#888}@bottom-right{content:"Page " counter(page) " of " counter(pages);font-family:Arial;font-size:8pt;color:#888}}
+  .d-table td,.d-table th{overflow-wrap:break-word}
+  /* @page margins add a little more breathing room + the footer where supported; content stays
+     safe even if the browser ignores these. */
+  @page{margin:8mm;@bottom-center{content:"RESTRICTED — FOR OFFICIAL USE ONLY";font-family:Arial;font-size:8pt;color:#888}@bottom-right{content:"Page " counter(page) " of " counter(pages);font-family:Arial;font-size:8pt;color:#888}}
 }
 
 /* ── Story / Narrative tab ── */
