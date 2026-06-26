@@ -1600,7 +1600,6 @@ async function renderGraph(){
 
   const link=g.append('g').selectAll('line').data(links).join('line').attr('stroke','#dccfc0').attr('stroke-width',d=>Math.max(0.5,Math.min(6,d.weight*0.5))).attr('stroke-opacity',0.6);
   const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))).style('fill',d=>d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'var(--accent)')).attr('stroke','#fff').attr('stroke-width',1.5).style('cursor','pointer')
-    .on('click',(e,d)=>{showProfile(d.id)})
     .on('mouseover',(e,d)=>{
       const deg=curCentrality?curCentrality.degree.find(x=>x[0]===d.id):null;
       D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>
@@ -1608,10 +1607,12 @@ async function renderGraph(){
         Connections (shown): ${links.filter(l=>(l.source.id||l.source)===d.id||(l.target.id||l.target)===d.id).length}<br>
         ${deg?`Degree: ${deg[1]}<br>`:''}<button class="btn btn-sm" onclick="showSubjectRecords('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">View Records</button>`
     })
-    .call(d3.drag().clickDistance(10)
-      .on('start',(e,d)=>{d.fx=d.x;d.fy=d.y})  // pin in place; do NOT heat the sim yet (so a click doesn't scatter nodes)
-      .on('drag',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=e.x;d.fy=e.y})  // heat only once an actual drag starts
-      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
+    // Open the profile from drag-end when the pointer didn't move — d3-drag swallows the native
+    // 'click', so we detect a click as a zero-movement gesture instead.
+    .call(d3.drag()
+      .on('start',(e,d)=>{d.fx=d.x;d.fy=d.y;d._sx=e.x;d._sy=e.y;d._moved=false})
+      .on('drag',(e,d)=>{d._moved=true;if(!e.active)sim.alphaTarget(0.3).restart();d.fx=e.x;d.fy=e.y})
+      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;const dx=e.x-(d._sx||0),dy=e.y-(d._sy||0);if(!d._moved||dx*dx+dy*dy<36)showProfile(d.id);}));
 
   const label=g.append('g').selectAll('text').data(nodes).join('text').text(d=>d.id.length>12?d.id.slice(0,12)+'...':d.id).attr('font-size','9').attr('dx',d=>Math.max(5,d.weight*0.2+5))   .attr('dy',3).attr('class','graph-label').style('pointer-events','none');
 
@@ -1896,11 +1897,10 @@ async function renderCrossCaseGraph(){
       if(d.type==='case')D.xcGraphDetails.innerHTML='<strong>Case: '+esc(d.label)+'</strong>'+(d.current?' <span style="color:var(--accent)">(current)</span>':'')+'<br>'+n(d.subject_count||0)+' shared subject(s)';
       else D.xcGraphDetails.innerHTML='<strong>'+esc(d.label)+'</strong> <span style="font-size:.65rem">'+(d.kind==='ip'?'IP':'phone')+'</span><br>'+_xcBadge(d.match_type)+' '+(d.confidence||'')+' &middot; in '+n(d.case_count||0)+' other case(s)';
     })
-    .on('click',(e,d)=>{if(d.type==='case'){const id=String(d.id).replace('case:','');if(!d.current)openInCase(id,'');}else{showProfile(d.label);}})
-    .call(d3.drag().clickDistance(10)
-      .on('start',(e,d)=>{d.fx=d.x;d.fy=d.y})
-      .on('drag',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=e.x;d.fy=e.y})
-      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
+    .call(d3.drag()
+      .on('start',(e,d)=>{d.fx=d.x;d.fy=d.y;d._sx=e.x;d._sy=e.y;d._moved=false})
+      .on('drag',(e,d)=>{d._moved=true;if(!e.active)sim.alphaTarget(0.3).restart();d.fx=e.x;d.fy=e.y})
+      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;const dx=e.x-(d._sx||0),dy=e.y-(d._sy||0);if(!d._moved||dx*dx+dy*dy<36){if(d.type==='case'){const id=String(d.id).replace('case:','');if(!d.current)openInCase(id,'');}else{showProfile(d.label);}}}));
   // Case nodes = rounded squares (teal, current case bigger/accent); subject nodes = circles by confidence.
   node.each(function(d){
     const sel=d3.select(this);
