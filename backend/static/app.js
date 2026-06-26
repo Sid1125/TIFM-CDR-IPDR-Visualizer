@@ -2024,7 +2024,9 @@ async function renderStory(){
 
 function populateStorySubjects(){
   const sel=D.storySubject;if(!sel)return;const cur=sel.value;
-  const subs=(state.subjects||[]).slice().sort((a,b)=>rowsFor(b).length-rowsFor(a).length);
+  // Count once (O(records)) instead of re-filtering per comparison.
+  const cnt={};allRows.forEach(r=>{if(r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
+  const subs=(state.subjects||[]).slice().sort((a,b)=>(cnt[b]||0)-(cnt[a]||0));
   sel.innerHTML='<option value="__all__">All subjects (case overview)</option>'+subs.slice(0,500).map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
   if(cur&&[...sel.options].some(o=>o.value===cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
 }
