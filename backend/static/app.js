@@ -1987,7 +1987,7 @@ function addAiEvents(ev,subject,fallbackTs){
   (cdr.risk||[]).filter(r=>match(r.subject)).forEach(r=>{if((r.score||0)>=50||r.band==='Critical'||r.band==='High')ev.push({ts:fallbackTs,kind:'ai',title:(subject?'':r.subject+': ')+'Risk assessment — '+(r.band||'')+' (score '+(r.score||0)+')',detail:'composite spatiotemporal risk',sub:r.subject});});
   (ipdr.risk||[]).filter(r=>match(r.subject)).forEach(r=>{if((r.score||0)>=50||r.band==='Critical'||r.band==='High')ev.push({ts:fallbackTs,kind:'ai',title:(subject?'':r.subject+': ')+'Flagged IP — '+(r.band||'')+' (score '+(r.score||0)+')',detail:'IPDR risk',sub:r.subject});});
   (cdr.impossible_travel||[]).filter(r=>match(r.subject)).forEach(r=>{ev.push({ts:r.to_time?new Date(r.to_time):fallbackTs,kind:'ai',title:(subject?'':r.subject+': ')+'Impossible travel flagged',detail:Math.round(r.distance_km||0)+'km in '+Math.round(r.dt_minutes||0)+'m ('+Math.round(r.speed_kmh||0)+' km/h) — possible clone/spoof',sub:r.subject});});
-  (cdr.co_presence||[]).filter(p=>(p.hidden_link||p.convoy)&&(!subject||p.subject===subject||p.peer===subject)).slice(0,40).forEach(p=>{ev.push({ts:fallbackTs,kind:'ai',title:(p.hidden_link?'Hidden link':'Convoy')+': '+p.subject+' ↔ '+p.peer,detail:'co-presence pattern flagged by the inference engine',sub:p.subject,cnt:p.peer});});
+  (cdr.co_presence||[]).filter(p=>(p.hidden_link||p.convoy)&&(!subject||p.subject_a===subject||p.subject_b===subject)).slice(0,40).forEach(p=>{ev.push({ts:fallbackTs,kind:'ai',title:(p.hidden_link?'Hidden link':'Convoy')+': '+p.subject_a+' ↔ '+p.subject_b,detail:(p.occurrences||0)+' co-locations over '+(p.distinct_days||0)+' day(s)'+(p.ever_called?'':'; never called each other'),sub:p.subject_a,cnt:p.subject_b});});
   (ipdr.beaconing||[]).filter(b=>match(b.subject)).slice(0,20).forEach(b=>{ev.push({ts:fallbackTs,kind:'ai',title:(subject?'':b.subject+': ')+'Beaconing pattern',detail:'periodic data sessions — possible C2/automated traffic',sub:b.subject});});
 }
 
@@ -5249,6 +5249,7 @@ if(D.dossierBtn)D.dossierBtn.addEventListener('click',renderDossier);
 if(D.dossierCloseBtn)D.dossierCloseBtn.addEventListener('click',()=>{D.dossier.style.display='none'});
 if(D.dossierPrintBtn)D.dossierPrintBtn.addEventListener('click',()=>window.print());
 {const ab=document.getElementById('dossierAgencyBtn');if(ab)ab.addEventListener('click',setAgencyDetails);}
+{const rb=document.getElementById('dossierRegenBtn');if(rb)rb.addEventListener('click',()=>{_storyXcaseCache={};_infReport=null;_meetings=null;renderDossier();});}
 
 // All-seeing-eye seal (Argus Panoptes) rendered in monochrome navy so it prints cleanly.
 const ARGUS_EMBLEM='<svg class="dc-emblem" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="ARGUS emblem">'
@@ -5443,8 +5444,9 @@ async function renderDossier(){
     }
     if(hidden.length){
       h+='<h3 class="d-h3">'+kn()+' Hidden links &amp; convoys ('+n(hidden.length)+')</h3>'
-        +'<table class="d-table"><thead><tr><th>Subject</th><th>Peer</th><th>Pattern</th></tr></thead><tbody>'
-        +hidden.slice(0,20).map(p=>'<tr><td>'+esc(p.subject||'—')+'</td><td>'+esc(p.peer||'—')+'</td><td>'+(p.hidden_link?'Hidden link':'')+(p.convoy?(p.hidden_link?' / convoy':'Convoy'):'')+'</td></tr>').join('')
+        +'<table class="d-table"><thead><tr><th>Subject A</th><th>Subject B</th><th>Pattern</th><th>Co-locations</th><th>Days</th><th>Towers</th><th>Ever called</th></tr></thead><tbody>'
+        +hidden.slice(0,20).map(p=>{const pat=[p.hidden_link?'Hidden link':null,p.convoy?'Convoy':null].filter(Boolean).join(' / ')||'Co-presence';
+          return '<tr><td>'+esc(p.subject_a||'—')+'</td><td>'+esc(p.subject_b||'—')+'</td><td>'+esc(pat)+'</td><td>'+n(p.occurrences||0)+'</td><td>'+n(p.distinct_days||0)+'</td><td>'+esc((p.towers||[]).join(', ')||'—')+'</td><td>'+(p.ever_called?'yes':'no')+'</td></tr>';}).join('')
         +'</tbody></table>';
     }
     if(!kf)h+='<div class="d-note">Automated analysis flagged no co-location meetings, impossible-travel legs, identity changes or hidden-link/convoy patterns in this case.</div>';
