@@ -55,6 +55,7 @@
       <button class="topbar-tab" data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
     </div>
     <div class="topbar-right">
+      <button id="dossierBtn" class="btn-sm" title="Generate a court-ready printable case dossier (Print → Save as PDF)" style="border-color:var(--accent);color:var(--accent)">Dossier</button>
       <button id="exportBtn" class="btn-sm" title="Export investigation report" style="border-color:var(--accent);color:var(--accent)">Export</button>
       <button id="darkModeBtn" style="background:none;border:none;cursor:pointer;font-size:1rem;padding:0 4px;color:var(--muted)" title="Toggle dark mode">&#9790;</button>
       <span id="sessionStatus" class="sess-active" title="Session active">Active</span>
@@ -544,6 +545,15 @@
 
   <!-- HOVER TOOLTIP -->
   <div id="ganttTooltip" class="gantt-tooltip"></div>
+</div>
+
+<!-- COURT-READY DOSSIER (print view) -->
+<div id="dossier" class="dossier" style="display:none">
+  <div class="dossier-toolbar no-print">
+    <button id="dossierPrintBtn" class="btn">Print / Save as PDF</button>
+    <button id="dossierCloseBtn" class="btn-sm">Close</button>
+  </div>
+  <div id="dossierBody"></div>
 </div>
 
 <script src="/static/vendor/leaflet-heat.js"></script>

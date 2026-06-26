@@ -85,6 +85,25 @@ def inference_report_md(request: Request, db: Session = Depends(get_db), limit: 
     return PlainTextResponse(content=md, headers={"X-Export-Ref": ref})
 
 
+@router.post("/dossier")
+def dossier_log(request: Request, db: Session = Depends(get_db), case_id: str = Query(default=""),
+                user=Depends(get_current_user)):
+    """Register a court-ready dossier generation: assigns an official reference id, writes an
+    ExportLog entry and an AuditLog chain-of-custody row, and returns the ref + case name for the
+    dossier's cover page. The dossier body itself is composed client-side."""
+    case_name = _case_name(db, case_id)
+    ref = make_export_ref("evidence")
+    exported_by = getattr(user, "username", None)
+    try:
+        db.add(ExportLog(ref_id=ref, source="dossier", case_id=case_id or None, case_name=case_name,
+                         exported_by=exported_by, details=json.dumps({"type": "court_dossier"})))
+        db.commit()
+    except Exception:
+        db.rollback()
+    log_action(db, user, request, "dossier", case_id=case_id or None, case_name=case_name, target=ref)
+    return {"ref": ref, "case_name": case_name}
+
+
 @router.get("/exports")
 def list_exports(db: Session = Depends(get_db), case_id: str = Query(default=""),
                  limit: int = Query(default=20, ge=1, le=100)):

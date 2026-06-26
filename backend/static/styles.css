@@ -800,3 +800,33 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 
 /* Tower Map: subject dropdown sits beside the search box */
 #mapSubjectSelect{max-width:190px}
+
+/* ── Court-ready Dossier (print view) ── */
+.dossier{position:fixed;inset:0;background:#fff;color:#111;z-index:2000;overflow:auto}
+.dossier-toolbar{position:sticky;top:0;display:flex;gap:8px;justify-content:flex-end;align-items:center;padding:10px 16px;background:#f1f1f1;border-bottom:1px solid #ccc}
+#dossierBody{max-width:840px;margin:0 auto;padding:32px 44px 60px;font-family:Georgia,'Times New Roman',serif;font-size:13px;line-height:1.6;color:#111}
+.dossier-cover{text-align:center;padding:56px 0 36px;border-bottom:2px solid #222;margin-bottom:24px;page-break-after:always}
+.dc-badge{display:inline-block;border:1px solid #a11;color:#a11;padding:3px 10px;font-size:11px;letter-spacing:1.5px;font-family:Arial,Helvetica,sans-serif;margin-bottom:26px}
+.dossier-cover h1{font-size:28px;margin:0 0 6px;letter-spacing:.5px}
+.dc-case{font-size:18px;color:#444;margin-bottom:28px}
+.dc-meta{margin:0 auto;border-collapse:collapse;text-align:left;font-size:13px}
+.dc-meta td{padding:5px 14px;border-bottom:1px solid #e2e2e2}
+.dc-meta td:first-child{color:#666;font-family:Arial,Helvetica,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.dc-foot{margin:40px auto 0;font-size:11px;color:#777;max-width:540px;font-style:italic}
+.dossier-section{margin:0 0 26px;page-break-inside:avoid}
+.dossier-section h2{font-size:16px;border-bottom:1px solid #222;padding-bottom:4px;margin:22px 0 12px}
+.d-table{width:100%;border-collapse:collapse;font-size:11.5px;font-family:Arial,Helvetica,sans-serif;margin:8px 0}
+.d-table th{text-align:left;background:#ededed;border:1px solid #c8c8c8;padding:4px 8px}
+.d-table td{border:1px solid #dcdcdc;padding:3px 8px}
+.d-note{font-size:11px;color:#666;font-family:Arial,Helvetica,sans-serif;margin:6px 0}
+.d-fig{margin:14px 0;text-align:center;page-break-inside:avoid}
+.d-fig img{max-width:100%;border:1px solid #ddd}
+.d-fig figcaption{font-size:11px;color:#555;font-family:Arial,Helvetica,sans-serif;margin-top:4px}
+.dossier-end{text-align:center;color:#999;font-size:11px;margin:48px 0 12px;font-family:Arial,Helvetica,sans-serif;letter-spacing:.5px}
+@media print{
+  body>*{display:none!important}
+  #dossier{display:block!important;position:static!important;overflow:visible!important;background:#fff}
+  .no-print{display:none!important}
+  #dossierBody{max-width:none;margin:0;padding:0}
+  @page{margin:18mm}
+}

@@ -58,6 +58,10 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Description:** Each session records the IP address (from `X-Forwarded-For` or direct client) and user-agent string.
 - **Tech:** `request.headers.get("x-forwarded-for")`, `request.client.host`, `request.headers.get("user-agent")`
 
+### Court-Ready Case Dossier (printable → PDF)
+- **Description:** A **Dossier** button in the top bar generates a styled, print-optimized case report an investigating officer can **Print → Save as PDF** and attach to a charge sheet — no raw Markdown, no external tooling, fully offline (air-gapped friendly; no PDF library bundled). The dossier opens as a clean white full-screen view (regardless of dark mode) with a cover page (RESTRICTED banner, case name, **official reference id**, generating officer, generated-at, record/subject/tower counts, activity window) followed by sections: **Subjects** (top 40 by record count, with distinct contacts/towers), **Most frequent contacts**, **Cross-case links** (recurring subjects + the other cases they appear in, from `/cross-case/report`), **Charts** (the live Chart.js canvases rasterized via `canvas.toDataURL()` so they print), and **Towers**. A print stylesheet hides all app chrome and the toolbar, sets page margins, and avoids breaking sections across pages. Generating a dossier is itself **logged** (ExportLog + AuditLog) under the official reference id shown on the cover.
+- **Tech:** Frontend `renderDossier()` / `fillDossierXcase()` composing from `state` + `/cross-case/report`; `#dossier` overlay + `@media print` rules (`body>*{display:none}` / show `#dossier`, `.no-print`, `@page` margins) in `styles.css`; `POST /inference/dossier` for the official ref + chain-of-custody logging. Top-bar `Dossier` button beside `Export`.
+
 ### Audit Trail / Chain-of-Custody
 - **Description:** Every meaningful action is recorded to an append-only `audit_logs` table for evidentiary accountability: who (username/role), from where (IP), what (action), against which case and target, plus a JSON detail blob and timestamp. Captured actions: `login` / `login_failed`, `upload` (with kind, mode, rows imported, filename), `export`, `dossier`, `case_create`, `case_delete`, and the read beacons `view_case` / `view_subject`. Audit writes are defensive — a logging failure never breaks the primary action.
 - **Surfacing:** Admin-only **Audit Log** panel in the Admin tab, most-recent-first, filterable by user, action, and from-date. Reads are recorded via a debounced client beacon (`POST /audit/view`) fired when a case is opened or a subject profile is viewed.
@@ -856,6 +860,7 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 ### Inference & Analytics (4 endpoints)
 - `GET /inference/report` — Full analytics report: composite risk leaderboards (CDR + IPDR), call-graph structure, temporal/behavioral shifts, IPDR volume/beaconing/destinations, multi-SIM entity resolution, and any watchlist hits — all case-scoped
 - `GET /inference/report.md` — The same report rendered as a downloadable Markdown case summary
+- `POST /inference/dossier` — Registers a court-ready dossier generation: assigns an official reference id, writes ExportLog + AuditLog rows, returns `{ref, case_name}` for the dossier cover page
 - `GET /inference/subject/{subject}` — One subject's movement-annotated timeline + anchors + baseline/escalation/dormancy
 - `GET|POST|DELETE /watchlist` — Investigator watchlist CRUD; matches force the subject to Critical at the top of the leaderboards (phones match CDR, IPs match IPDR)
 

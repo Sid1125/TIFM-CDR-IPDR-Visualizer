@@ -102,6 +102,14 @@ class AuditTests(unittest.TestCase):
         self.current = _user("admin", "admin")
         self.assertEqual(self.client.get("/audit/log").status_code, 200)
 
+    def test_dossier_endpoint_logs(self):
+        r = self.client.post("/inference/dossier")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json().get("ref"))
+        rows = self._rows(action="dossier")
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["target"])  # the official ref id
+
     def test_log_viewer_filters(self):
         db = self.Session()
         try:
