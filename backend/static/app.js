@@ -1608,7 +1608,10 @@ async function renderGraph(){
         Connections (shown): ${links.filter(l=>(l.source.id||l.source)===d.id||(l.target.id||l.target)===d.id).length}<br>
         ${deg?`Degree: ${deg[1]}<br>`:''}<button class="btn btn-sm" onclick="showSubjectRecords('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">View Records</button>`
     })
-    .call(d3.drag().on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y}).on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
+    .call(d3.drag().clickDistance(10)
+      .on('start',(e,d)=>{d.fx=d.x;d.fy=d.y})  // pin in place; do NOT heat the sim yet (so a click doesn't scatter nodes)
+      .on('drag',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=e.x;d.fy=e.y})  // heat only once an actual drag starts
+      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
 
   const label=g.append('g').selectAll('text').data(nodes).join('text').text(d=>d.id.length>12?d.id.slice(0,12)+'...':d.id).attr('font-size','9').attr('dx',d=>Math.max(5,d.weight*0.2+5))   .attr('dy',3).attr('class','graph-label').style('pointer-events','none');
 
@@ -1894,7 +1897,10 @@ async function renderCrossCaseGraph(){
       else D.xcGraphDetails.innerHTML='<strong>'+esc(d.label)+'</strong> <span style="font-size:.65rem">'+(d.kind==='ip'?'IP':'phone')+'</span><br>'+_xcBadge(d.match_type)+' '+(d.confidence||'')+' &middot; in '+n(d.case_count||0)+' other case(s)';
     })
     .on('click',(e,d)=>{if(d.type==='case'){const id=String(d.id).replace('case:','');if(!d.current)openInCase(id,'');}else{showProfile(d.label);}})
-    .call(d3.drag().on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y}).on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
+    .call(d3.drag().clickDistance(10)
+      .on('start',(e,d)=>{d.fx=d.x;d.fy=d.y})
+      .on('drag',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=e.x;d.fy=e.y})
+      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
   // Case nodes = rounded squares (teal, current case bigger/accent); subject nodes = circles by confidence.
   node.each(function(d){
     const sel=d3.select(this);
