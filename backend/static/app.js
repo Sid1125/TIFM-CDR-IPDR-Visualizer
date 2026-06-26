@@ -5421,34 +5421,33 @@ async function renderDossier(){
 
     // ── 4. Key findings ──
     h+='<section class="dossier-section"><h2>4. Key Findings</h2>';
-    // 4.1 meetings
-    h+='<h3 class="d-h3">4.1 Co-location meetings ('+n(mt.total||meetingsList.length)+')</h3>';
+    // Only emit subsections that actually have findings, numbered 4.1, 4.2 … in sequence.
+    let kf=0;const kn=()=>'4.'+(++kf);
     if(meetingsList.length){
-      h+='<table class="d-table"><thead><tr><th>Subject A</th><th>Subject B</th><th>Tower</th><th>Place</th><th>Time</th><th>Gap</th><th>Confidence</th></tr></thead><tbody>'
+      h+='<h3 class="d-h3">'+kn()+' Co-location meetings ('+n(mt.total||meetingsList.length)+')</h3>'
+        +'<table class="d-table"><thead><tr><th>Subject A</th><th>Subject B</th><th>Tower</th><th>Place</th><th>Time</th><th>Gap</th><th>Confidence</th></tr></thead><tbody>'
         +meetingsList.slice(0,25).map(m=>{const pl=tm[m.tow]||{};return '<tr><td>'+esc(m.subA)+'</td><td>'+esc(m.subB)+'</td><td>'+esc(m.tow||'?')+'</td><td>'+esc([pl.city,pl.state].filter(Boolean).join(', ')||'—')+'</td><td>'+esc(_fmtDT(m.time))+'</td><td>'+Math.round(m.gap)+'m</td><td>'+esc(m.gapLevel)+'</td></tr>';}).join('')
         +'</tbody></table>'+(meetingsList.length>25?'<div class="d-note">Showing top 25 by confidence of '+n(mt.total||meetingsList.length)+'.</div>':'');
-    }else h+='<div class="d-note">No co-location meetings detected.</div>';
-    // 4.2 impossible travel
-    h+='<h3 class="d-h3">4.2 Impossible travel / possible cloning ('+n(impossible.length)+')</h3>';
+    }
     if(impossible.length){
-      h+='<table class="d-table"><thead><tr><th>Subject</th><th>From → To tower</th><th>Distance</th><th>Elapsed</th><th>Implied speed</th></tr></thead><tbody>'
+      h+='<h3 class="d-h3">'+kn()+' Impossible travel / possible cloning ('+n(impossible.length)+')</h3>'
+        +'<table class="d-table"><thead><tr><th>Subject</th><th>From → To tower</th><th>Distance</th><th>Elapsed</th><th>Implied speed</th></tr></thead><tbody>'
         +impossible.slice(0,20).map(r=>'<tr><td>'+esc(r.subject||'—')+'</td><td>'+esc(r.from_tower||'?')+' → '+esc(r.to_tower||'?')+'</td><td>'+Math.round(r.distance_km||0)+' km</td><td>'+Math.round(r.dt_minutes||0)+' min</td><td>'+Math.round(r.speed_kmh||0)+' km/h</td></tr>').join('')
         +'</tbody></table>';
-    }else h+='<div class="d-note">No impossible-travel legs flagged.</div>';
-    // 4.3 identity changes
-    h+='<h3 class="d-h3">4.3 Identity changes — SIM / handset swaps ('+n(idChanges.length)+')</h3>';
+    }
     if(idChanges.length){
-      h+='<table class="d-table"><thead><tr><th>Subject</th><th>Change</th><th>From → To</th><th>When</th><th>Confidence</th></tr></thead><tbody>'
+      h+='<h3 class="d-h3">'+kn()+' Identity changes — SIM / handset swaps ('+n(idChanges.length)+')</h3>'
+        +'<table class="d-table"><thead><tr><th>Subject</th><th>Change</th><th>From → To</th><th>When</th><th>Confidence</th></tr></thead><tbody>'
         +idChanges.slice(0,25).map(c=>'<tr><td>'+esc(c.sub)+'</td><td>'+esc(c.detail)+'</td><td>'+esc(c.from||'—')+' → '+esc(c.to||'—')+'</td><td>'+esc(_fmtDT(c.time))+'</td><td>'+esc(c.confidence||'')+'</td></tr>').join('')
         +'</tbody></table>'+(idChanges.length>25?'<div class="d-note">Showing 25 of '+n(idChanges.length)+'.</div>':'');
-    }else h+='<div class="d-note">No SIM/handset changes detected.</div>';
-    // 4.4 hidden links
-    h+='<h3 class="d-h3">4.4 Hidden links &amp; convoys ('+n(hidden.length)+')</h3>';
+    }
     if(hidden.length){
-      h+='<table class="d-table"><thead><tr><th>Subject</th><th>Peer</th><th>Pattern</th></tr></thead><tbody>'
+      h+='<h3 class="d-h3">'+kn()+' Hidden links &amp; convoys ('+n(hidden.length)+')</h3>'
+        +'<table class="d-table"><thead><tr><th>Subject</th><th>Peer</th><th>Pattern</th></tr></thead><tbody>'
         +hidden.slice(0,20).map(p=>'<tr><td>'+esc(p.subject||'—')+'</td><td>'+esc(p.peer||'—')+'</td><td>'+(p.hidden_link?'Hidden link':'')+(p.convoy?(p.hidden_link?' / convoy':'Convoy'):'')+'</td></tr>').join('')
         +'</tbody></table>';
-    }else h+='<div class="d-note">No hidden-link or convoy patterns flagged.</div>';
+    }
+    if(!kf)h+='<div class="d-note">Automated analysis flagged no co-location meetings, impossible-travel legs, identity changes or hidden-link/convoy patterns in this case.</div>';
     h+='</section>';
 
     // ── 5. Communication analysis ──
