@@ -93,6 +93,7 @@ def _harvest_towers(db: Session, df) -> int:
 async def upload_cdr(
     file: UploadFile = File(...),
     case_id: str = Form(""),
+    mode: str = Form("replace"),
     db: Session = Depends(get_db),
 ):
     temp_path = None
@@ -111,13 +112,16 @@ async def upload_cdr(
         ]
         ensure_columns(df.columns, cdr_required)
 
-        if case_id:
-            db.query(CDRRecord).filter(CDRRecord.case_id == case_id).delete(synchronize_session=False)
-        else:
-            # No case selected: replace only un-cased records, never wipe other cases' data.
-            db.query(CDRRecord).filter(
-                (CDRRecord.case_id.is_(None)) | (CDRRecord.case_id == "")
-            ).delete(synchronize_session=False)
+        # Append mode adds the new rows alongside what's already in the case; replace mode
+        # (default) clears the case's existing CDR first.
+        if mode.lower() != "append":
+            if case_id:
+                db.query(CDRRecord).filter(CDRRecord.case_id == case_id).delete(synchronize_session=False)
+            else:
+                # No case selected: replace only un-cased records, never wipe other cases' data.
+                db.query(CDRRecord).filter(
+                    (CDRRecord.case_id.is_(None)) | (CDRRecord.case_id == "")
+                ).delete(synchronize_session=False)
 
         for col in ["start_time", "end_time"]:
             if col in df.columns:
@@ -164,6 +168,7 @@ async def upload_cdr(
 async def upload_ipdr(
     file: UploadFile = File(...),
     case_id: str = Form(""),
+    mode: str = Form("replace"),
     db: Session = Depends(get_db),
 ):
     temp_path = None
@@ -181,13 +186,16 @@ async def upload_ipdr(
         ]
         ensure_columns(df.columns, ipdr_required)
 
-        if case_id:
-            db.query(IPDRRecord).filter(IPDRRecord.case_id == case_id).delete(synchronize_session=False)
-        else:
-            # No case selected: replace only un-cased records, never wipe other cases' data.
-            db.query(IPDRRecord).filter(
-                (IPDRRecord.case_id.is_(None)) | (IPDRRecord.case_id == "")
-            ).delete(synchronize_session=False)
+        # Append mode adds the new rows alongside what's already in the case; replace mode
+        # (default) clears the case's existing IPDR first.
+        if mode.lower() != "append":
+            if case_id:
+                db.query(IPDRRecord).filter(IPDRRecord.case_id == case_id).delete(synchronize_session=False)
+            else:
+                # No case selected: replace only un-cased records, never wipe other cases' data.
+                db.query(IPDRRecord).filter(
+                    (IPDRRecord.case_id.is_(None)) | (IPDRRecord.case_id == "")
+                ).delete(synchronize_session=False)
 
         for col in ["start_time", "end_time"]:
             if col in df.columns:

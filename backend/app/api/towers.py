@@ -16,6 +16,7 @@ from app.core.database import get_db
 from app.models.tower import Tower
 from app.schemas.tower import TowerRead
 from app.schemas.upload import UploadResponse
+from app.services.geocode_service import geocode_missing
 from app.services.tower_service import rebuild_tower_repo
 from app.services.tower_service import tower_repo_list
 from app.services.tower_service import tower_repo_stats
@@ -83,8 +84,16 @@ def repo_list(
 @router.post("/repo/rebuild")
 def repo_rebuild(db: Session = Depends(get_db)):
     """Backfill the tower repository from CDR/IPDR records already loaded (fills coordinates from
-    the records' own tower_id+lat/lng). Idempotent; never clobbers existing data."""
+    the records' own tower_id+lat/lng), then offline-geocode newly-located towers to city/state.
+    Idempotent; never clobbers existing data."""
     return rebuild_tower_repo(db)
+
+
+@router.post("/repo/geocode")
+def repo_geocode(db: Session = Depends(get_db)):
+    """Offline reverse-geocode: fill city/state for repository towers that have coordinates but no
+    place name (nearest-major-city lookup, no external API). Never overwrites existing names."""
+    return geocode_missing(db)
 
 
 @router.get("/", response_model=list[TowerRead])

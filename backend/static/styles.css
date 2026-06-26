@@ -162,6 +162,15 @@ a{color:var(--accent);text-decoration:none}
 .charts-grid .card{display:flex;flex-direction:column;height:340px}
 .charts-grid .card canvas{flex:1;min-height:0}
 .chart-info{font-size:0.65rem;color:var(--muted);padding:0 0 4px;flex-shrink:0;line-height:1.4;display:flex;gap:8px;flex-wrap:wrap}
+/* Section divider within the charts grid */
+.charts-divider{margin:10px 0 0;padding-top:10px;border-top:1px solid var(--line);font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)}
+/* Pattern-of-life heatmap (day-of-week x hour), rendered as a CSS grid (no Chart.js plugin) */
+.pol-heat{flex:1;min-height:0;display:flex;flex-direction:column;gap:2px;justify-content:center;overflow:auto}
+.pol-row{display:flex;align-items:center;gap:2px}
+.pol-day{width:34px;flex-shrink:0;font-size:0.62rem;color:var(--muted);text-align:right;padding-right:4px}
+.pol-cell{flex:1;height:22px;border-radius:2px;min-width:6px}
+.pol-head .pol-h{flex:1;font-size:0.55rem;color:var(--muted);text-align:left;min-width:6px}
+.pol-head{height:14px}
 
 /* RECORDS TAB */
 .rec-toolbar{display:flex;gap:8px;align-items:center;padding:8px 0;flex-wrap:wrap}

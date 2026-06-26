@@ -15,6 +15,7 @@ const D={
   chartServPie:$('chartServicePie'),chartHourly:$('chartHourlyBar'),chartTopContacts:$('chartTopContacts'),chartServTimeline:$('chartServiceTimeline'),
   chartContactDir:$('chartContactDir'),chartContactDur:$('chartContactDur'),chartDayOfWeek:$('chartDayOfWeek'),
   chartDurDist:$('chartDurDist'),chartProtDist:$('chartProtDist'),chartTopPorts:$('chartTopPorts'),chartDataVol:$('chartDataVol'),chartTowerAct:$('chartTowerAct'),
+  chartDailyTrend:$('chartDailyTrend'),chartPatternHeat:$('chartPatternHeat'),chartCdrIpdrTime:$('chartCdrIpdrTime'),chartCumulative:$('chartCumulative'),chartActiveSubjects:$('chartActiveSubjects'),chartNewReturning:$('chartNewReturning'),chartGeoState:$('chartGeoState'),chartTowerDiversity:$('chartTowerDiversity'),
   recSearch:$('recSearch'),recType:$('recType'),recService:$('recService'),recCount:$('recCount'),recBody:$('recBody'),recLoadMore:$('recLoadMore'),
   profile:$('profileModal'),profileTitle:$('profileTitle'),profileBody:$('profileBody'),profileClose:$('profileClose'),
   aiEndpoint:$('aiEndpoint'),aiModel:$('aiModel'),aiConfigSave:$('aiConfigSave'),aiStatus:$('aiStatus'),aiMode:$('aiMode'),aiSeedBtn:$('aiSeedBtn'),
@@ -26,7 +27,7 @@ const D={
   svcSearchInput:$('svcSearchInput'),svcMinConf:$('svcMinConf'),svcCount:$('svcCount'),svcBursts:$('svcBursts'),svcCardGrid:$('svcCardGrid'),
   corrSubA:$('corrSubA'),corrSubB:$('corrSubB'),corrGoBtn:$('corrGoBtn'),corrSwapBtn:$('corrSwapBtn'),corrResults:$('corrResults'),
   crossCaseTab:$('crossCaseTab'),xcRefreshBtn:$('xcRefreshBtn'),
-  towerRepo:$('towerRepo'),trSearch:$('trSearch'),trImportBtn:$('trImportBtn'),trImportFile:$('trImportFile'),trRefreshBtn:$('trRefreshBtn'),trRebuildBtn:$('trRebuildBtn'),
+  towerRepo:$('towerRepo'),trSearch:$('trSearch'),trImportBtn:$('trImportBtn'),trImportFile:$('trImportFile'),trRefreshBtn:$('trRefreshBtn'),trRebuildBtn:$('trRebuildBtn'),trGeocodeBtn:$('trGeocodeBtn'),
   csGrid:$('csGrid'),csMeta:$('csMeta'),csBody:$('csBody'),
   cpStartA:$('cpStartA'),cpEndA:$('cpEndA'),cpStartB:$('cpStartB'),cpEndB:$('cpEndB'),cpGoBtn:$('cpGoBtn'),cpCloseBtn:$('cpCloseBtn'),cpStatus:$('cpStatus'),cpResults:$('cpResults'),compareBar:$('compareBar'),
 };
@@ -1047,6 +1048,15 @@ function showUploadPreview(kind,file){
     }
     modal.querySelector('#upTitle').textContent='Preview: '+kindLabel[kind]+' ('+preview.total+' rows)';
     let html='<div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Columns: '+preview.header.join(', ')+'</div>';
+    // CDR/IPDR: let the investigator add to an existing case instead of replacing it.
+    if(kind==='cdr'||kind==='ipdr'){
+      const existing=kind==='cdr'?(state.cdr?state.cdr.length:0):(state.ipdr?state.ipdr.length:0);
+      html+='<div id="upModeBox" style="margin-bottom:10px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:0.8rem">'
+        +'<div style="font-weight:600;margin-bottom:4px">This case already has '+n(existing)+' '+kindLabel[kind]+' record'+(existing===1?'':'s')+'</div>'
+        +'<label style="display:block;cursor:pointer;padding:1px 0"><input type="radio" name="upMode" value="append" checked> Add to existing (keep current records)</label>'
+        +'<label style="display:block;cursor:pointer;padding:1px 0;color:var(--danger)"><input type="radio" name="upMode" value="replace"> Replace existing (delete the '+n(existing)+' current '+kindLabel[kind]+' record'+(existing===1?'':'s')+' first)</label>'
+        +'</div>';
+    }
     html+='<div style="overflow:auto;max-height:350px;border:1px solid var(--line);border-radius:6px">';
     html+='<table class="data-table" style="min-width:400px;font-size:0.72rem"><thead><tr>'+preview.header.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
     preview.rows.forEach(r=>{html+='<tr>'+r.map(v=>'<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis">'+esc(v||'')+'</td>').join('')+'</tr>'});
@@ -1065,17 +1075,25 @@ function showUploadPreview(kind,file){
     upClose.parentNode.replaceChild(newUpClose,upClose);
     newUpClose.addEventListener('click',hide);
     newUpCancel.addEventListener('click',hide);
-    newUpConfirm.addEventListener('click',async()=>{hide();await handleUploadConfirmed(kind,file,routes[kind]);});
+    newUpConfirm.addEventListener('click',async()=>{
+      const sel=modal.querySelector('input[name="upMode"]:checked');
+      const mode=sel?sel.value:'append';
+      hide();await handleUploadConfirmed(kind,file,routes[kind],mode);
+    });
   };
   reader.readAsText(file.slice(0,1024*512));
 }
-async function handleUploadConfirmed(kind,file,route){
-  D.importStatus.textContent='Uploading '+kind+'...';
-  try{const fd=new FormData();fd.append('file',file);if(activeCaseId)fd.append('case_id',activeCaseId);
+async function handleUploadConfirmed(kind,file,route,mode){
+  const verb=mode==='append'?'Adding':'Uploading';
+  D.importStatus.textContent=verb+' '+kind+'...';
+  try{const fd=new FormData();fd.append('file',file);if(activeCaseId)fd.append('case_id',activeCaseId);if(mode)fd.append('mode',mode);
     const r=await fetch(route,{credentials:'same-origin',method:'POST',body:fd});
     if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}
     if(!r.ok)throw new Error(await r.text()||'Upload failed');
-    document.getElementById(kind+'File').value='';D.importStatus.textContent=kind.toUpperCase()+' uploaded';await loadCaseData()}catch(e){D.importStatus.textContent='Upload failed';console.error(e)}
+    const res=await r.json().catch(()=>({}));
+    document.getElementById(kind+'File').value='';
+    D.importStatus.textContent=kind.toUpperCase()+(mode==='append'?' added':' uploaded')+(res&&res.records_imported!=null?' ('+n(res.records_imported)+' rows)':'');
+    await loadCaseData()}catch(e){D.importStatus.textContent='Upload failed';console.error(e)}
 }
 // Replace the direct upload listeners with preview triggers
 ['cdr','ipdr','towers'].forEach(k=>{
@@ -1773,8 +1791,17 @@ if(D.trRebuildBtn)D.trRebuildBtn.addEventListener('click',async()=>{
     const r=await API.post('/towers/repo/rebuild',{});
     try{state.towers=await API.get('/towers/')}catch(e){}  // refresh map's tower cache
     await renderTowerRepo();
-    D.importStatus&&(D.importStatus.textContent='Tower repo rebuilt: +'+r.added+' new, '+r.updated+' located ('+r.total+' total).');
+    D.importStatus&&(D.importStatus.textContent='Tower repo rebuilt: +'+r.added+' new, '+r.updated+' located, '+(r.geocoded||0)+' named ('+r.total+' total).');
   }catch(e){if(el)el.innerHTML='<div class="tr-empty" style="color:var(--danger)">Rebuild failed: '+esc(e.message||String(e))+'</div>';}
+});
+if(D.trGeocodeBtn)D.trGeocodeBtn.addEventListener('click',async()=>{
+  const el=D.towerRepo;if(el)el.innerHTML='<div class="tr-empty">Reverse-geocoding located towers (offline)…</div>';
+  try{
+    const r=await API.post('/towers/repo/geocode',{});
+    try{state.towers=await API.get('/towers/')}catch(e){}  // refresh map's tower cache with names
+    await renderTowerRepo();
+    D.importStatus&&(D.importStatus.textContent='Reverse-geocoded '+(r.filled||0)+' tower'+((r.filled||0)===1?'':'s')+' to a city/state.');
+  }catch(e){if(el)el.innerHTML='<div class="tr-empty" style="color:var(--danger)">Geocoding failed: '+esc(e.message||String(e))+'</div>';}
 });
 if(D.trImportBtn)D.trImportBtn.addEventListener('click',()=>D.trImportFile&&D.trImportFile.click());
 if(D.trImportFile)D.trImportFile.addEventListener('change',async function(){
@@ -2464,6 +2491,135 @@ function renderCharts(){
   renderChartTopPorts();
   renderChartDataVolume();
   renderChartTowerActivity();
+  // Behavioural & investigative
+  try{renderChartDailyTrend()}catch(e){console.error('dailyTrend',e)}
+  try{renderChartPatternHeat()}catch(e){console.error('patternHeat',e)}
+  try{renderChartCdrIpdrTime()}catch(e){console.error('cdrIpdrTime',e)}
+  try{renderChartCumulative()}catch(e){console.error('cumulative',e)}
+  try{renderChartActiveSubjects()}catch(e){console.error('activeSubjects',e)}
+  try{renderChartNewReturning()}catch(e){console.error('newReturning',e)}
+  try{renderChartGeoState()}catch(e){console.error('geoState',e)}
+  try{renderChartTowerDiversity()}catch(e){console.error('towerDiversity',e)}
+}
+
+// ===== Behavioural & investigative charts (shared helpers) =====
+function _dayKey(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function _sortedDays(){const s=new Set();allRows.forEach(r=>{if(r.ts)s.add(_dayKey(r.ts))});return [...s].sort();}
+// Aggregate the case window into <=~120 buckets (daily; weekly if the span is long) so time-series
+// stay legible on huge cases. Returns {buckets:[key...], label, idxOf(ts)}.
+function _timeBuckets(){
+  const days=_sortedDays();
+  if(!days.length)return{buckets:[],unit:'day',keyOf:()=>null};
+  if(days.length<=120)return{buckets:days,unit:'day',keyOf:ts=>_dayKey(ts)};
+  // weekly buckets keyed by ISO-ish week start
+  const weekKey=ts=>{const d=new Date(ts);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);return _dayKey(d);};
+  const set=new Set();allRows.forEach(r=>{if(r.ts)set.add(weekKey(r.ts))});
+  return{buckets:[...set].sort(),unit:'week',keyOf:weekKey};
+}
+function towerMeta(){const m={};(state.towers||[]).forEach(t=>{m[t.tower_id]={city:t.city,state:t.state}});return m;}
+function _destroy(name){if(window[name]){try{window[name].destroy()}catch(e){}window[name]=null}}
+
+function renderChartDailyTrend(){
+  if(typeof Chart==='undefined'||!D.chartDailyTrend)return;
+  const tb=_timeBuckets();
+  const counts=tb.buckets.map(()=>0);const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
+  allRows.forEach(r=>{if(r.ts){const k=tb.keyOf(r.ts);if(k in idx)counts[idx[k]]++}});
+  const total=counts.reduce((s,v)=>s+v,0);const avg=tb.buckets.length?Math.round(total/tb.buckets.length):0;
+  const mx=Math.max(...counts,0);const peak=tb.buckets[counts.indexOf(mx)]||'n/a';
+  _destroy('chartDailyTrendC');
+  const ci=document.getElementById('ciDailyTrend');
+  if(ci)ci.innerHTML=tb.buckets.length+' '+tb.unit+'s &middot; '+total+' records &middot; avg '+avg+'/'+tb.unit+' &middot; peak '+peak+' ('+mx+')';
+  window.chartDailyTrendC=new Chart(D.chartDailyTrend,{type:'line',data:{labels:tb.buckets,datasets:[{label:'Records',data:counts,borderColor:'#2c6f79',backgroundColor:'#2c6f7922',fill:true,tension:0.25,pointRadius:tb.buckets.length>60?0:2,pointHoverRadius:5}]},options:{plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:14,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
+}
+
+function renderChartPatternHeat(){
+  const el=D.chartPatternHeat;if(!el)return;
+  const grid=Array.from({length:7},()=>Array(24).fill(0));
+  let max=0;allRows.forEach(r=>{if(r.ts){const d=new Date(r.ts);const dow=(d.getDay()+6)%7;const h=d.getHours();grid[dow][h]++;if(grid[dow][h]>max)max=grid[dow][h]}});
+  const dows=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const total=grid.flat().reduce((s,v)=>s+v,0);
+  const ci=document.getElementById('ciPatternHeat');
+  if(ci)ci.innerHTML=total+' records mapped &middot; darker = busier (peak '+max+' in one cell)';
+  const color=v=>{if(!v)return'var(--surface)';const t=v/max;const a=0.12+t*0.85;return'rgba(43,111,121,'+a.toFixed(2)+')';};
+  let h='<div class="pol-row pol-head"><span class="pol-day"></span>'+Array.from({length:24},(_,i)=>'<span class="pol-h">'+(i%3===0?String(i).padStart(2,'0'):'')+'</span>').join('')+'</div>';
+  for(let d=0;d<7;d++){
+    h+='<div class="pol-row"><span class="pol-day">'+dows[d]+'</span>'+grid[d].map((v,hh)=>'<span class="pol-cell" style="background:'+color(v)+'" title="'+dows[d]+' '+String(hh).padStart(2,'0')+':00 — '+v+' records"></span>').join('')+'</div>';
+  }
+  el.innerHTML=h;
+}
+
+function renderChartCdrIpdrTime(){
+  if(typeof Chart==='undefined'||!D.chartCdrIpdrTime)return;
+  const tb=_timeBuckets();const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
+  const cdr=tb.buckets.map(()=>0),ipdr=tb.buckets.map(()=>0);
+  allRows.forEach(r=>{if(!r.ts)return;const k=tb.keyOf(r.ts);if(!(k in idx))return;if(r.type==='IPDR')ipdr[idx[k]]++;else cdr[idx[k]]++;});
+  const tc=cdr.reduce((s,v)=>s+v,0),ti=ipdr.reduce((s,v)=>s+v,0);
+  _destroy('chartCdrIpdrTimeC');
+  const ci=document.getElementById('ciCdrIpdrTime');
+  if(ci)ci.innerHTML=n(tc)+' CDR &middot; '+n(ti)+' IPDR across '+tb.buckets.length+' '+tb.unit+'s';
+  window.chartCdrIpdrTimeC=new Chart(D.chartCdrIpdrTime,{type:'bar',data:{labels:tb.buckets,datasets:[{label:'CDR (voice/SMS)',data:cdr,backgroundColor:'#2c6f79'},{label:'IPDR (data)',data:ipdr,backgroundColor:'#d4a017'}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9}}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:14,font:{size:8}}},y:{stacked:true,beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
+}
+
+function renderChartCumulative(){
+  if(typeof Chart==='undefined'||!D.chartCumulative)return;
+  const tb=_timeBuckets();const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
+  const per=tb.buckets.map(()=>0);
+  allRows.forEach(r=>{if(r.ts){const k=tb.keyOf(r.ts);if(k in idx)per[idx[k]]++}});
+  let run=0;const cum=per.map(v=>(run+=v));
+  _destroy('chartCumulativeC');
+  const ci=document.getElementById('ciCumulative');
+  if(ci)ci.innerHTML='Total '+n(run)+' records, cumulative';
+  window.chartCumulativeC=new Chart(D.chartCumulative,{type:'line',data:{labels:tb.buckets,datasets:[{label:'Cumulative',data:cum,borderColor:'#8b5cf6',backgroundColor:'#8b5cf622',fill:true,tension:0.2,pointRadius:0}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Cumulative records',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
+}
+
+function renderChartActiveSubjects(){
+  if(typeof Chart==='undefined'||!D.chartActiveSubjects)return;
+  const cnt={};allRows.forEach(r=>{const k=r.sub;if(k)cnt[k]=(cnt[k]||0)+1});
+  const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  _destroy('chartActiveSubjectsC');
+  const ci=document.getElementById('ciActiveSubjects');
+  if(ci)ci.innerHTML=Object.keys(cnt).length+' subjects &middot; top '+sorted.length+' by owned records';
+  window.chartActiveSubjectsC=new Chart(D.chartActiveSubjects,{type:'bar',data:{labels:sorted.map(s=>s[0].length>16?s[0].slice(0,16)+'…':s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{onClick:(e,els)=>{if(els.length){const f=sorted[els[0].index];if(f)showProfile(f[0])}},plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>sorted[c[0].dataIndex][0],label:c=>c.parsed.x+' records (click to open profile)'}}},indexAxis:'y',scales:{x:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
+}
+
+function renderChartNewReturning(){
+  if(typeof Chart==='undefined'||!D.chartNewReturning)return;
+  const tb=_timeBuckets();const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
+  const fresh=tb.buckets.map(()=>0),repeat=tb.buckets.map(()=>0);
+  const seen=new Set();
+  allRows.slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts)).forEach(r=>{
+    if(!r.ts||!r.cnt)return;const k=tb.keyOf(r.ts);if(!(k in idx))return;
+    if(seen.has(r.cnt))repeat[idx[k]]++;else{seen.add(r.cnt);fresh[idx[k]]++;}
+  });
+  _destroy('chartNewReturningC');
+  const ci=document.getElementById('ciNewReturning');
+  if(ci)ci.innerHTML=seen.size+' distinct contacts &middot; new vs already-seen per '+tb.unit;
+  window.chartNewReturningC=new Chart(D.chartNewReturning,{type:'bar',data:{labels:tb.buckets,datasets:[{label:'New contacts',data:fresh,backgroundColor:'#b94a48'},{label:'Returning',data:repeat,backgroundColor:'#2c6f79'}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9}}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}},y:{stacked:true,beginAtZero:true,title:{display:true,text:'Contacts',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
+}
+
+function renderChartGeoState(){
+  if(typeof Chart==='undefined'||!D.chartGeoState)return;
+  const meta=towerMeta();const byLoc={};let located=0,unloc=0;
+  allRows.forEach(r=>{const m=r.tow&&meta[r.tow];const st=m&&m.state;if(st){byLoc[st]=(byLoc[st]||0)+1;located++}else if(r.tow)unloc++;});
+  const sorted=Object.entries(byLoc).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  _destroy('chartGeoStateC');
+  const ci=document.getElementById('ciGeoState');
+  if(ci)ci.innerHTML=sorted.length?(sorted.length+' states/UTs &middot; '+n(located)+' located records'+(unloc?' &middot; '+n(unloc)+' un-named towers':'')):'No tower place names yet — use Tower Repo → “Fill place names”.';
+  if(!sorted.length){_destroy('chartGeoStateC');const ctx=D.chartGeoState.getContext('2d');ctx&&ctx.clearRect(0,0,D.chartGeoState.width,D.chartGeoState.height);return;}
+  window.chartGeoStateC=new Chart(D.chartGeoState,{type:'bar',data:{labels:sorted.map(s=>s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:'#3a7d5a',borderRadius:4}]},options:{plugins:{legend:{display:false}},indexAxis:'y',scales:{x:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
+}
+
+function renderChartTowerDiversity(){
+  if(typeof Chart==='undefined'||!D.chartTowerDiversity)return;
+  const tb=_timeBuckets();const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
+  const sets=tb.buckets.map(()=>new Set());
+  allRows.forEach(r=>{if(r.ts&&r.tow){const k=tb.keyOf(r.ts);if(k in idx)sets[idx[k]].add(r.tow)}});
+  const counts=sets.map(s=>s.size);
+  const allTowers=new Set();allRows.forEach(r=>{if(r.tow)allTowers.add(r.tow)});
+  _destroy('chartTowerDiversityC');
+  const ci=document.getElementById('ciTowerDiversity');
+  if(ci)ci.innerHTML=allTowers.size+' distinct towers overall &middot; distinct towers per '+tb.unit;
+  window.chartTowerDiversityC=new Chart(D.chartTowerDiversity,{type:'line',data:{labels:tb.buckets,datasets:[{label:'Distinct towers',data:counts,borderColor:'#ec4899',backgroundColor:'#ec489922',fill:true,tension:0.25,pointRadius:tb.buckets.length>60?0:2}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Towers',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartServicePie(){
   if(typeof Chart==='undefined')return;

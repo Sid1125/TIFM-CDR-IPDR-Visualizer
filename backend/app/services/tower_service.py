@@ -7,6 +7,7 @@ from sqlalchemy import func, or_
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower
+from app.services.geocode_service import geocode_missing
 
 
 def list_tower_activity(db, case_id=None):
@@ -94,7 +95,8 @@ def rebuild_tower_repo(db) -> dict:
     """One-time backfill: harvest the tower repository from CDR/IPDR records already in the DB.
     Records carry authoritative tower_id + lat/lng, so this populates coordinates for towers that
     were registered (e.g. from an id-only CSV) without them. Inserts new towers, fills missing
-    coordinates, and never clobbers existing coordinates or city/state. Idempotent."""
+    coordinates, and never clobbers existing coordinates or city/state. Newly-located towers are
+    then reverse-geocoded offline to a city/state (only where missing). Idempotent."""
     best: dict = {}
     for model in (CDRRecord, IPDRRecord):
         rows = (
@@ -128,7 +130,9 @@ def rebuild_tower_repo(db) -> dict:
             if changed:
                 updated += 1
     db.commit()
-    return {"added": added, "updated": updated, "total": db.query(func.count(Tower.tower_id)).scalar() or 0}
+    geocoded = geocode_missing(db).get("filled", 0)
+    return {"added": added, "updated": updated, "geocoded": geocoded,
+            "total": db.query(func.count(Tower.tower_id)).scalar() or 0}
 
 
 def find_colocation_candidates(db, limit: int = 50, case_id=None):

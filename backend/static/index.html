@@ -208,6 +208,16 @@
       <div class="card"><h3>Top Ports</h3><div class="chart-info" id="ciTopPorts"></div><canvas id="chartTopPorts"></canvas></div>
       <div class="card"><h3>Data Volume</h3><div class="chart-info" id="ciDataVol"></div><canvas id="chartDataVol"></canvas></div>
       <div class="card"><h3>Tower Activity</h3><div class="chart-info" id="ciTowerAct"></div><canvas id="chartTowerAct"></canvas></div>
+
+      <div class="charts-divider" style="grid-column:1/-1">Behavioural &amp; Investigative</div>
+      <div class="card" style="grid-column:1/-1"><h3>Daily Activity Trend</h3><div class="chart-info" id="ciDailyTrend"></div><canvas id="chartDailyTrend"></canvas></div>
+      <div class="card" style="grid-column:1/-1"><h3>Pattern of Life &mdash; Day &times; Hour</h3><div class="chart-info" id="ciPatternHeat"></div><div id="chartPatternHeat" class="pol-heat"></div></div>
+      <div class="card" style="grid-column:1/-1"><h3>CDR vs IPDR Over Time</h3><div class="chart-info" id="ciCdrIpdrTime"></div><canvas id="chartCdrIpdrTime"></canvas></div>
+      <div class="card"><h3>Cumulative Activity</h3><div class="chart-info" id="ciCumulative"></div><canvas id="chartCumulative"></canvas></div>
+      <div class="card"><h3>Most Active Subjects</h3><div class="chart-info" id="ciActiveSubjects"></div><canvas id="chartActiveSubjects"></canvas></div>
+      <div class="card"><h3>New vs Returning Contacts</h3><div class="chart-info" id="ciNewReturning"></div><canvas id="chartNewReturning"></canvas></div>
+      <div class="card"><h3>Activity by Location</h3><div class="chart-info" id="ciGeoState"></div><canvas id="chartGeoState"></canvas></div>
+      <div class="card"><h3>Tower Diversity Over Time</h3><div class="chart-info" id="ciTowerDiversity"></div><canvas id="chartTowerDiversity"></canvas></div>
     </div>
   </section>
 
@@ -293,6 +303,7 @@
       <input id="trSearch" type="search" placeholder="Search tower id / city / state"/>
       <input type="file" id="trImportFile" accept=".csv" style="display:none"/>
       <button id="trRebuildBtn" class="btn-sm" title="Backfill tower coordinates from the CDR/IPDR records already loaded">Rebuild from records</button>
+      <button id="trGeocodeBtn" class="btn-sm" title="Offline reverse-geocode: name located towers with their nearest city/state (fills only where missing)">Fill place names</button>
       <button id="trImportBtn" class="btn-sm" title="Import a tower master CSV (tower_id, latitude, longitude, city, state)">Import master CSV</button>
       <button id="trRefreshBtn" class="btn-sm" title="Recompute">&#8635;</button>
     </div>

@@ -78,9 +78,13 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Description:** The `towers` table is a **global, case-independent** master keyed by `tower_id` (no `case_id`), shared across every case and never wiped by case delete or `/records/reset`. Every CDR/IPDR upload now **auto-harvests** towers from the rows' own `tower_id`+lat/lng, so each case teaches the repository the towers it touched — using the operators' authoritative coordinates. Upserts **insert** new towers and **back-fill** missing coordinates but **never clobber** existing coordinates or city/state. A one-time **Rebuild from records** action backfills coordinates from CDR/IPDR records already loaded (for towers registered before harvesting). A dedicated **Tower Repo tab** shows totals, coordinate coverage, coverage-by-state bars, a searchable listing (tower_id / city / state, with click-to-map), and an "Import master CSV" button (e.g. an OpenCellID India export or an operator/TRAI master).
 - **Tech:** `_harvest_towers()` in `api/upload.py` (called inside `upload_cdr`/`upload_ipdr`); `tower_repo_stats()` / `tower_repo_list()` / `rebuild_tower_repo()` in `services/tower_service.py`; endpoints `GET /towers/repo/stats`, `GET /towers/repo`, `POST /towers/repo/rebuild`. Frontend `renderTowerRepo()`/`renderTowerRepoView()` + `.tr-*` styles. Tested in `backend/tests/test_tower_repo.py` (harvest insert/backfill/no-clobber, missing-column guard, stats/search, rebuild).
 
-### Replace-on-Upload Strategy
-- **Description:** CDR and IPDR uploads use a strict replace strategy: old records are deleted before new ones are inserted. Tower uploads use merge/upsert.
-- **Tech:** `DELETE FROM cdr_records` / `DELETE FROM ipdr_records` then `add_all()`
+### Offline Reverse-Geocoding (tower → city/state)
+- **Description:** Auto-harvested towers carry coordinates from the records but no place name, while master-CSV towers do. This derives a **city + state from coordinates** with a *nearest major city* lookup against an embedded India reference table (~170 cities spanning every state/UT) — **fully offline**, no external API, matching the app's air-gapped design. State accuracy is high; city is the nearest known city (approximate). Values are **only ever filled in when missing** — an authoritative master CSV is never overwritten. Geocoding runs **automatically at the end of "Rebuild from records"** (so harvested towers get named in one click) and is also available standalone via a **"Fill place names"** button in the Tower Repo tab. The rebuild status line reports the count named; the by-state / cities-covered stats reflect the newly resolved names.
+- **Tech:** `services/geocode_service.py` — `nearest_city(lat,lng)` (haversine over `INDIA_CITIES`), `fill_tower(tower)` (fills only-missing), `geocode_missing(db)` (bulk, idempotent). Wired into `rebuild_tower_repo()` (returns a `geocoded` count); endpoint `POST /towers/repo/geocode`. Frontend `trGeocodeBtn` handler + updated rebuild status. Tested in `backend/tests/test_geocode.py` (nearest-city state resolution, fill-only-missing, idempotency, rebuild integration).
+
+### Append-or-Replace Upload Strategy
+- **Description:** CDR and IPDR uploads support **two modes**, chosen per-upload in the preview dialog: **Add to existing** (append the new rows to whatever the case already holds — for loading additional dumps for the same case without losing prior data) or **Replace existing** (clear the case's CDR/IPDR first, then insert — for re-loading a corrected file). The preview shows how many records of that type the case already has so the choice is informed; the UI defaults to the non-destructive **Add to existing**. Tower uploads still use merge/upsert. The API parameter is `mode=append|replace` (defaults to `replace` for backward compatibility; the UI always sends an explicit mode).
+- **Tech:** `mode: str = Form("replace")` on `POST /upload/cdr` and `/upload/ipdr`; the pre-insert `DELETE` runs only when `mode != "append"`. Frontend `showUploadPreview()` injects a radio toggle, `handleUploadConfirmed(kind,file,route,mode)` sends it. Tested in `backend/tests/test_upload_append.py` (append keeps existing, replace clears, default-is-replace), via dependency-overridden in-memory SQLite.
 
 ### CSV File Parser
 - **Description:** Centralized CSV loading utility using Pandas with flexible column handling.
@@ -302,7 +306,19 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 
 ---
 
-## 7. Charts (12 Chart Types)
+## 7. Charts (20 Chart Types)
+
+### Behavioural & Investigative charts (8, added)
+- **Description:** A second band of charts below the original twelve, focused on investigative insight rather than raw counts. All compute client-side from `allRows` and auto-bucket the case window (daily, switching to weekly when the span exceeds ~120 buckets) so they stay legible on large cases:
+  - **Daily Activity Trend** — total records per day/week across the *full* case window (the older Service Timeline only shows the last 14 days); surfaces escalation, lulls and dormant gaps.
+  - **Pattern of Life (Day × Hour)** — a 7×24 CSS-grid heatmap of when activity happens (darker = busier), exposing routines and night/weekend behaviour. Built as a CSS grid because only the core Chart.js bundle is vendored (no matrix plugin).
+  - **CDR vs IPDR Over Time** — stacked per-bucket bars splitting voice/SMS vs data, showing how the two evolve.
+  - **Cumulative Activity** — running total curve (growth rate at a glance).
+  - **Most Active Subjects** — top subjects by *owned* records; click a bar to open that subject's profile.
+  - **New vs Returning Contacts** — per-bucket split of first-seen contacts vs already-seen ones (network expansion over time).
+  - **Activity by Location** — records ranked by state/UT, joined from the tower repository's geocoded city/state (empty-state nudges to “Fill place names”).
+  - **Tower Diversity Over Time** — distinct towers touched per bucket (movement/footprint breadth).
+- **Tech:** `renderChartDailyTrend/PatternHeat/CdrIpdrTime/Cumulative/ActiveSubjects/NewReturning/GeoState/TowerDiversity()` in `app.js`, dispatched from `renderCharts()` (each wrapped in try/catch). Shared helpers `_timeBuckets()` (adaptive day/week bucketing), `_dayKey()`, `towerMeta()` (tower_id→city/state from `state.towers`). `.pol-*` / `.charts-divider` styles. Chart.js for all but the heatmap.
 
 ### Service Usage Doughnut Chart
 - **Description:** Pie/doughnut chart showing the top 10 services by record count with a legend on the right.
@@ -809,11 +825,12 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - `GET /geo/subjects` — Located parties that have geo-tagged records (CDR a-party + msisdn, IPDR source_ip; excludes remote endpoints like DNS/CDN destinations)
 - `GET /geo/towers` — All tower locations with metadata
 
-### Tower Repository (4 endpoints)
+### Tower Repository (5 endpoints)
 - `GET /towers/` — Full tower list (global, case-independent)
 - `GET /towers/repo/stats` — Repository headline stats: total, coordinate coverage, states/cities covered, coverage-by-state
 - `GET /towers/repo?search=&limit=&offset=` — Searchable, paginated tower listing (by tower_id / city / state)
-- `POST /towers/repo/rebuild` — Backfill tower coordinates from CDR/IPDR records already loaded (idempotent, never clobbers)
+- `POST /towers/repo/rebuild` — Backfill tower coordinates from CDR/IPDR records already loaded, then offline-geocode newly-located towers (idempotent, never clobbers)
+- `POST /towers/repo/geocode` — Offline reverse-geocode: fill city/state for located towers that lack a place name (nearest-city, never overwrites)
 
 ### Investigation (5 endpoints)
 - `GET /investigation/timeline` — Unified CDR/IPDR/Tower timeline
