@@ -586,3 +586,44 @@ def case_cross_case_report(db: Session, case_id: str, limit: int = 200) -> dict:
         },
         "by_case": by_case_list, "subjects": subjects,
     }
+
+
+def case_cross_case_graph(db: Session, case_id: str, limit: int = 200) -> dict:
+    """Reshape the cross-case report into a node/edge graph of recurring SUBJECTS bridging CASES:
+    case nodes (current + every linked case) and subject nodes (each recurring subject), with an
+    edge from each subject to every case it appears in (including the current case). Edges carry
+    match type + confidence for colouring. Powers the Cross-Case tab's Graph view."""
+    rep = case_cross_case_report(db, case_id, limit=limit)
+    cur = rep["current_case"]
+    cur_node_id = "case:" + str(cur["id"])
+
+    nodes: list = [{
+        "id": cur_node_id, "type": "case", "label": cur["name"] or f"Case {cur['id']}",
+        "current": True, "subject_count": rep["summary"]["recurring_subjects"],
+    }]
+    seen_case = {cur_node_id}
+    for c in rep["by_case"]:
+        cid = "case:" + str(c["case_id"])
+        if cid not in seen_case:
+            nodes.append({
+                "id": cid, "type": "case", "label": c["case_name"] or str(c["case_id"]),
+                "current": False, "subject_count": c["shared_subject_count"],
+            })
+            seen_case.add(cid)
+
+    edges: list = []
+    for su in rep["subjects"]:
+        sid = "subj:" + su["subject"]
+        nodes.append({
+            "id": sid, "type": "subject", "label": su["subject"], "kind": su["kind"],
+            "confidence": su["confidence"], "match_type": su["strongest_match"],
+            "case_count": su["other_case_count"],
+        })
+        # The subject belongs to the current case.
+        edges.append({"source": sid, "target": cur_node_id,
+                      "confidence": su["confidence"], "match_type": su["strongest_match"]})
+        for m in su["matches"]:
+            edges.append({"source": sid, "target": "case:" + str(m["case_id"]),
+                          "confidence": m["confidence"], "match_type": m["match_type"]})
+
+    return {"current_case": cur, "stats": rep["summary"], "nodes": nodes, "edges": edges}

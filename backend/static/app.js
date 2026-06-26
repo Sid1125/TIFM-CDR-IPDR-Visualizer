@@ -28,6 +28,7 @@ const D={
   svcSearchInput:$('svcSearchInput'),svcMinConf:$('svcMinConf'),svcCount:$('svcCount'),svcBursts:$('svcBursts'),svcCardGrid:$('svcCardGrid'),
   corrSubA:$('corrSubA'),corrSubB:$('corrSubB'),corrGoBtn:$('corrGoBtn'),corrSwapBtn:$('corrSwapBtn'),corrResults:$('corrResults'),
   crossCaseTab:$('crossCaseTab'),xcRefreshBtn:$('xcRefreshBtn'),
+  xcViewList:$('xcViewList'),xcViewGraph:$('xcViewGraph'),crossCaseGraph:$('crossCaseGraph'),xcGraphSvg:$('xcGraphSvg'),xcGraphDetails:$('xcGraphDetails'),xcGraphStats:$('xcGraphStats'),
   towerRepo:$('towerRepo'),trSearch:$('trSearch'),trImportBtn:$('trImportBtn'),trImportFile:$('trImportFile'),trRefreshBtn:$('trRefreshBtn'),trRebuildBtn:$('trRebuildBtn'),trGeocodeBtn:$('trGeocodeBtn'),
   csGrid:$('csGrid'),csMeta:$('csMeta'),csBody:$('csBody'),
   cpStartA:$('cpStartA'),cpEndA:$('cpEndA'),cpStartB:$('cpStartB'),cpEndB:$('cpEndB'),cpGoBtn:$('cpGoBtn'),cpCloseBtn:$('cpCloseBtn'),cpStatus:$('cpStatus'),cpResults:$('cpResults'),compareBar:$('compareBar'),
@@ -1003,7 +1004,7 @@ function switchTab(tab){
   if(tab==='charts')renderCharts();
   if(tab==='services')renderServicesTab();
   if(tab==='correlation')renderCorrelationTab();
-  if(tab==='crosscase')renderCrossCaseTab();
+  if(tab==='crosscase'){xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();}
   if(tab==='inferences')renderInferences();
   if(tab==='records')renderRecords();
   if(tab==='towerrepo')renderTowerRepo();
@@ -1823,7 +1824,81 @@ function renderCrossCaseReport(rep){
   h+='</div>';
   el.innerHTML=h;
 }
-if(D.xcRefreshBtn)D.xcRefreshBtn.addEventListener('click',renderCrossCaseTab);
+if(D.xcRefreshBtn)D.xcRefreshBtn.addEventListener('click',()=>{xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();});
+
+// Cross-Case tab: List (dossier) vs Graph (subjects bridging cases) view.
+let xcView='list';
+function setXcView(v){
+  xcView=v;
+  if(D.xcViewList)D.xcViewList.classList.toggle('active',v==='list');
+  if(D.xcViewGraph)D.xcViewGraph.classList.toggle('active',v==='graph');
+  if(D.crossCaseTab)D.crossCaseTab.style.display=v==='list'?'':'none';
+  if(D.crossCaseGraph)D.crossCaseGraph.style.display=v==='graph'?'flex':'none';
+  if(v==='graph')renderCrossCaseGraph();else renderCrossCaseTab();
+}
+if(D.xcViewList)D.xcViewList.addEventListener('click',()=>setXcView('list'));
+if(D.xcViewGraph)D.xcViewGraph.addEventListener('click',()=>setXcView('graph'));
+
+let xcGraphSim=null;
+async function renderCrossCaseGraph(){
+  const host=D.xcGraphSvg;if(!host)return;
+  if(!activeCaseId){host.innerHTML='<div class="xc-empty">No case selected.</div>';D.xcGraphStats.textContent='';return;}
+  host.innerHTML='<div class="xc-empty">Building link graph…</div>';
+  let data;
+  try{data=await API.get('/cross-case/graph?case_id='+encodeURIComponent(activeCaseId));}
+  catch(e){host.innerHTML='<div class="xc-empty" style="color:var(--danger)">Failed to load graph.</div>';console.error(e);return;}
+  const nodes=(data.nodes||[]).map(n=>({...n}));
+  const edges=(data.edges||[]).map(e=>({source:e.source,target:e.target,confidence:e.confidence,match_type:e.match_type}));
+  if(!nodes.length||nodes.filter(n=>n.type==='subject').length===0){
+    host.innerHTML='<div class="xc-empty"><div style="font-size:1.2rem;margin-bottom:6px">No cross-case links to graph</div><div style="color:var(--muted)">None of this case&rsquo;s subjects appear in other cases yet.</div></div>';
+    D.xcGraphStats.textContent='';return;
+  }
+  host.innerHTML='<svg width="100%" height="100%"></svg>';
+  const svg=d3.select(host).select('svg'),w=host.clientWidth||800,h=host.clientHeight||520;
+  const confColor=c=>c==='high'?'#3a7d5a':'#d4a017';
+  const zoom=d3.zoom().scaleExtent([0.2,8]).on('zoom',e=>g.attr('transform',e.transform));
+  svg.call(zoom);
+  const g=svg.append('g');
+  const sim=d3.forceSimulation(nodes)
+    .force('link',d3.forceLink(edges).id(d=>d.id).distance(d=>d.confidence==='high'?90:120))
+    .force('charge',d3.forceManyBody().strength(-220))
+    .force('center',d3.forceCenter(w/2,h/2))
+    .force('collision',d3.forceCollide(20));
+  xcGraphSim=sim;
+  const link=g.append('g').selectAll('line').data(edges).join('line')
+    .attr('stroke',d=>confColor(d.confidence)).attr('stroke-width',d=>d.confidence==='high'?2:1.2)
+    .attr('stroke-opacity',0.55).attr('stroke-dasharray',d=>d.confidence==='low'?'4 3':null);
+  const node=g.append('g').selectAll('g.xc-node').data(nodes).join('g').attr('class','xc-node').style('cursor','pointer')
+    .on('mouseover',(e,d)=>{
+      if(d.type==='case')D.xcGraphDetails.innerHTML='<strong>Case: '+esc(d.label)+'</strong>'+(d.current?' <span style="color:var(--accent)">(current)</span>':'')+'<br>'+n(d.subject_count||0)+' shared subject(s)';
+      else D.xcGraphDetails.innerHTML='<strong>'+esc(d.label)+'</strong> <span style="font-size:.65rem">'+(d.kind==='ip'?'IP':'phone')+'</span><br>'+_xcBadge(d.match_type)+' '+(d.confidence||'')+' &middot; in '+n(d.case_count||0)+' other case(s)';
+    })
+    .on('click',(e,d)=>{if(d.type==='case'){const id=String(d.id).replace('case:','');if(!d.current)openInCase(id,'');}else{showProfile(d.label);}})
+    .call(d3.drag().on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y}).on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y}).on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
+  // Case nodes = rounded squares (teal, current case bigger/accent); subject nodes = circles by confidence.
+  node.each(function(d){
+    const sel=d3.select(this);
+    if(d.type==='case'){
+      const s=d.current?26:18;
+      sel.append('rect').attr('width',s).attr('height',s).attr('x',-s/2).attr('y',-s/2).attr('rx',4)
+        .attr('fill',d.current?'#2c6f79':'#4a929c').attr('stroke','#fff').attr('stroke-width',1.5);
+    }else{
+      sel.append('circle').attr('r',d=>Math.max(6,Math.min(14,6+(d.case_count||1)*2)))
+        .attr('fill',d.confidence==='high'?'#3a7d5a':'#d4a017').attr('stroke','#fff').attr('stroke-width',1.5);
+    }
+  });
+  const label=g.append('g').selectAll('text').data(nodes).join('text')
+    .text(d=>{const t=d.type==='case'?d.label:d.label;return t&&t.length>16?t.slice(0,16)+'…':t;})
+    .attr('font-size',d=>d.type==='case'?'10':'8.5').attr('dx',12).attr('dy',3)
+    .attr('class','graph-label').style('pointer-events','none');
+  sim.on('tick',()=>{
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    node.attr('transform',d=>'translate('+d.x+','+d.y+')');
+    label.attr('x',d=>d.x).attr('y',d=>d.y);
+  });
+  const ncase=nodes.filter(n=>n.type==='case').length,nsub=nodes.filter(n=>n.type==='subject').length;
+  D.xcGraphStats.textContent=nsub+' subject'+(nsub===1?'':'s')+' bridging '+ncase+' case'+(ncase===1?'':'s')+' · '+edges.length+' links';
+}
 
 // ---- Tower Repository tab (permanent, case-independent master of all towers) ----
 async function renderTowerRepo(){

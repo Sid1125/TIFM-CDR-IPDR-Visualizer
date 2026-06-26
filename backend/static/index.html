@@ -254,10 +254,19 @@
   <section id="tab-crosscase" class="tab-content">
     <div class="xc-toolbar">
       <h3 style="margin:0;flex:1">Cross-Case Subject Linking</h3>
+      <div class="xc-viewtoggle">
+        <button id="xcViewList" class="btn-sm active" data-view="list">List</button>
+        <button id="xcViewGraph" class="btn-sm" data-view="graph">Graph</button>
+      </div>
       <button id="xcRefreshBtn" class="btn-sm" title="Recompute">&#8635; Refresh</button>
     </div>
     <div id="crossCaseTab" class="xc-wrap" style="flex:1;overflow:auto">
       <div class="xc-empty">Open a case to see which of its subjects appear in other cases.</div>
+    </div>
+    <div id="crossCaseGraph" class="xc-graph-wrap" style="display:none;flex:1;position:relative">
+      <div id="xcGraphSvg" class="xc-graph-svg"></div>
+      <div id="xcGraphDetails" class="xc-graph-details">Hover a node for detail.</div>
+      <div id="xcGraphStats" class="xc-graph-stats"></div>
     </div>
   </section>
 

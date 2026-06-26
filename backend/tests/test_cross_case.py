@@ -16,6 +16,7 @@ from app.models.case import Case
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower  # noqa: F401
+from app.services.cross_case_service import case_cross_case_graph
 from app.services.cross_case_service import case_cross_case_overview
 from app.services.cross_case_service import case_cross_case_report
 from app.services.cross_case_service import subject_cross_case
@@ -146,6 +147,36 @@ class CrossCaseTests(unittest.TestCase):
         subj = {x["subject"]: x for x in rep["subjects"]}
         self.assertIn("A", subj)
         self.assertEqual(subj["A"]["strongest_match"], "number")
+        db.close()
+
+    def test_graph_subjects_bridge_cases(self):
+        db = self._db()
+        gr = case_cross_case_graph(db, case_id="1")
+        nodes = {nd["id"]: nd for nd in gr["nodes"]}
+        # current case node present and flagged
+        self.assertIn("case:1", nodes)
+        self.assertTrue(nodes["case:1"]["current"])
+        # linked case nodes for Bravo (2) and Charlie (3)
+        self.assertIn("case:2", nodes)
+        self.assertIn("case:3", nodes)
+        # subject A is a node and has edges to current + both other cases (number + handset)
+        self.assertIn("subj:A", nodes)
+        a_targets = {e["target"] for e in gr["edges"] if e["source"] == "subj:A"}
+        self.assertEqual(a_targets, {"case:1", "case:2", "case:3"})
+        # isolated subject B never becomes a node
+        self.assertNotIn("subj:B", nodes)
+        # the IP subject's edge to case 3 is low-confidence
+        ip_edges = [e for e in gr["edges"] if e["source"] == "subj:10.0.0.5" and e["target"] == "case:3"]
+        self.assertTrue(ip_edges)
+        self.assertEqual(ip_edges[0]["confidence"], "low")
+        db.close()
+
+    def test_graph_empty_when_no_case(self):
+        db = self._db()
+        gr = case_cross_case_graph(db, case_id="")
+        # only the (empty) current-case node, no subject nodes
+        self.assertFalse([nd for nd in gr["nodes"] if nd["type"] == "subject"])
+        self.assertEqual(gr["edges"], [])
         db.close()
 
     def test_report_empty_when_no_links(self):
