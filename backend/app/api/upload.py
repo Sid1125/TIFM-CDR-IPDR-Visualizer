@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 
@@ -21,9 +22,23 @@ from app.models.tower import Tower
 from app.schemas.upload import UploadResponse
 from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
+from app.services.ingest_service import coerce_frame
+from app.services.ingest_service import resolve_columns
 from app.utils.validators import ensure_columns
 
 router = APIRouter()
+
+
+def _parse_mapping(mapping_json: str):
+    """Parse the optional UI-supplied column override (canonical -> actual header). Bad JSON is
+    ignored (falls back to auto-detection) rather than failing the upload."""
+    if not mapping_json:
+        return None
+    try:
+        m = json.loads(mapping_json)
+        return {str(k): str(v) for k, v in m.items()} if isinstance(m, dict) else None
+    except Exception:
+        return None
 
 
 def _to_pydatetime(val):
@@ -99,6 +114,8 @@ async def upload_cdr(
     file: UploadFile = File(...),
     case_id: str = Form(""),
     mode: str = Form("replace"),
+    mapping_json: str = Form(""),
+    operator: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -109,14 +126,16 @@ async def upload_cdr(
             temp_path = temp_file.name
 
         df = pd.read_csv(temp_path)
-        cdr_required = [
-            "a_party_number",
-            "b_party_number",
-            "start_time",
-            "end_time",
-            "duration_seconds",
-        ]
-        ensure_columns(df.columns, cdr_required)
+        # Operator-aware mapping: resolve the file's headers onto canonical CDR fields (honouring a
+        # UI-supplied override), then bail clearly if a required field can't be found.
+        override = _parse_mapping(mapping_json)
+        resolved = resolve_columns(df.columns, "cdr", override=override)
+        if resolved["unmapped_required"]:
+            raise HTTPException(
+                status_code=422,
+                detail="Could not map required CDR column(s): " + ", ".join(resolved["unmapped_required"]),
+            )
+        df, report = coerce_frame(df, "cdr", resolved["mapping"])
 
         # Append mode adds the new rows alongside what's already in the case; replace mode
         # (default) clears the case's existing CDR first.
@@ -128,10 +147,6 @@ async def upload_cdr(
                 db.query(CDRRecord).filter(
                     (CDRRecord.case_id.is_(None)) | (CDRRecord.case_id == "")
                 ).delete(synchronize_session=False)
-
-        for col in ["start_time", "end_time"]:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors="coerce")
 
         records = []
         for _, row in df.iterrows():
@@ -163,8 +178,11 @@ async def upload_cdr(
 
         log_action(db, user, request, "upload", case_id=case_id or None,
                    detail={"kind": "cdr", "mode": mode.lower(), "rows_imported": len(records),
-                           "filename": file.filename})
-        return UploadResponse(success=True, records_imported=len(records))
+                           "rows_dropped": report["rows_dropped"], "filename": file.filename})
+        return UploadResponse(success=True, records_imported=len(records), validation=report)
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -179,6 +197,8 @@ async def upload_ipdr(
     file: UploadFile = File(...),
     case_id: str = Form(""),
     mode: str = Form("replace"),
+    mapping_json: str = Form(""),
+    operator: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -189,13 +209,16 @@ async def upload_ipdr(
             temp_path = temp_file.name
 
         df = pd.read_csv(temp_path)
-        ipdr_required = [
-            "start_time",
-            "end_time",
-            "source_ip",
-            "destination_ip",
-        ]
-        ensure_columns(df.columns, ipdr_required)
+        # Operator-aware mapping onto canonical IPDR fields (UI override honoured), then a clear
+        # failure if a required field is missing.
+        override = _parse_mapping(mapping_json)
+        resolved = resolve_columns(df.columns, "ipdr", override=override)
+        if resolved["unmapped_required"]:
+            raise HTTPException(
+                status_code=422,
+                detail="Could not map required IPDR column(s): " + ", ".join(resolved["unmapped_required"]),
+            )
+        df, report = coerce_frame(df, "ipdr", resolved["mapping"])
 
         # Append mode adds the new rows alongside what's already in the case; replace mode
         # (default) clears the case's existing IPDR first.
@@ -207,10 +230,6 @@ async def upload_ipdr(
                 db.query(IPDRRecord).filter(
                     (IPDRRecord.case_id.is_(None)) | (IPDRRecord.case_id == "")
                 ).delete(synchronize_session=False)
-
-        for col in ["start_time", "end_time"]:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors="coerce")
 
         records = []
         for _, row in df.iterrows():
@@ -246,8 +265,11 @@ async def upload_ipdr(
 
         log_action(db, user, request, "upload", case_id=case_id or None,
                    detail={"kind": "ipdr", "mode": mode.lower(), "rows_imported": len(records),
-                           "filename": file.filename})
-        return UploadResponse(success=True, records_imported=len(records))
+                           "rows_dropped": report["rows_dropped"], "filename": file.filename})
+        return UploadResponse(success=True, records_imported=len(records), validation=report)
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -292,8 +314,48 @@ async def upload_towers(
                    detail={"kind": "towers", "rows_imported": len(records),
                            "filename": file.filename})
         return UploadResponse(success=True, records_imported=len(records))
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+@router.post("/preview")
+async def upload_preview(
+    file: UploadFile = File(...),
+    kind: str = Form(...),
+    mapping_json: str = Form(""),
+):
+    """Dry-run a CDR/IPDR upload: resolve the file's headers onto canonical fields (no DB writes),
+    so the UI can show the auto-detected mapping, any unmapped required columns, and the detected
+    operator before the investigator commits the upload."""
+    kind = (kind or "").lower()
+    if kind not in ("cdr", "ipdr"):
+        raise HTTPException(status_code=400, detail="kind must be 'cdr' or 'ipdr'")
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as temp_file:
+            temp_file.write(await file.read())
+            temp_path = temp_file.name
+        df = pd.read_csv(temp_path, nrows=50)
+        resolved = resolve_columns(df.columns, kind, override=_parse_mapping(mapping_json))
+        return {
+            "kind": kind,
+            "headers": list(df.columns),
+            "mapping": resolved["mapping"],
+            "unmapped_required": resolved["unmapped_required"],
+            "required": resolved["required"],
+            "canonical": resolved["canonical"],
+            "detected_operator": resolved["detected_operator"],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         if temp_path and os.path.exists(temp_path):
