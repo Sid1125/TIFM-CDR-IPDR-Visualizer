@@ -2003,7 +2003,7 @@ async function getStoryXcase(){
   return _storyXcaseCache[k];
 }
 
-function buildNarrative(subject,events){
+function buildStoryNarrative(subject,events){
   if(subject==='__all__'){
     const meetings=events.filter(e=>e.kind==='meeting').length,ids=events.filter(e=>e.kind==='identity').length,xc=events.filter(e=>e.kind==='crosscase').length,ai=events.filter(e=>e.kind==='ai').length;
     let p='This case spans <b>'+n(state.subjects.length)+'</b> subjects and <b>'+n(allRows.length)+'</b> records. ';
@@ -2042,7 +2042,7 @@ async function renderStory(){
   await ensureMeetingsLoaded();
   try{await getInfReport();}catch(e){}
   _storyEvents=await buildCaseEvents(subject);
-  D.storyNarrative.innerHTML='<h4 class="story-narr-h">Case Narrative</h4>'+buildNarrative(subject,_storyEvents);
+  D.storyNarrative.innerHTML='<h4 class="story-narr-h">Case Narrative</h4>'+buildStoryNarrative(subject,_storyEvents);
   renderStoryFilters();
   renderStoryTimeline();
   renderEvidence();
@@ -5390,7 +5390,7 @@ async function renderDossier(){
 
     // ── 2. Case narrative ──
     let narr='';
-    try{if(topSub){const evs=await buildCaseEvents(topSub);narr='<p class="d-narr-lead">Principal subject (by activity): <b>'+esc(topSub)+'</b>.</p>'+buildNarrative(topSub,evs);}else{narr=buildNarrative('__all__',[]);}}catch(e){narr='<div class="d-note">Narrative unavailable.</div>';}
+    try{if(topSub){const evs=await buildCaseEvents(topSub);narr='<p class="d-narr-lead">Principal subject (by activity): <b>'+esc(topSub)+'</b>.</p>'+buildStoryNarrative(topSub,evs);}else{narr=buildStoryNarrative('__all__',[]);}}catch(e){narr='<div class="d-note">Narrative unavailable.</div>';}
     h+='<section class="dossier-section"><h2>2. Case Narrative</h2><div class="d-narr">'+narr+'</div>'
       +'<div class="d-note">Auto-reconstructed from the chronological record. See the Story tab for the full timeline and other subjects.</div></section>';
 
