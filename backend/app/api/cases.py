@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -9,6 +9,7 @@ from app.models.case import Case
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.schemas.case import CaseCreate, CaseRead, CaseUpdate
+from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
 from app.models.auth import User
 
@@ -34,11 +35,12 @@ def list_cases(db: Session = Depends(get_db), _user: User = Depends(get_current_
 
 
 @router.post("/", response_model=CaseRead, status_code=status.HTTP_201_CREATED)
-def create_case(payload: CaseCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def create_case(payload: CaseCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = Case(name=payload.name, description=payload.description, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
     db.add(c)
     db.commit()
     db.refresh(c)
+    log_action(db, user, request, "case_create", case_id=c.id, case_name=c.name)
     return CaseRead(id=c.id, name=c.name, description=c.description, created_at=c.created_at, updated_at=c.updated_at, record_count=0)
 
 
@@ -60,12 +62,14 @@ def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)
 
 
 @router.delete("/{case_id}")
-def delete_case(case_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def delete_case(case_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = db.query(Case).filter(Case.id == case_id).one_or_none()
     if c is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    case_name = c.name
     db.query(CDRRecord).filter(CDRRecord.case_id == str(c.id)).delete(synchronize_session=False)
     db.query(IPDRRecord).filter(IPDRRecord.case_id == str(c.id)).delete(synchronize_session=False)
     db.delete(c)
     db.commit()
+    log_action(db, user, request, "case_delete", case_id=case_id, case_name=case_name)
     return {"success": True, "deleted_records": True}

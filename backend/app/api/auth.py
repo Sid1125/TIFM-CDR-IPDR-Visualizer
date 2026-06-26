@@ -25,6 +25,7 @@ from app.schemas.auth import AuthUserRead
 from app.schemas.auth import ChangePasswordRequest
 from app.schemas.auth import LoginRequest
 from app.schemas.auth import PasswordChangeResponse
+from app.services.audit_service import log_action
 from app.services.auth_service import authenticate_user
 from app.services.auth_service import create_session
 from app.services.auth_service import get_current_admin
@@ -52,9 +53,13 @@ def _serialize_session(session: AuthSession, current_session: AuthSession) -> Au
 def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     user = authenticate_user(db, payload.username, payload.password)
     if user is None:
+        log_action(db, request=request, action="login_failed",
+                   username=normalize_username(payload.username or ""),
+                   target="invalid credentials")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
     session, raw_token = create_session(db, user, request)
+    log_action(db, user, request, "login")
     response.set_cookie(
         key=settings.AUTH_SESSION_COOKIE_NAME,
         value=raw_token,

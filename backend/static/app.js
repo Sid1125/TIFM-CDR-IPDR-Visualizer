@@ -23,6 +23,7 @@ const D={
   resetCaseBtn:$('resetCaseBtn'),
   aiGenerateReportBtn:null,aiReportContent:$('aiReportContent'),aiCopyReportBtn:$('aiCopyReportBtn'),aiCopyPackageBtn:$('aiCopyPackageBtn'),
   adminTabBtn:$('adminTabBtn'),adminBody:$('adminBody'),adminEmpty:$('adminEmpty'),adminTable:$('adminTable'),adminCreateBtn:$('adminCreateBtn'),
+  auditBody:$('auditBody'),auditTable:$('auditTable'),auditEmpty:$('auditEmpty'),auditFilterUser:$('auditFilterUser'),auditFilterAction:$('auditFilterAction'),auditFilterFrom:$('auditFilterFrom'),auditRefreshBtn:$('auditRefreshBtn'),
   darkModeBtn:$('darkModeBtn'),exportBtn:$('exportBtn'),caseSelector:$('caseSelector'),
   svcSearchInput:$('svcSearchInput'),svcMinConf:$('svcMinConf'),svcCount:$('svcCount'),svcBursts:$('svcBursts'),svcCardGrid:$('svcCardGrid'),
   corrSubA:$('corrSubA'),corrSubB:$('corrSubB'),corrGoBtn:$('corrGoBtn'),corrSwapBtn:$('corrSwapBtn'),corrResults:$('corrResults'),
@@ -167,6 +168,7 @@ async function loadCaseData(){
     // view instantly, instead of requiring a manual tab switch or a page refresh. Dashboard,
     // Charts and Records are already re-rendered just above, so only refresh the others.
     if(state.tab&&!['dashboard','charts','records'].includes(state.tab))switchTab(state.tab);
+    if(activeCaseId){const cn=(state.cases||[]).find(c=>String(c.id)===String(activeCaseId));auditView('view_case',{case_id:activeCaseId,case_name:cn?cn.name:null});}
   }catch(e){console.error(e)}
 }
 function nCdr(r){
@@ -186,6 +188,7 @@ function nIpdr(r){
 // -- Case Management --
 async function loadCases(){
   try{let cases=await API.get('/cases/');
+    state.cases=cases;
     if(!cases.length){
       const c=await API.post('/cases/',{name:'Default Case'});
       cases=[c];setActiveCase(c.id);
@@ -2864,6 +2867,7 @@ D.recService.addEventListener('change',renderRecTable);
 // ====== 7. SUBJECT PROFILE ======
 function showProfile(sub){
   if(!sub){D.profile.style.display='none';return}
+  auditView('view_subject',{case_id:activeCaseId,target:sub});
   const rows=rowsFor(sub);
   const contacts=new Set();const towers=new Set();const svcCounts={};const hours=Array(24).fill(0);const dailyMap={};
   rows.forEach(r=>{
@@ -4478,6 +4482,49 @@ function renderAdmin(){
       </tr>`
     }).join('');
   }).catch(e=>{tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--danger)">Failed to load users.</td></tr>';console.error(e)});
+  renderAuditLog();
+}
+
+function renderAuditLog(){
+  const tbody=D.auditBody;const table=D.auditTable;const empty=D.auditEmpty;
+  if(!tbody)return;
+  tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--muted)">Loading...</td></tr>';
+  const p=new URLSearchParams();
+  const u=(D.auditFilterUser.value||'').trim();if(u)p.set('username',u);
+  const a=D.auditFilterAction.value;if(a)p.set('action',a);
+  const f=D.auditFilterFrom.value;if(f)p.set('date_from',f);
+  p.set('limit','500');
+  API.get('/audit/log?'+p.toString()).then(rows=>{
+    if(!rows.length){table.style.display='none';empty.style.display='block';return}
+    table.style.display='';empty.style.display='none';
+    tbody.innerHTML=rows.map(r=>{
+      const t=r.ts?new Date(r.ts).toLocaleString():'-';
+      const det=r.detail&&Object.keys(r.detail).length?esc(JSON.stringify(r.detail)):'';
+      const caseTxt=r.case_name?esc(r.case_name):(r.case_id?esc(r.case_id):'-');
+      return `<tr>
+        <td style="white-space:nowrap">${t}</td>
+        <td>${esc(r.username||'-')}</td>
+        <td>${esc(r.role||'-')}</td>
+        <td>${esc(r.ip_address||'-')}</td>
+        <td><span class="audit-act audit-${esc(r.action)}">${esc(r.action)}</span></td>
+        <td>${caseTxt}</td>
+        <td>${esc(r.target||'-')}</td>
+        <td style="color:var(--muted);font-size:.8rem;max-width:240px;overflow:hidden;text-overflow:ellipsis">${det}</td>
+      </tr>`
+    }).join('');
+  }).catch(e=>{tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--danger)">Failed to load audit log.</td></tr>';console.error(e)});
+}
+
+// Fire-and-forget chain-of-custody beacon for reads (case open / subject view). Debounced so
+// repeated renders of the same target don't spam rows.
+let _lastBeacon='';
+function auditView(action,opts){
+  try{
+    opts=opts||{};
+    const key=action+'|'+(opts.case_id||'')+'|'+(opts.target||'');
+    if(key===_lastBeacon)return; _lastBeacon=key;
+    API.post('/audit/view',{action:action,case_id:opts.case_id!=null?String(opts.case_id):null,case_name:opts.case_name||null,target:opts.target!=null?String(opts.target):null}).catch(()=>{});
+  }catch(e){}
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -4564,6 +4611,9 @@ D.adminCreateBtn.addEventListener('click',()=>{
     renderAdmin();
   });
 });
+
+if(D.auditRefreshBtn)D.auditRefreshBtn.addEventListener('click',renderAuditLog);
+if(D.auditFilterAction)D.auditFilterAction.addEventListener('change',renderAuditLog);
 
 // ====== EVIDENCE EXPORT ======
 D.exportBtn.addEventListener('click',async ()=>{

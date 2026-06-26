@@ -506,6 +506,32 @@
       </table>
     </div>
     <div id="adminEmpty" style="display:none;padding:40px;text-align:center;color:var(--muted)">No users found.</div>
+
+    <div class="admin-toolbar" style="margin-top:28px">
+      <h3 style="margin:0;flex:1">Audit Log <span style="font-weight:400;color:var(--muted);font-size:.85rem">— chain of custody</span></h3>
+      <input id="auditFilterUser" class="input-sm" placeholder="user" style="width:110px">
+      <select id="auditFilterAction" class="input-sm" style="width:140px">
+        <option value="">all actions</option>
+        <option value="login">login</option>
+        <option value="login_failed">login failed</option>
+        <option value="upload">upload</option>
+        <option value="export">export</option>
+        <option value="dossier">dossier</option>
+        <option value="case_create">case create</option>
+        <option value="case_delete">case delete</option>
+        <option value="view_case">view case</option>
+        <option value="view_subject">view subject</option>
+      </select>
+      <input id="auditFilterFrom" class="input-sm" type="date" title="from date" style="width:140px">
+      <button id="auditRefreshBtn" class="btn btn-sm">Refresh</button>
+    </div>
+    <div class="admin-wrap">
+      <table class="data-table" id="auditTable">
+        <thead><tr><th>Time</th><th>User</th><th>Role</th><th>IP</th><th>Action</th><th>Case</th><th>Target</th><th>Detail</th></tr></thead>
+        <tbody id="auditBody"></tbody>
+      </table>
+    </div>
+    <div id="auditEmpty" style="display:none;padding:24px;text-align:center;color:var(--muted)">No audit entries.</div>
   </section>
 
   <!-- SUBJECT PROFILE MODAL -->

@@ -580,6 +580,15 @@ a{color:var(--accent);text-decoration:none}
 .admin-actions button{padding:4px 10px;font-size:0.72rem;cursor:pointer;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg)}
 .admin-actions button:hover{background:var(--accent-light)}
 .admin-actions .btn-danger{color:var(--danger);border-color:var(--danger)}
+/* ── Audit Log ── */
+.input-sm{padding:4px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--text,var(--fg));font-size:0.75rem}
+#auditTable td{padding:6px 10px;font-size:0.76rem;vertical-align:top}
+.audit-act{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.7rem;font-weight:600;background:var(--accent-light);color:var(--accent)}
+.audit-login_failed{background:rgba(185,74,72,.15);color:var(--danger)}
+.audit-case_delete{background:rgba(185,74,72,.15);color:var(--danger)}
+.audit-upload{background:rgba(58,125,90,.16);color:#3a7d5a}
+.audit-export,.audit-dossier{background:rgba(212,160,23,.16);color:#a9791a}
+.audit-view_case,.audit-view_subject{background:var(--bg);color:var(--muted)}
 /* ── Full Investigation Command Center ── */
 .invest-toolbar{display:flex;align-items:center;gap:12px;padding:4px 0 8px}
 .invest-toolbar .btn{background:var(--accent);color:#fff;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.8rem}

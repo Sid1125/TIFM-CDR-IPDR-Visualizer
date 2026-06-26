@@ -58,6 +58,11 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 - **Description:** Each session records the IP address (from `X-Forwarded-For` or direct client) and user-agent string.
 - **Tech:** `request.headers.get("x-forwarded-for")`, `request.client.host`, `request.headers.get("user-agent")`
 
+### Audit Trail / Chain-of-Custody
+- **Description:** Every meaningful action is recorded to an append-only `audit_logs` table for evidentiary accountability: who (username/role), from where (IP), what (action), against which case and target, plus a JSON detail blob and timestamp. Captured actions: `login` / `login_failed`, `upload` (with kind, mode, rows imported, filename), `export`, `dossier`, `case_create`, `case_delete`, and the read beacons `view_case` / `view_subject`. Audit writes are defensive — a logging failure never breaks the primary action.
+- **Surfacing:** Admin-only **Audit Log** panel in the Admin tab, most-recent-first, filterable by user, action, and from-date. Reads are recorded via a debounced client beacon (`POST /audit/view`) fired when a case is opened or a subject profile is viewed.
+- **Tech:** `AuditLog` model (auto-created via `Base.metadata.create_all`, composite `ix_audit_ts_user` index), `audit_service.log_action()` / `list_audit()`, `GET /audit/log` (admin-gated via `get_current_admin`), `POST /audit/view` (any authed user), frontend `renderAuditLog()` + `auditView()`
+
 ---
 
 ## 2. Data Ingestion

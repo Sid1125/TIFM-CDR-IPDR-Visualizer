@@ -9,14 +9,18 @@ from fastapi import Depends
 from fastapi import File
 from fastapi import Form
 from fastapi import HTTPException
+from fastapi import Request
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.auth import User
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower
 from app.schemas.upload import UploadResponse
+from app.services.audit_service import log_action
+from app.services.auth_service import get_current_user
 from app.utils.validators import ensure_columns
 
 router = APIRouter()
@@ -91,10 +95,12 @@ def _harvest_towers(db: Session, df) -> int:
 
 @router.post("/cdr", response_model=UploadResponse)
 async def upload_cdr(
+    request: Request,
     file: UploadFile = File(...),
     case_id: str = Form(""),
     mode: str = Form("replace"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     temp_path = None
     try:
@@ -155,6 +161,9 @@ async def upload_cdr(
         _harvest_towers(db, df)  # grow the permanent tower repository from this case's rows
         db.commit()
 
+        log_action(db, user, request, "upload", case_id=case_id or None,
+                   detail={"kind": "cdr", "mode": mode.lower(), "rows_imported": len(records),
+                           "filename": file.filename})
         return UploadResponse(success=True, records_imported=len(records))
     except Exception as exc:
         db.rollback()
@@ -166,10 +175,12 @@ async def upload_cdr(
 
 @router.post("/ipdr", response_model=UploadResponse)
 async def upload_ipdr(
+    request: Request,
     file: UploadFile = File(...),
     case_id: str = Form(""),
     mode: str = Form("replace"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     temp_path = None
     try:
@@ -233,6 +244,9 @@ async def upload_ipdr(
         _harvest_towers(db, df)  # grow the permanent tower repository from this case's rows
         db.commit()
 
+        log_action(db, user, request, "upload", case_id=case_id or None,
+                   detail={"kind": "ipdr", "mode": mode.lower(), "rows_imported": len(records),
+                           "filename": file.filename})
         return UploadResponse(success=True, records_imported=len(records))
     except Exception as exc:
         db.rollback()
@@ -244,8 +258,10 @@ async def upload_ipdr(
 
 @router.post("/towers", response_model=UploadResponse)
 async def upload_towers(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     temp_path = None
     try:
@@ -272,6 +288,9 @@ async def upload_towers(
             db.merge(record)
         db.commit()
 
+        log_action(db, user, request, "upload",
+                   detail={"kind": "towers", "rows_imported": len(records),
+                           "filename": file.filename})
         return UploadResponse(success=True, records_imported=len(records))
     except Exception as exc:
         db.rollback()

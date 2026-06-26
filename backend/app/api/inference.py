@@ -5,12 +5,14 @@ import json
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
+from fastapi import Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.export_log import ExportLog
 from app.models.watchlist import WatchlistEntry
+from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
 from app.services.inference_service import apply_watchlist
 from app.services.inference_service import export_manifest
@@ -54,7 +56,7 @@ def inference_report(db: Session = Depends(get_db), limit: int = Query(default=5
 
 
 @router.get("/report.md")
-def inference_report_md(db: Session = Depends(get_db), limit: int = Query(default=5000, ge=1, le=50000),
+def inference_report_md(request: Request, db: Session = Depends(get_db), limit: int = Query(default=5000, ge=1, le=50000),
                         case_id: str = Query(default=""),
                         source: str = Query(default="analysis"),
                         user=Depends(get_current_user)):
@@ -78,6 +80,8 @@ def inference_report_md(db: Session = Depends(get_db), limit: int = Query(defaul
         db.commit()
     except Exception:
         db.rollback()
+    log_action(db, user, request, "export", case_id=case_id or None, case_name=case_name,
+               target=ref, detail={"source": source})
     return PlainTextResponse(content=md, headers={"X-Export-Ref": ref})
 
 
