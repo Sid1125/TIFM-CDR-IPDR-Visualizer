@@ -29,6 +29,8 @@ const D={
   corrSubA:$('corrSubA'),corrSubB:$('corrSubB'),corrGoBtn:$('corrGoBtn'),corrSwapBtn:$('corrSwapBtn'),corrResults:$('corrResults'),
   crossCaseTab:$('crossCaseTab'),xcRefreshBtn:$('xcRefreshBtn'),
   xcViewList:$('xcViewList'),xcViewGraph:$('xcViewGraph'),crossCaseGraph:$('crossCaseGraph'),xcGraphSvg:$('xcGraphSvg'),xcGraphDetails:$('xcGraphDetails'),xcGraphStats:$('xcGraphStats'),
+  storySubject:$('storySubject'),storyFilters:$('storyFilters'),storyNarrative:$('storyNarrative'),storyTimeline:$('storyTimeline'),storyRefreshBtn:$('storyRefreshBtn'),
+  evidenceToggleBtn:$('evidenceToggleBtn'),evidenceCount:$('evidenceCount'),evidencePanel:$('evidencePanel'),evidenceList:$('evidenceList'),evidenceClearBtn:$('evidenceClearBtn'),
   towerRepo:$('towerRepo'),trSearch:$('trSearch'),trImportBtn:$('trImportBtn'),trImportFile:$('trImportFile'),trRefreshBtn:$('trRefreshBtn'),trRebuildBtn:$('trRebuildBtn'),trGeocodeBtn:$('trGeocodeBtn'),
   csGrid:$('csGrid'),csMeta:$('csMeta'),csBody:$('csBody'),
   cpStartA:$('cpStartA'),cpEndA:$('cpEndA'),cpStartB:$('cpStartB'),cpEndB:$('cpEndB'),cpGoBtn:$('cpGoBtn'),cpCloseBtn:$('cpCloseBtn'),cpStatus:$('cpStatus'),cpResults:$('cpResults'),compareBar:$('compareBar'),
@@ -152,7 +154,7 @@ function setActiveCase(id){
   try{if(activeCaseId)localStorage.setItem('activeCaseId',activeCaseId);else localStorage.removeItem('activeCaseId');}catch(e){}
 }
 async function loadCaseData(){
-  invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;
+  invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
   try{
     const caseParam=activeCaseId?'?case_id='+activeCaseId:'';
     const[cdr,ipdr,towers]=await Promise.all([API.get('/records/cdr'+caseParam),API.get('/records/ipdr'+caseParam),API.get('/towers/')]);
@@ -1004,6 +1006,7 @@ function switchTab(tab){
   if(tab==='charts')renderCharts();
   if(tab==='services')renderServicesTab();
   if(tab==='correlation')renderCorrelationTab();
+  if(tab==='story')renderStory();
   if(tab==='crosscase'){xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();}
   if(tab==='inferences')renderInferences();
   if(tab==='records')renderRecords();
@@ -1899,6 +1902,199 @@ async function renderCrossCaseGraph(){
   const ncase=nodes.filter(n=>n.type==='case').length,nsub=nodes.filter(n=>n.type==='subject').length;
   D.xcGraphStats.textContent=nsub+' subject'+(nsub===1?'':'s')+' bridging '+ncase+' case'+(ncase===1?'':'s')+' · '+edges.length+' links';
 }
+
+// ====== STORY / NARRATIVE TAB (unified investigation timeline + auto narrative + evidence) ======
+const EVK={
+  first:{c:'#2c6f79',g:'◉',l:'First activity'},
+  call:{c:'#3a7d5a',g:'☎',l:'Call'},
+  sms:{c:'#4a929c',g:'✉',l:'SMS'},
+  data:{c:'#7b4f9c',g:'⇄',l:'Data'},
+  move:{c:'#b07d2b',g:'▲',l:'Movement'},
+  meeting:{c:'#b94a48',g:'⚑',l:'Meeting'},
+  identity:{c:'#8b5cf6',g:'↻',l:'Identity change'},
+  crosscase:{c:'#d4a017',g:'⇌',l:'Cross-case'},
+  ai:{c:'#c0392b',g:'⚠',l:'AI finding'},
+};
+let _storyEvents=[],_storyKinds=null,_storyXcaseCache={};
+function _fmtDT(v){try{return new Date(v).toLocaleString([], {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return String(v)}}
+function _evSig(e){return e.kind+'|'+(e.ts?new Date(e.ts).getTime():'')+'|'+e.title}
+
+// Assemble a meaningful, bounded chronological event feed for one subject (or '__all__').
+async function buildCaseEvents(subject){
+  const ev=[];
+  const xrep=await getStoryXcase();
+  if(subject&&subject!=='__all__'){
+    const owned=allRows.filter(r=>r.ts&&(r.sub===subject||r.msisdn===subject));
+    const any=rowsFor(subject).filter(r=>r.ts).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+    if(any.length){const f=any[0];ev.push({ts:new Date(f.ts),kind:'first',title:subject+' first appears in this case',detail:'via '+(f.type==='IPDR'?'data session':(f.cll||'call'))+(f.tow?' at tower '+f.tow:''),sub:subject});}
+    // First contact with each top contact (CDR)
+    const contactFirst={},contactCount={};
+    owned.filter(r=>r.type==='CDR'&&r.cnt&&r.cnt!==subject).forEach(r=>{const t=new Date(r.ts);contactCount[r.cnt]=(contactCount[r.cnt]||0)+1;if(!contactFirst[r.cnt]||t<contactFirst[r.cnt])contactFirst[r.cnt]=t;});
+    Object.entries(contactCount).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([c,k])=>{
+      ev.push({ts:contactFirst[c],kind:'call',title:'Began contact with '+c,detail:k+' interaction'+(k===1?'':'s')+' over the case window',sub:subject,cnt:c});
+    });
+    // Data activity onset
+    const ipr=owned.filter(r=>r.type==='IPDR').sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+    if(ipr.length){const svcCount={};ipr.forEach(r=>{const s=recordSvcAttr(r)||r.svc||'Unknown';svcCount[s]=(svcCount[s]||0)+1;});const top=Object.entries(svcCount).sort((a,b)=>b[1]-a[1])[0];
+      ev.push({ts:new Date(ipr[0].ts),kind:'data',title:'Internet activity begins',detail:ipr.length+' data session'+(ipr.length===1?'':'s')+(top?'; dominant: '+top[0]:''),sub:subject});}
+    // Distinct-tower first visits (bounded)
+    const towFirst={};owned.filter(r=>r.tow).forEach(r=>{const t=new Date(r.ts);if(!towFirst[r.tow]||t<towFirst[r.tow])towFirst[r.tow]=t;});
+    const tm=towerMeta?towerMeta():{};
+    Object.entries(towFirst).sort((a,b)=>a[1]-b[1]).slice(0,8).forEach(([tw,t])=>{const m=tm[tw]||{};ev.push({ts:t,kind:'move',title:'First seen at tower '+tw,detail:[m.city,m.state].filter(Boolean).join(', ')||'location unresolved',sub:subject,tow:tw});});
+    // Identity changes
+    try{(buildIdentityProfile(subject).changes||[]).forEach(c=>ev.push({ts:new Date(c.time),kind:'identity',title:c.detail,detail:(c.from?('was '+c.from):'')+(c.to?(' → '+c.to):'')+' ('+c.confidence+' confidence)',sub:subject}));}catch(e){}
+    // Meetings involving subject
+    ((_meetings&&_meetings.list)||[]).filter(m=>m.subA===subject||m.subB===subject).forEach(m=>{const other=m.subA===subject?m.subB:m.subA;ev.push({ts:new Date(m.time),kind:'meeting',title:'Co-located with '+other,detail:'tower '+(m.tow||'?')+' · '+Math.round(m.gap)+'m gap · '+m.gapLevel+' confidence'+(m.encounterCount>1?' · '+m.encounterCount+' encounters':''),sub:subject,cnt:other,tow:m.tow});});
+    // Cross-case
+    const xs=((xrep&&xrep.subjects)||[]).find(s=>s.subject===subject);
+    if(xs){(xs.matches||[]).forEach(mm=>{const when=mm.first_seen?new Date(mm.first_seen):(any.length?new Date(any[0].ts):new Date());ev.push({ts:when,kind:'crosscase',title:'Also appears in case "'+(mm.case_name||mm.case_id)+'"',detail:'matched by '+((mm.match_types||[mm.match_type]).join(', '))+' · '+mm.confidence+' confidence · '+(mm.record_count||0)+' records',sub:subject});});}
+    // AI findings
+    addAiEvents(ev,subject,any.length?new Date(any[any.length-1].ts):new Date());
+  }else{
+    // Case-wide overview: meetings, identity changes, cross-case, AI (bounded).
+    ((_meetings&&_meetings.list)||[]).forEach(m=>ev.push({ts:new Date(m.time),kind:'meeting',title:m.subA+' ↔ '+m.subB,detail:'tower '+(m.tow||'?')+' · '+Math.round(m.gap)+'m · '+m.gapLevel,sub:m.subA,cnt:m.subB,tow:m.tow}));
+    (state.subjects||[]).slice(0,200).forEach(s=>{try{(buildIdentityProfile(s).changes||[]).forEach(c=>ev.push({ts:new Date(c.time),kind:'identity',title:s+': '+c.detail,detail:(c.from||'')+(c.to?(' → '+c.to):'')+' ('+c.confidence+')',sub:s}));}catch(e){}});
+    ((xrep&&xrep.subjects)||[]).forEach(xs=>{(xs.matches||[]).forEach(mm=>ev.push({ts:mm.first_seen?new Date(mm.first_seen):new Date(),kind:'crosscase',title:xs.subject+' ↔ case "'+(mm.case_name||mm.case_id)+'"',detail:'matched by '+((mm.match_types||[mm.match_type]).join(', '))+' · '+mm.confidence,sub:xs.subject}));});
+    addAiEvents(ev,null,new Date());
+  }
+  return ev.filter(e=>e.ts&&!isNaN(e.ts)).sort((a,b)=>a.ts-b.ts);
+}
+
+function addAiEvents(ev,subject,fallbackTs){
+  const rep=_infReport;if(!rep)return;
+  const cdr=rep.cdr||{},ipdr=rep.ipdr||{};
+  const match=s=>!subject||s===subject;
+  (cdr.risk||[]).filter(r=>match(r.subject)).forEach(r=>{if((r.score||0)>=50||r.band==='Critical'||r.band==='High')ev.push({ts:fallbackTs,kind:'ai',title:(subject?'':r.subject+': ')+'Risk assessment — '+(r.band||'')+' (score '+(r.score||0)+')',detail:'composite spatiotemporal risk',sub:r.subject});});
+  (ipdr.risk||[]).filter(r=>match(r.subject)).forEach(r=>{if((r.score||0)>=50||r.band==='Critical'||r.band==='High')ev.push({ts:fallbackTs,kind:'ai',title:(subject?'':r.subject+': ')+'Flagged IP — '+(r.band||'')+' (score '+(r.score||0)+')',detail:'IPDR risk',sub:r.subject});});
+  (cdr.impossible_travel||[]).filter(r=>match(r.subject)).forEach(r=>{ev.push({ts:r.to_time?new Date(r.to_time):fallbackTs,kind:'ai',title:(subject?'':r.subject+': ')+'Impossible travel flagged',detail:Math.round(r.distance_km||0)+'km in '+Math.round(r.dt_minutes||0)+'m ('+Math.round(r.speed_kmh||0)+' km/h) — possible clone/spoof',sub:r.subject});});
+  (cdr.co_presence||[]).filter(p=>(p.hidden_link||p.convoy)&&(!subject||p.subject===subject||p.peer===subject)).slice(0,40).forEach(p=>{ev.push({ts:fallbackTs,kind:'ai',title:(p.hidden_link?'Hidden link':'Convoy')+': '+p.subject+' ↔ '+p.peer,detail:'co-presence pattern flagged by the inference engine',sub:p.subject,cnt:p.peer});});
+  (ipdr.beaconing||[]).filter(b=>match(b.subject)).slice(0,20).forEach(b=>{ev.push({ts:fallbackTs,kind:'ai',title:(subject?'':b.subject+': ')+'Beaconing pattern',detail:'periodic data sessions — possible C2/automated traffic',sub:b.subject});});
+}
+
+async function getStoryXcase(){
+  const k=activeCaseId||'none';if(_storyXcaseCache[k])return _storyXcaseCache[k];
+  try{_storyXcaseCache[k]=await API.get('/cross-case/report?case_id='+encodeURIComponent(activeCaseId||''));}catch(e){_storyXcaseCache[k]={subjects:[]};}
+  return _storyXcaseCache[k];
+}
+
+function buildNarrative(subject,events){
+  if(subject==='__all__'){
+    const meetings=events.filter(e=>e.kind==='meeting').length,ids=events.filter(e=>e.kind==='identity').length,xc=events.filter(e=>e.kind==='crosscase').length,ai=events.filter(e=>e.kind==='ai').length;
+    let p='This case spans <b>'+n(state.subjects.length)+'</b> subjects and <b>'+n(allRows.length)+'</b> records. ';
+    if(events.length){const f=events[0],l=events[events.length-1];p+='Notable activity runs from <b>'+_fmtDT(f.ts)+'</b> to <b>'+_fmtDT(l.ts)+'</b>. ';}
+    p+='The engine surfaced '+meetings+' co-location meeting'+(meetings===1?'':'s')+', '+ids+' identity change'+(ids===1?'':'s')+', '+xc+' cross-case link'+(xc===1?'':'s')+', and '+ai+' AI finding'+(ai===1?'':'s')+'. ';
+    p+='Select a subject above to read their individual story.';
+    return '<p>'+p+'</p>';
+  }
+  const lines=[];
+  const first=events.find(e=>e.kind==='first');
+  if(first)lines.push('<b>'+esc(subject)+'</b> first appears in this case on <b>'+_fmtDT(first.ts)+'</b> ('+esc(first.detail)+').');
+  const ids=events.filter(e=>e.kind==='identity');
+  ids.forEach(c=>lines.push('On <b>'+_fmtDT(c.ts)+'</b>, '+esc(c.title.toLowerCase())+' &mdash; '+esc(c.detail)+'.'));
+  const contacts=events.filter(e=>e.kind==='call');
+  if(contacts.length){const top=contacts[0];lines.push('Communication with <b>'+esc(top.cnt)+'</b> began on <b>'+_fmtDT(top.ts)+'</b>'+(contacts.length>1?', among '+contacts.length+' principal contacts':'')+'.');}
+  const data=events.find(e=>e.kind==='data');
+  if(data)lines.push('Internet activity '+(first&&data.ts-first.ts>3600000?'shifted online':'is present')+' from <b>'+_fmtDT(data.ts)+'</b> ('+esc(data.detail)+').');
+  const moves=events.filter(e=>e.kind==='move');
+  if(moves.length)lines.push('The subject was active across <b>'+moves.length+(moves.length>=8?'+':'')+'</b> distinct towers'+(moves[0]?', first at '+esc(moves[0].title.replace('First seen at tower ',''))+' on '+_fmtDT(moves[0].ts):'')+'.');
+  const meets=events.filter(e=>e.kind==='meeting');
+  if(meets.length){const m=meets[0];lines.push('A co-location was detected with <b>'+esc(m.cnt)+'</b> on <b>'+_fmtDT(m.ts)+'</b> ('+esc(m.detail)+')'+(meets.length>1?', one of '+meets.length+' meetings':'')+'.');}
+  const xcs=events.filter(e=>e.kind==='crosscase');
+  if(xcs.length)lines.push('<b>Cross-case:</b> this subject also appears in '+xcs.length+' other case'+(xcs.length===1?'':'s')+' &mdash; '+xcs.map(x=>esc(x.title.replace('Also appears in case ',''))).slice(0,4).join(', ')+'.');
+  const ais=events.filter(e=>e.kind==='ai');
+  ais.forEach(a=>lines.push('<b>AI:</b> '+esc(a.title)+' ('+esc(a.detail)+').'));
+  if(!lines.length)return '<p class="story-muted">Not enough data to reconstruct a narrative for this subject.</p>';
+  return '<ol class="story-narr-list">'+lines.map(l=>'<li>'+l+'</li>').join('')+'</ol>';
+}
+
+async function renderStory(){
+  if(!D.storyTimeline)return;
+  if(!allRows.length){D.storyNarrative.innerHTML='';D.storyTimeline.innerHTML='<div class="story-muted" style="padding:40px;text-align:center">Load a case to reconstruct its story.</div>';populateStorySubjects();updateEvidenceCount();return;}
+  populateStorySubjects();
+  const subject=D.storySubject.value||'__all__';
+  D.storyTimeline.innerHTML='<div class="story-muted" style="padding:30px;text-align:center">Reconstructing the investigation…</div>';
+  await ensureMeetingsLoaded();
+  try{await getInfReport();}catch(e){}
+  _storyEvents=await buildCaseEvents(subject);
+  D.storyNarrative.innerHTML='<h4 class="story-narr-h">Case Narrative</h4>'+buildNarrative(subject,_storyEvents);
+  renderStoryFilters();
+  renderStoryTimeline();
+  renderEvidence();
+}
+
+function populateStorySubjects(){
+  const sel=D.storySubject;if(!sel)return;const cur=sel.value;
+  const subs=(state.subjects||[]).slice().sort((a,b)=>rowsFor(b).length-rowsFor(a).length);
+  sel.innerHTML='<option value="__all__">All subjects (case overview)</option>'+subs.slice(0,500).map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
+  if(cur&&[...sel.options].some(o=>o.value===cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
+}
+
+function renderStoryFilters(){
+  if(!D.storyFilters)return;
+  const present=[...new Set(_storyEvents.map(e=>e.kind))];
+  if(_storyKinds===null)_storyKinds=new Set(present);
+  D.storyFilters.innerHTML=present.map(k=>{const m=EVK[k];const on=_storyKinds.has(k);return '<button class="story-chip'+(on?' on':'')+'" data-k="'+k+'" style="--ec:'+m.c+'">'+m.g+' '+m.l+'</button>';}).join('');
+  D.storyFilters.querySelectorAll('.story-chip').forEach(b=>b.onclick=()=>{const k=b.dataset.k;if(_storyKinds.has(k))_storyKinds.delete(k);else _storyKinds.add(k);renderStoryFilters();renderStoryTimeline();});
+}
+
+function renderStoryTimeline(){
+  const box=D.storyTimeline;if(!box)return;
+  const events=_storyEvents.filter(e=>!_storyKinds||_storyKinds.has(e.kind));
+  if(!events.length){box.innerHTML='<div class="story-muted" style="padding:30px;text-align:center">No events for the current filter.</div>';return;}
+  const pinned=new Set(evLoad().map(x=>x.sig));
+  let lastDay='';let h='<div class="story-tl">';
+  events.forEach(e=>{
+    const day=new Date(e.ts).toLocaleDateString([], {year:'numeric',month:'long',day:'numeric'});
+    if(day!==lastDay){h+='<div class="story-day">'+esc(day)+'</div>';lastDay=day;}
+    const m=EVK[e.kind];const sig=_evSig(e);const isP=pinned.has(sig);
+    h+='<div class="story-ev" style="--ec:'+m.c+'">'
+      +'<span class="story-ev-dot" title="'+m.l+'">'+m.g+'</span>'
+      +'<div class="story-ev-body"><div class="story-ev-top"><span class="story-ev-time">'+new Date(e.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</span>'
+      +'<span class="story-ev-title">'+esc(e.title)+'</span>'
+      +'<button class="story-pin'+(isP?' pinned':'')+'" data-sig="'+esc(sig)+'" title="'+(isP?'In evidence folder':'Add to evidence folder')+'">'+(isP?'★':'☆')+'</button></div>'
+      +(e.detail?'<div class="story-ev-detail">'+esc(e.detail)+'</div>':'')
+      +(e.sub?'<span class="story-ev-sub" onclick="showProfile(\''+esc(e.sub)+'\')">'+esc(e.sub)+'</span>':'')
+      +(e.cnt?' <span class="story-ev-sub" onclick="showProfile(\''+esc(e.cnt)+'\')">'+esc(e.cnt)+'</span>':'')
+      +'</div></div>';
+  });
+  h+='</div>';box.innerHTML=h;
+  box.querySelectorAll('.story-pin').forEach(b=>b.onclick=()=>{
+    const sig=b.dataset.sig;const e=_storyEvents.find(x=>_evSig(x)===sig);if(!e)return;
+    if(evLoad().some(x=>x.sig===sig)){unpinEvidenceBySig(sig);}else{pinEvidence({sig,kind:e.kind,label:e.title,detail:e.detail,ts:e.ts,subject:e.sub||(D.storySubject.value)});}
+    renderStoryTimeline();
+  });
+}
+
+// ---- Evidence folder (per-case, localStorage) ----
+function evKey(){return 'argus_evidence_'+(activeCaseId||'none')}
+function evLoad(){try{return JSON.parse(localStorage.getItem(evKey())||'[]')}catch(e){return[]}}
+function evSave(list){try{localStorage.setItem(evKey(),JSON.stringify(list))}catch(e){}}
+function updateEvidenceCount(){if(D.evidenceCount)D.evidenceCount.textContent=evLoad().length;}
+function pinEvidence(item){
+  const list=evLoad();const sig=item.sig||(item.kind+'|'+item.label);
+  if(list.some(x=>x.sig===sig))return false;
+  list.push({id:'ev_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),sig,addedAt:new Date().toISOString(),kind:item.kind||'note',label:item.label||'',detail:item.detail||'',ts:item.ts?new Date(item.ts).toISOString():null,subject:item.subject||null});
+  evSave(list);updateEvidenceCount();renderEvidence();return true;
+}
+function unpinEvidence(id){evSave(evLoad().filter(x=>x.id!==id));updateEvidenceCount();renderEvidence();renderStoryTimeline();}
+function unpinEvidenceBySig(sig){evSave(evLoad().filter(x=>x.sig!==sig));updateEvidenceCount();renderEvidence();}
+function renderEvidence(){
+  if(!D.evidenceList)return;updateEvidenceCount();
+  const list=evLoad();
+  if(!list.length){D.evidenceList.innerHTML='<div class="story-muted" style="padding:16px">Pin findings (☆) from the timeline to build an evidence folder. It is included in the dossier.</div>';return;}
+  D.evidenceList.innerHTML=list.slice().reverse().map(it=>{const m=EVK[it.kind]||{c:'#888',g:'●',l:it.kind};
+    return '<div class="evidence-item" style="--ec:'+m.c+'"><div class="evidence-item-h"><span class="story-ev-dot">'+m.g+'</span><b>'+esc(it.label)+'</b>'
+      +'<button class="evidence-rm" data-id="'+it.id+'" title="Remove">&times;</button></div>'
+      +(it.detail?'<div class="story-ev-detail">'+esc(it.detail)+'</div>':'')
+      +'<div class="evidence-meta">'+(it.ts?_fmtDT(it.ts)+' · ':'')+(it.subject?esc(it.subject)+' · ':'')+'pinned '+_fmtDT(it.addedAt)+'</div></div>';
+  }).join('');
+  D.evidenceList.querySelectorAll('.evidence-rm').forEach(b=>b.onclick=()=>unpinEvidence(b.dataset.id));
+}
+
+if(D.storySubject)D.storySubject.addEventListener('change',renderStory);
+if(D.storyRefreshBtn)D.storyRefreshBtn.addEventListener('click',()=>{_storyXcaseCache={};_infReport=null;renderStory();});
+if(D.evidenceToggleBtn)D.evidenceToggleBtn.addEventListener('click',()=>{const p=D.evidencePanel;p.style.display=p.style.display==='none'?'':'none';renderEvidence();});
+if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();renderStoryTimeline();}});
 
 // ---- Tower Repository tab (permanent, case-independent master of all towers) ----
 async function renderTowerRepo(){
@@ -4969,6 +5165,27 @@ D.exportBtn.addEventListener('click',async ()=>{
 if(D.dossierBtn)D.dossierBtn.addEventListener('click',renderDossier);
 if(D.dossierCloseBtn)D.dossierCloseBtn.addEventListener('click',()=>{D.dossier.style.display='none'});
 if(D.dossierPrintBtn)D.dossierPrintBtn.addEventListener('click',()=>window.print());
+{const ab=document.getElementById('dossierAgencyBtn');if(ab)ab.addEventListener('click',setAgencyDetails);}
+
+// All-seeing-eye seal (Argus Panoptes) rendered in monochrome navy so it prints cleanly.
+const ARGUS_EMBLEM='<svg class="dc-emblem" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="ARGUS emblem">'
+  +'<circle cx="50" cy="50" r="47" fill="#fff" stroke="#16284a" stroke-width="2"/>'
+  +'<circle cx="50" cy="50" r="41" fill="none" stroke="#16284a" stroke-width="0.9"/>'
+  +'<path d="M16 50 Q50 26 84 50 Q50 74 16 50 Z" fill="none" stroke="#16284a" stroke-width="2.6"/>'
+  +'<circle cx="50" cy="50" r="11" fill="#16284a"/><circle cx="50" cy="50" r="4.2" fill="#fff"/>'
+  +'<g stroke="#16284a" stroke-width="1.7" stroke-linecap="round">'
+  +'<path d="M50 16 V7"/><path d="M50 84 V93"/><path d="M16 50 H7"/><path d="M84 50 H93"/>'
+  +'<path d="M27 27 L21 21"/><path d="M73 27 L79 21"/><path d="M27 73 L21 79"/><path d="M73 73 L79 79"/></g></svg>';
+
+function getAgency(){try{return JSON.parse(localStorage.getItem('argus_agency')||'{}')||{}}catch(e){return{}}}
+function setAgencyDetails(){
+  const a=getAgency();
+  const name=prompt('Agency / unit name for the dossier letterhead:',a.name||'');if(name===null)return;
+  const sub=prompt('Sub-line (e.g. "Telecom Forensics Unit · Cyber Crime Cell"):',a.sub||'');if(sub===null)return;
+  const logo=prompt('Optional logo image URL or /static path (blank = ARGUS emblem):',a.logo||'');if(logo===null)return;
+  localStorage.setItem('argus_agency',JSON.stringify({name:name.trim(),sub:(sub||'').trim(),logo:(logo||'').trim()}));
+  alert('Saved. Regenerate the dossier to apply.');
+}
 
 async function renderDossier(){
   if(!allRows.length){alert('Load a case first — there is nothing to put in a dossier yet.');return}
@@ -4976,61 +5193,119 @@ async function renderDossier(){
   try{
     const caseName=(D.caseSelector.options[D.caseSelector.selectedIndex]?.text||'None').replace(/\s*\(\d+\)\s*$/,'');
     const officer=state.auth&&state.auth.user?state.auth.user.username:'Unknown';
+    const role=state.auth&&state.auth.user?state.auth.user.role:'';
     const now=new Date();
+    const ag=getAgency();
+    const agencyName=(ag.name||'LAW ENFORCEMENT AGENCY').toUpperCase();
+    const agencySub=ag.sub||'Telecom Forensics Unit';
+    const CLASS='RESTRICTED — FOR OFFICIAL USE ONLY';
     // Official reference id + chain-of-custody log (best-effort; dossier still renders if it fails).
     let ref='';let serverCase=caseName;
     try{const r=await API.post('/inference/dossier'+(activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):''),{});if(r){ref=r.ref||'';if(r.case_name)serverCase=r.case_name;}}catch(e){}
     if(!ref)ref='ARGUS-EVD-'+now.toISOString().slice(0,10).replace(/-/g,'')+'-LOCAL';
 
-    const ts=allRows.filter(r=>r.ts).map(r=>new Date(r.ts).getTime()).filter(t=>!isNaN(t));
-    const dr=ts.length?(new Date(Math.min(...ts)).toLocaleString()+'  —  '+new Date(Math.max(...ts)).toLocaleString()):'—';
+    // Ensure analytical inputs are loaded for the narrative / summary.
+    try{await ensureMeetingsLoaded();}catch(e){}
+    try{await getInfReport();}catch(e){}
+    const xrep=await getStoryXcase();
 
-    // Per-subject rollup (records, distinct contacts, distinct towers, type).
+    const ts=allRows.filter(r=>r.ts).map(r=>new Date(r.ts).getTime()).filter(t=>!isNaN(t));
+    const minD=ts.length?new Date(Math.min(...ts)):null,maxD=ts.length?new Date(Math.max(...ts)):null;
+    const dr=ts.length?(minD.toLocaleString()+'  —  '+maxD.toLocaleString()):'—';
+    const spanDays=ts.length?Math.max(1,Math.round((Math.max(...ts)-Math.min(...ts))/86400000)):0;
+
+    // Per-subject rollup.
     const subStat={};
     allRows.forEach(r=>{const s=r.sub;if(!s)return;const o=subStat[s]||(subStat[s]={n:0,c:new Set(),t:new Set(),type:r.type});o.n++;if(r.cnt&&r.cnt!==s)o.c.add(r.cnt);if(r.tow)o.t.add(r.tow);});
-    const subjects=Object.entries(subStat).map(([s,o])=>({s,n:o.n,c:o.c.size,t:o.t.size,type:o.type})).sort((a,b)=>b.n-a.n).slice(0,40);
-
+    const subjects=Object.entries(subStat).map(([s,o])=>({s,n:o.n,c:o.c.size,t:o.t.size,type:o.type})).sort((a,b)=>b.n-a.n);
+    const topSub=subjects.length?subjects[0].s:null;
     const topCnt=Object.entries(allRows.reduce((a,r)=>{if(r.cnt&&r.cnt!==r.sub){a[r.cnt]=(a[r.cnt]||0)+1}return a},{})).sort((a,b)=>b[1]-a[1]).slice(0,15);
 
+    const mt=(typeof meetingTotals==='function')?meetingTotals():{total:0};
+    const xcount=(xrep&&xrep.subjects)?xrep.subjects.length:0;
+    const rep=_infReport||{};const poi=((rep.cdr&&rep.cdr.risk)||[]).filter(r=>r.band==='Critical'||r.band==='High').length;
+    const imposs=((rep.cdr&&rep.cdr.impossible_travel)||[]).length;
+    const ev=evLoad();
+
     let h='';
-    // Cover
+    // ── Cover / letterhead ──
+    const logoHtml=ag.logo?('<img class="dc-emblem" src="'+esc(ag.logo)+'" alt="agency logo">'):ARGUS_EMBLEM;
     h+='<section class="dossier-cover">'
-      +'<div class="dc-badge">RESTRICTED — FOR OFFICIAL USE</div>'
-      +'<h1>Case Evidence Dossier</h1>'
-      +'<div class="dc-case">'+esc(serverCase)+'</div>'
+      +'<div class="dc-class-top">'+CLASS+'</div>'
+      +'<div class="dc-letterhead">'+logoHtml
+        +'<div class="dc-agency"><div class="dc-agency-name">'+esc(agencyName)+'</div><div class="dc-agency-sub">'+esc(agencySub)+'</div>'
+        +'<div class="dc-agency-tool">Project ARGUS · CDR / IPDR Forensic Analysis Platform</div></div></div>'
+      +'<div class="dc-rule"></div>'
+      +'<div class="dc-doctype">CASE ANALYSIS DOSSIER</div>'
+      +'<h1 class="dc-title">'+esc(serverCase)+'</h1>'
       +'<table class="dc-meta">'
-      +'<tr><td>Reference</td><td>'+esc(ref)+'</td></tr>'
-      +'<tr><td>Generating officer</td><td>'+esc(officer)+'</td></tr>'
-      +'<tr><td>Generated</td><td>'+esc(now.toLocaleString())+'</td></tr>'
-      +'<tr><td>Records</td><td>'+n(allRows.length)+' total — '+n(state.cdr.length)+' CDR · '+n(state.ipdr.length)+' IPDR</td></tr>'
-      +'<tr><td>Subjects</td><td>'+n(state.subjects.length)+'</td></tr>'
-      +'<tr><td>Towers</td><td>'+n(state.towers.length)+'</td></tr>'
-      +'<tr><td>Activity window</td><td>'+esc(dr)+'</td></tr>'
+      +'<tr><td>Document reference</td><td><b>'+esc(ref)+'</b></td></tr>'
+      +'<tr><td>Case</td><td>'+esc(serverCase)+(activeCaseId?' (ID '+esc(activeCaseId)+')':'')+'</td></tr>'
+      +'<tr><td>Prepared by</td><td>'+esc(officer)+(role?' ('+esc(role)+')':'')+'</td></tr>'
+      +'<tr><td>Date / time generated</td><td>'+esc(now.toLocaleString())+'</td></tr>'
+      +'<tr><td>Evidence window</td><td>'+esc(dr)+'</td></tr>'
+      +'<tr><td>Records examined</td><td>'+n(allRows.length)+' ('+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR)</td></tr>'
+      +'<tr><td>Subjects / towers</td><td>'+n(state.subjects.length)+' subjects · '+n(state.towers.length)+' towers</td></tr>'
+      +'<tr><td>Classification</td><td>'+CLASS+'</td></tr>'
       +'</table>'
-      +'<div class="dc-foot">Generated by Project ARGUS — CDR/IPDR Forensic Visualizer. This document was produced from the records loaded into the named case and is intended as an investigative aid.</div>'
+      +'<div class="dc-control"><b>Document control.</b> This dossier was generated programmatically by Project ARGUS from the telecom records loaded into the named case under reference <b>'+esc(ref)+'</b>, which is recorded in the system audit log (chain of custody). It is an investigative aid and does not by itself constitute proof; all findings should be corroborated with the underlying CDR/IPDR records and primary evidence before being relied upon in proceedings.</div>'
+      +'<div class="dc-class-bottom">'+CLASS+'</div>'
       +'</section>';
 
-    // Subjects
-    h+='<section class="dossier-section"><h2>1. Subjects</h2>';
+    // ── Table of contents ──
+    h+='<section class="dossier-section"><h2>Contents</h2><ol class="dossier-toc">'
+      +'<li>Executive Summary</li><li>Case Narrative</li><li>Subjects of Interest</li>'
+      +'<li>Communication Analysis</li><li>Cross-Case Links</li><li>Bookmarked Evidence</li>'
+      +'<li>Analytical Charts</li><li>Tower Index</li><li>Appendix A — Methodology &amp; Limitations</li></ol></section>';
+
+    // ── 1. Executive summary ──
+    h+='<section class="dossier-section"><h2>1. Executive Summary</h2><table class="d-kv">'
+      +'<tr><td>Evidence window</td><td>'+esc(dr)+' ('+n(spanDays)+' day'+(spanDays===1?'':'s')+')</td></tr>'
+      +'<tr><td>Total records</td><td>'+n(allRows.length)+' — '+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR</td></tr>'
+      +'<tr><td>Distinct subjects</td><td>'+n(state.subjects.length)+'</td></tr>'
+      +'<tr><td>Persons of interest (High/Critical risk)</td><td>'+n(poi)+'</td></tr>'
+      +'<tr><td>Co-location meetings detected</td><td>'+n(mt.total||0)+'</td></tr>'
+      +'<tr><td>Impossible-travel flags</td><td>'+n(imposs)+'</td></tr>'
+      +'<tr><td>Subjects linked to other cases</td><td>'+n(xcount)+'</td></tr>'
+      +'<tr><td>Items bookmarked as evidence</td><td>'+n(ev.length)+'</td></tr>'
+      +'</table></section>';
+
+    // ── 2. Case narrative ──
+    let narr='';
+    try{if(topSub){const evs=await buildCaseEvents(topSub);narr='<p class="d-narr-lead">Principal subject (by activity): <b>'+esc(topSub)+'</b>.</p>'+buildNarrative(topSub,evs);}else{narr=buildNarrative('__all__',[]);}}catch(e){narr='<div class="d-note">Narrative unavailable.</div>';}
+    h+='<section class="dossier-section"><h2>2. Case Narrative</h2><div class="d-narr">'+narr+'</div>'
+      +'<div class="d-note">Auto-reconstructed from the chronological record (first appearance, identity changes, communications, movement, meetings, cross-case links and engine findings). See the Story tab for the full timeline.</div></section>';
+
+    // ── 3. Subjects ──
+    h+='<section class="dossier-section"><h2>3. Subjects of Interest</h2>';
     if(subjects.length){
-      h+='<table class="d-table"><thead><tr><th>Subject</th><th>Type</th><th>Records</th><th>Distinct contacts</th><th>Towers</th></tr></thead><tbody>'
-        +subjects.map(r=>'<tr><td>'+esc(r.s)+'</td><td>'+esc(r.type)+'</td><td>'+n(r.n)+'</td><td>'+n(r.c)+'</td><td>'+n(r.t)+'</td></tr>').join('')
-        +'</tbody></table>'+(Object.keys(subStat).length>40?'<div class="d-note">Showing top 40 of '+n(Object.keys(subStat).length)+' subjects by record count.</div>':'');
+      h+='<table class="d-table"><thead><tr><th>#</th><th>Subject</th><th>Type</th><th>Records</th><th>Distinct contacts</th><th>Towers</th></tr></thead><tbody>'
+        +subjects.slice(0,40).map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(r.s)+'</td><td>'+esc(r.type)+'</td><td>'+n(r.n)+'</td><td>'+n(r.c)+'</td><td>'+n(r.t)+'</td></tr>').join('')
+        +'</tbody></table>'+(subjects.length>40?'<div class="d-note">Showing top 40 of '+n(subjects.length)+' subjects by record count.</div>':'');
     }else h+='<div class="d-note">No subjects.</div>';
     h+='</section>';
 
-    // Top contacts
-    h+='<section class="dossier-section"><h2>2. Most frequent contacts</h2>';
+    // ── 4. Communication analysis ──
+    h+='<section class="dossier-section"><h2>4. Communication Analysis</h2><h3 class="d-h3">Most frequent contacts</h3>';
     if(topCnt.length){
-      h+='<table class="d-table"><thead><tr><th>Contact</th><th>Interactions</th></tr></thead><tbody>'
-        +topCnt.map(([c,k])=>'<tr><td>'+esc(c)+'</td><td>'+n(k)+'</td></tr>').join('')+'</tbody></table>';
+      h+='<table class="d-table"><thead><tr><th>#</th><th>Contact</th><th>Interactions</th></tr></thead><tbody>'
+        +topCnt.map(([c,k],i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(c)+'</td><td>'+n(k)+'</td></tr>').join('')+'</tbody></table>';
     }else h+='<div class="d-note">None.</div>';
     h+='</section>';
 
-    // Cross-case hits
-    h+='<section class="dossier-section"><h2>3. Cross-case links</h2><div id="dossierXcase" class="d-note">Loading…</div></section>';
+    // ── 5. Cross-case links ──
+    h+='<section class="dossier-section"><h2>5. Cross-Case Links</h2><div id="dossierXcase" class="d-note">Loading…</div></section>';
 
-    // Charts (rasterized from the live Chart.js canvases so they print).
+    // ── 6. Bookmarked evidence ──
+    h+='<section class="dossier-section"><h2>6. Bookmarked Evidence</h2>';
+    if(ev.length){
+      h+='<table class="d-table"><thead><tr><th>#</th><th>Type</th><th>Finding</th><th>Detail</th><th>Subject</th><th>When</th></tr></thead><tbody>'
+        +ev.map((it,i)=>{const m=EVK[it.kind]||{l:it.kind};return '<tr><td>'+(i+1)+'</td><td>'+esc(m.l)+'</td><td>'+esc(it.label||'')+'</td><td>'+esc(it.detail||'')+'</td><td>'+esc(it.subject||'—')+'</td><td>'+(it.ts?esc(_fmtDT(it.ts)):'—')+'</td></tr>';}).join('')
+        +'</tbody></table>';
+    }else h+='<div class="d-note">No items have been bookmarked into the evidence folder. Pin findings (☆) on the Story tab to include them here.</div>';
+    h+='</section>';
+
+    // ── 7. Charts ──
     const chartList=[['chartDailyTrend','Daily activity trend'],['chartCdrIpdrTime','CDR vs IPDR over time'],['chartActiveSubjects','Most active subjects'],['chartNewReturning','New vs returning contacts'],['chartGeoState','Geographic spread by state'],['chartTowerDiversity','Tower diversity']];
     let chartsHtml='';
     chartList.forEach(([id,title])=>{
@@ -5039,19 +5314,23 @@ async function renderDossier(){
         try{const url=cv.toDataURL('image/png');if(url&&url.length>2000)chartsHtml+='<figure class="d-fig"><img src="'+url+'"><figcaption>'+esc(title)+'</figcaption></figure>';}catch(e){}
       }
     });
-    if(chartsHtml)h+='<section class="dossier-section"><h2>4. Charts</h2>'+chartsHtml+'</section>';
+    h+='<section class="dossier-section"><h2>7. Analytical Charts</h2>'+(chartsHtml||'<div class="d-note">No chart snapshots available — open the Charts tab once, then regenerate the dossier.</div>')+'</section>';
 
-    // Towers
+    // ── 8. Tower index ──
     const tows=(state.towers||[]).slice(0,60);
-    h+='<section class="dossier-section"><h2>'+(chartsHtml?'5':'4')+'. Towers</h2>';
+    h+='<section class="dossier-section"><h2>8. Tower Index</h2>';
     if(tows.length){
-      h+='<table class="d-table"><thead><tr><th>Tower ID</th><th>City</th><th>State</th><th>Lat</th><th>Lng</th></tr></thead><tbody>'
+      h+='<table class="d-table"><thead><tr><th>Tower ID</th><th>City</th><th>State</th><th>Latitude</th><th>Longitude</th></tr></thead><tbody>'
         +tows.map(t=>'<tr><td>'+esc(t.tower_id)+'</td><td>'+esc(t.city||'—')+'</td><td>'+esc(t.state||'—')+'</td><td>'+(t.latitude!=null?esc(t.latitude):'—')+'</td><td>'+(t.longitude!=null?esc(t.longitude):'—')+'</td></tr>').join('')
         +'</tbody></table>'+(state.towers.length>60?'<div class="d-note">Showing 60 of '+n(state.towers.length)+' towers.</div>':'');
     }else h+='<div class="d-note">No towers.</div>';
     h+='</section>';
 
-    h+='<div class="dossier-end">— End of dossier — '+esc(ref)+' —</div>';
+    // ── Appendix ──
+    h+='<section class="dossier-section"><h2>Appendix A — Methodology &amp; Limitations</h2>'
+      +'<p class="d-app">Findings are derived from Call Detail Records (CDR) and Internet Protocol Detail Records (IPDR) loaded into the named case. CDR and IPDR are analysed under strict separation — a phone-number subject is never merged with an IP subject. Co-location ("meeting") detection infers proximity from same-tower activity within a short time window and is probabilistic, not positional proof. "Impossible travel" flags legs whose implied speed exceeds human possibility and may indicate a cloned SIM or a spoofed record. Cross-case links are an identity/intelligence lookup (number, IMEI handset, IMSI SIM, or IP); IP-only matches are low-confidence because operators reassign addresses. Tower place-names may be approximate where derived by offline reverse-geocoding. All times are shown in the analyst workstation\'s local timezone. This dossier is an investigative aid; corroborate every finding against the primary records before relying on it in proceedings.</p></section>';
+
+    h+='<div class="dossier-end">— End of dossier · '+esc(ref)+' · '+CLASS+' —</div>';
     D.dossierBody.innerHTML=h;
     D.dossier.style.display='block';D.dossier.scrollTop=0;
 

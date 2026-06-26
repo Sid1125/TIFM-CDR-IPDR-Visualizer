@@ -41,6 +41,7 @@
     <div class="topbar-center">
       <select id="caseSelector" style="padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);font-size:0.78rem;margin-right:12px;max-width:180px"><option value="">No case</option></select>
       <button class="topbar-tab active" data-tab="dashboard">Dashboard</button>
+      <button class="topbar-tab" data-tab="story">Story</button>
       <button class="topbar-tab" data-tab="graph">Network Graph</button>
       <button class="topbar-tab" data-tab="map">Tower Map</button>
       <button class="topbar-tab" data-tab="timeline">Timeline</button>
@@ -247,6 +248,28 @@
     </div>
     <div id="corrResults" class="corr-results" style="flex:1;overflow:auto">
       <div style="padding:40px;text-align:center;color:var(--muted)">Select two subjects and click Compare.</div>
+    </div>
+  </section>
+
+  <!-- STORY / NARRATIVE TAB -->
+  <section id="tab-story" class="tab-content">
+    <div class="story-toolbar">
+      <h3 style="margin:0">Investigation Story</h3>
+      <label style="font-size:.8rem;color:var(--muted)">Focus</label>
+      <select id="storySubject" class="input-sm" style="min-width:200px"></select>
+      <div class="story-filters" id="storyFilters"></div>
+      <button id="storyRefreshBtn" class="btn-sm" title="Rebuild">&#8635; Rebuild</button>
+      <button id="evidenceToggleBtn" class="btn-sm" title="Show the evidence folder">&#9733; Evidence (<span id="evidenceCount">0</span>)</button>
+    </div>
+    <div class="story-layout">
+      <div class="story-main">
+        <div id="storyNarrative" class="story-narrative"></div>
+        <div id="storyTimeline" class="story-timeline"></div>
+      </div>
+      <aside id="evidencePanel" class="evidence-panel" style="display:none">
+        <div class="evidence-head"><b>Evidence Folder</b><button id="evidenceClearBtn" class="btn-sm" title="Remove all">Clear</button></div>
+        <div id="evidenceList" class="evidence-list"></div>
+      </aside>
     </div>
   </section>
 
@@ -559,6 +582,8 @@
 <!-- COURT-READY DOSSIER (print view) -->
 <div id="dossier" class="dossier" style="display:none">
   <div class="dossier-toolbar no-print">
+    <span class="dossier-tb-title">Case Analysis Dossier</span>
+    <button id="dossierAgencyBtn" class="btn-sm" title="Set the agency name / logo on the letterhead">Agency details</button>
     <button id="dossierPrintBtn" class="btn">Print / Save as PDF</button>
     <button id="dossierCloseBtn" class="btn-sm">Close</button>
   </div>
