@@ -57,6 +57,7 @@ function renderAuth(){
   const ok=state.auth.status==='authenticated';
   D.shell.style.display=ok?'block':'none';D.auth.style.display=ok?'none':'flex';
   D.sessionUser.textContent=ok?state.auth.user.username+` (${state.auth.user.role})`:'Signed out';
+  {const av=document.getElementById('userAvatar');if(av)av.textContent=ok&&state.auth.user.username?state.auth.user.username[0]:'?';}
   D.adminTabBtn.style.display=ok&&state.auth.user.role==='admin'?'':'none';
   if(ok){resetIdle();D.sessionStatus.style.display=''}else{D.sessionStatus.style.display='none';idleTimer&&clearTimeout(idleTimer);idleWarnTimer&&clearTimeout(idleWarnTimer);healthTimer&&clearInterval(healthTimer)}
 }
@@ -1001,6 +1002,9 @@ function switchTab(tab){
   state.tab=tab;
   document.querySelectorAll('.topbar-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-content').forEach(s=>s.classList.toggle('active',s.id==='tab-'+tab));
+  // Reflect the active tab onto its parent dropdown group, and close any open menus.
+  document.querySelectorAll('.nav-group').forEach(g=>{g.classList.toggle('group-active',[...g.querySelectorAll('.topbar-tab')].some(b=>b.dataset.tab===tab));g.classList.remove('open');});
+  document.querySelectorAll('.user-menu.open').forEach(m=>m.classList.remove('open'));
   if(tab==='dashboard')renderDashboard();
   if(tab==='graph')renderGraph();
   if(tab==='map')initMap();
@@ -1018,6 +1022,14 @@ function switchTab(tab){
   if(tab==='admin')renderAdmin();
 }
 document.querySelectorAll('.topbar-tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+
+// Topbar dropdown menus (grouped nav + user menu): click to toggle, click-out to close.
+(function initTopbarMenus(){
+  const toggle=(el)=>{const wasOpen=el.classList.contains('open');document.querySelectorAll('.nav-group.open,.user-menu.open').forEach(x=>x.classList.remove('open'));if(!wasOpen)el.classList.add('open');};
+  document.querySelectorAll('.nav-group-btn').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();toggle(btn.parentNode);}));
+  const ub=document.querySelector('.user-btn');if(ub)ub.addEventListener('click',e=>{e.stopPropagation();toggle(ub.parentNode);});
+  document.addEventListener('click',()=>document.querySelectorAll('.nav-group.open,.user-menu.open').forEach(x=>x.classList.remove('open')));
+})();
 
 // ====== UPLOAD ======
 function parseCsvPreview(text){
@@ -5290,6 +5302,7 @@ async function renderDossier(){
     allRows.forEach(r=>{const s=r.sub;if(!s)return;const o=subStat[s]||(subStat[s]={n:0,c:new Set(),t:new Set(),type:r.type});o.n++;if(r.cnt&&r.cnt!==s)o.c.add(r.cnt);if(r.tow)o.t.add(r.tow);});
     const subjects=Object.entries(subStat).map(([s,o])=>({s,n:o.n,c:o.c.size,t:o.t.size,type:o.type})).sort((a,b)=>b.n-a.n);
     const topSub=subjects.length?subjects[0].s:null;
+    const caseTowerN=new Set(allRows.filter(r=>r.tow).map(r=>r.tow)).size; // towers in THIS case (not the global repo)
     const topCnt=Object.entries(allRows.reduce((a,r)=>{if(r.cnt&&r.cnt!==r.sub){a[r.cnt]=(a[r.cnt]||0)+1}return a},{})).sort((a,b)=>b[1]-a[1]).slice(0,15);
 
     const mt=(typeof meetingTotals==='function')?meetingTotals():{total:0};
@@ -5316,7 +5329,7 @@ async function renderDossier(){
       +'<tr><td>Date / time generated</td><td>'+esc(now.toLocaleString())+'</td></tr>'
       +'<tr><td>Evidence window</td><td>'+esc(dr)+'</td></tr>'
       +'<tr><td>Records examined</td><td>'+n(allRows.length)+' ('+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR)</td></tr>'
-      +'<tr><td>Subjects / towers</td><td>'+n(state.subjects.length)+' subjects · '+n(state.towers.length)+' towers</td></tr>'
+      +'<tr><td>Subjects / towers</td><td>'+n(state.subjects.length)+' subjects · '+n(caseTowerN)+' towers in this case</td></tr>'
       +'<tr><td>Classification</td><td>'+CLASS+'</td></tr>'
       +'</table>'
       +'<div class="dc-control"><b>Document control.</b> This dossier was generated programmatically by Project ARGUS from the telecom records loaded into the named case under reference <b>'+esc(ref)+'</b>, which is recorded in the system audit log (chain of custody). It is an investigative aid and does not by itself constitute proof; all findings should be corroborated with the underlying CDR/IPDR records and primary evidence before being relied upon in proceedings.</div>'

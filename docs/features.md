@@ -921,9 +921,9 @@ Comprehensive inventory of every feature in the CDR/IPDR Investigation Visualize
 
 ## 17. UI/UX Features
 
-### Tab-Based Navigation (11 Tabs)
-- **Description:** 11 top-level tabs (Dashboard, Network Graph, Tower Map, Timeline, Charts, Services, Correlation, Inferences, Records, AI Insights, Admin) with active tab highlighting and content switching. Admin tab is visible only for users with `role=admin`.
-- **Tech:** `.topbar-tab` buttons with `data-tab` attributes, `.tab-content` sections, `switchTab()` function, admin role check `state.auth.user?.role === 'admin'`
+### Grouped Tab Navigation (decluttered topbar)
+- **Description:** The topbar was reorganised from a flat row of ~15 tabs into a compact, grouped bar. Left: ARGUS logo + the **active-case selector** (moved here as it's contextual). Centre: primary tabs **Dashboard · Story · Cross-Case · Evidence · Records** plus two **dropdown groups** — **Maps & Network** (Network Graph, Tower Map, Tower Repository) and **Analysis** (Timeline, Charts, Services, Correlation, Inferences, AI Insights) — with the **Admin** tab shown only for `role=admin`. The dropdown trigger shows an underline when one of its tabs is active. Right: **Dossier** and **Export** actions, a session-status indicator, and a compact **user menu** (avatar + name) housing the theme toggle and Sign out. Menus open on click and close on outside-click or tab selection.
+- **Tech:** `.topbar-tab` buttons with `data-tab` (unchanged switch logic via `switchTab()`), `.nav-group`/`.nav-menu` dropdowns, `.user-menu`/`.user-pop`, `initTopbarMenus()` for open/close, `group-active` reflection in `switchTab()`; admin check `state.auth.user?.role === 'admin'`. Styles `.topbar-nav`/`.nav-*`/`.user-*`/`.tb-action`/`.case-select`.
 
 ### Dark Mode
 - **Description:** A moon icon toggle button in the top bar switches the entire UI between light and dark color schemes. Palette is applied via CSS custom properties on `.dark` class. Persisted to `localStorage` and restored on page load. Applies to all surfaces, text, lines, charts, maps, tooltips, Gantt bars, and modals.

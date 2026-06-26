@@ -37,32 +37,46 @@
     <div class="topbar-left">
       <img src="/static/logo-mark.png" alt="ARGUS" class="topbar-logo"/>
       <h1 title="Advanced Records &amp; Geospatial Unified Surveillance">ARGUS</h1>
+      <select id="caseSelector" class="case-select" title="Active case"><option value="">No case</option></select>
     </div>
-    <div class="topbar-center">
-      <select id="caseSelector" style="padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);font-size:0.78rem;margin-right:12px;max-width:180px"><option value="">No case</option></select>
+    <nav class="topbar-nav">
       <button class="topbar-tab active" data-tab="dashboard">Dashboard</button>
       <button class="topbar-tab" data-tab="story">Story</button>
-      <button class="topbar-tab" data-tab="evidence">Evidence <span id="evidenceTabCount" class="tab-badge">0</span></button>
-      <button class="topbar-tab" data-tab="graph">Network Graph</button>
-      <button class="topbar-tab" data-tab="map">Tower Map</button>
-      <button class="topbar-tab" data-tab="timeline">Timeline</button>
-      <button class="topbar-tab" data-tab="charts">Charts</button>
-      <button class="topbar-tab" data-tab="services">Services</button>
-      <button class="topbar-tab" data-tab="correlation">Correlation</button>
       <button class="topbar-tab" data-tab="crosscase">Cross-Case</button>
-      <button class="topbar-tab" data-tab="inferences">Inferences</button>
+      <button class="topbar-tab" data-tab="evidence">Evidence <span id="evidenceTabCount" class="tab-badge">0</span></button>
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn">Maps &amp; Network <span class="caret">&#9662;</span></button>
+        <div class="nav-menu">
+          <button class="topbar-tab" data-tab="graph">Network Graph</button>
+          <button class="topbar-tab" data-tab="map">Tower Map</button>
+          <button class="topbar-tab" data-tab="towerrepo">Tower Repository</button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn">Analysis <span class="caret">&#9662;</span></button>
+        <div class="nav-menu">
+          <button class="topbar-tab" data-tab="timeline">Timeline</button>
+          <button class="topbar-tab" data-tab="charts">Charts</button>
+          <button class="topbar-tab" data-tab="services">Services</button>
+          <button class="topbar-tab" data-tab="correlation">Correlation</button>
+          <button class="topbar-tab" data-tab="inferences">Inferences</button>
+          <button class="topbar-tab" data-tab="ai">AI Insights</button>
+        </div>
+      </div>
       <button class="topbar-tab" data-tab="records">Records</button>
-      <button class="topbar-tab" data-tab="towerrepo">Tower Repo</button>
-      <button class="topbar-tab" data-tab="ai">AI Insights</button>
       <button class="topbar-tab" data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
-    </div>
+    </nav>
     <div class="topbar-right">
-      <button id="dossierBtn" class="btn-sm" title="Generate a court-ready printable case dossier (Print → Save as PDF)" style="border-color:var(--accent);color:var(--accent)">Dossier</button>
-      <button id="exportBtn" class="btn-sm" title="Export investigation report" style="border-color:var(--accent);color:var(--accent)">Export</button>
-      <button id="darkModeBtn" style="background:none;border:none;cursor:pointer;font-size:1rem;padding:0 4px;color:var(--muted)" title="Toggle dark mode">&#9790;</button>
-      <span id="sessionStatus" class="sess-active" title="Session active">Active</span>
-      <span id="sessionUser">Signed out</span>
-      <button id="logoutBtn">Sign out</button>
+      <button id="dossierBtn" class="tb-action" title="Generate a court-ready printable case dossier (Print → Save as PDF)">Dossier</button>
+      <button id="exportBtn" class="tb-action" title="Export investigation report (.md)">Export</button>
+      <span id="sessionStatus" class="sess-active" title="Session status">Active</span>
+      <div class="user-menu">
+        <button type="button" class="user-btn"><span class="user-av" id="userAvatar">?</span><span id="sessionUser">Signed out</span><span class="caret">&#9662;</span></button>
+        <div class="user-pop">
+          <button id="darkModeBtn" class="user-pop-item" type="button">&#9728; Toggle theme</button>
+          <button id="logoutBtn" class="user-pop-item" type="button">Sign out</button>
+        </div>
+      </div>
     </div>
   </header>
 
