@@ -1242,7 +1242,7 @@ async function handleUploadConfirmed(kind,file,route,mode,mapping){
     if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}
     if(!r.ok)throw new Error(await r.text()||'Upload failed');
     const res=await r.json().catch(()=>({}));
-    document.getElementById(kind+'File').value='';
+    {const fi=document.getElementById(kind==='towers'?'towerFile':kind+'File');if(fi)fi.value='';}
     let msg=kind.toUpperCase()+(mode==='append'?' added':' uploaded')+(res&&res.records_imported!=null?' ('+n(res.records_imported)+' rows)':'');
     const v=res&&res.validation;
     if(v){
