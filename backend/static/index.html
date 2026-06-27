@@ -64,6 +64,7 @@
         </div>
       </div>
       <button class="topbar-tab" data-tab="records">Records</button>
+      <button class="topbar-tab" data-tab="laws" title="Indian legal framework for CDR/IPDR investigations">Laws</button>
       <button class="topbar-tab" data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
     </nav>
     <div class="topbar-right">
@@ -347,6 +348,18 @@
       </table>
     </div>
     <button id="recLoadMore" class="btn" style="width:100%;margin-top:8px;display:none">Load more</button>
+  </section>
+
+  <!-- LAWS / LEGAL REFERENCE TAB -->
+  <section id="tab-laws" class="tab-content">
+    <div class="laws-toolbar">
+      <h3 style="margin:0">Legal Framework — CDR / IPDR Investigations (India)</h3>
+      <div style="flex:1"></div>
+      <input id="lawSearch" type="search" placeholder="Search laws, sections, keywords…"/>
+      <select id="lawCategory"><option value="">All categories</option></select>
+      <button id="lawExpandBtn" class="btn-sm" type="button">Expand all</button>
+    </div>
+    <div id="lawsBody" class="laws-body"></div>
   </section>
 
   <!-- TOWER REPOSITORY TAB -->

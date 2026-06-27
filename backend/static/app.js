@@ -1041,6 +1041,7 @@ function switchTab(tab){
   if(tab==='crosscase'){xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();}
   if(tab==='inferences')renderInferences();
   if(tab==='records')renderRecords();
+  if(tab==='laws')renderLaws();
   if(tab==='towerrepo')renderTowerRepo();
   if(tab==='ai')renderAiInsights();
   if(tab==='admin')renderAdmin();
@@ -5964,6 +5965,104 @@ D.corrSwapBtn.addEventListener('click',()=>{
 });
 
 // ====== BOOTSTRAP ======
+// ====== LAWS / LEGAL REFERENCE (India — CDR/IPDR) ======
+const LAW_CATS={
+  'Production':'#2c6f79',
+  'Interception':'#b07d2b',
+  'Evidence & Admissibility':'#3a7d5a',
+  'Retention':'#7b4f9c',
+  'Privacy & Misuse':'#b94a48',
+};
+const LAW_REFERENCE=[
+  {cat:'Production',title:'Production of records & devices (the workhorse for stored CDR/IPDR)',statute:'BNSS, 2023 — Section 94',
+   tagline:'Successor to Sections 91–92 CrPC; unlike the CrPC it expressly covers electronic records.',
+   covers:'Empowers a court — or, during investigation, the officer in charge of a police station — to issue a summons or written order requiring the production of any document or "other thing", expressly including electronic communications and devices containing digital evidence, needed for an investigation, inquiry or trial.',
+   use:'This is the everyday, lawful route to obtain STORED records: CDR, tower-dump / cell-ID data, subscriber (CAF) details, and IPDR from a telecom operator or ISP. Draft a written requisition / production order naming the exact identifier (MSISDN, IMEI, IMSI, IP) and a bounded date-time range, and the specific records sought. Prefer this over interception whenever the data already exists in storage. Always pair the records received with a Section 63 BSA certificate so they are admissible.',
+   authority:'A Magistrate court, or during investigation the SHO / IO. Note the separate 2013 executive guideline that restricts which police officer may actually requisition CDR from operators (SP rank and above).',
+   caselaw:'High Courts (e.g. Rajasthan HC, 2025) have held that an accused may also invoke Section 94 to seek preservation/production of CDR and tower-location data crucial to the defence, even against a marginal privacy intrusion.',
+   pitfall:'Over-broad requests ("every number on a tower for a month" with no nexus) invite challenge and may be quashed. Keep the identifier and the time-window tight and tied to the offence.'},
+
+  {cat:'Production',title:'Investigation, forensic-collection & attendance powers',statute:'BNSS, 2023 — Sections 175, 176, 179, 185',
+   covers:'Section 175 — power of police to investigate a cognizable offence. Section 176 — procedure for investigation; for offences punishable with 7 years or more it mandates forensic-expert collection of evidence at the scene (with videography). Section 179 — power to require the attendance of witnesses. Section 185 — search by an officer with reasons recorded.',
+   use:'These frame the investigation within which you issue Section 94 production orders and analyse CDR/IPDR. Section 176\'s forensic mandate for serious offences supports a documented, defensible digital-evidence chain from seizure onward.',
+   authority:'Investigating officer / SHO, observing the rank and reason-recording requirements each section specifies.'},
+
+  {cat:'Interception',title:'Lawful interception of telecom messages (real-time)',statute:'Telecommunications Act, 2023 — Section 20(2); Lawful Interception Rules, 2024',
+   tagline:'Replaces Section 5(2) of the Indian Telegraph Act, 1885 and Rule 419A of the Telegraph Rules.',
+   covers:'Permits an authorised agency to intercept, detain or disclose telecommunication messages on the occurrence of a public emergency or in the interest of public safety, where necessary in the interest of the sovereignty and integrity of India, defence, security of the State, friendly relations with foreign States, public order, or preventing incitement to an offence. This is for live / ongoing communication — not historical stored records.',
+   authority:'Order by the Union Home Secretary (Centre) or State Home Secretary (States). In unavoidable circumstances an officer not below the rank of Joint Secretary to the Government of India, duly authorised, may issue it.',
+   timeline:'An interception order stays in force up to 60 days, is renewable, but never beyond a total of 180 days. A copy must reach the Review Committee within 7 working days, and records are destroyed when no longer required.',
+   pitfall:'Do not use interception to obtain something Section 94 can lawfully produce from storage. Skipping the Review-Committee / renewal safeguards taints the evidence and the order.'},
+
+  {cat:'Interception',title:'Interception, monitoring & decryption of digital information (IPDR basis)',statute:'IT Act, 2000 — Sections 69 & 69B; IT (Interception, Monitoring & Decryption) Rules, 2009',
+   covers:'Section 69 lets an authorised agency direct interception, monitoring or decryption of any information generated, transmitted, received or stored in any computer resource, on the broad State-interest grounds plus investigation of an offence. Sections 69(3)–(4) compel intermediaries/ISPs to extend technical assistance — non-compliance is punishable with imprisonment up to 7 years and fine. Section 69B allows monitoring and collection of traffic data for cyber-security.',
+   use:'This is the principal basis for obtaining and monitoring IPDR and internet activity. Use it (with Section 94 production for stored logs) to get source/destination IP and port, timestamps, data volume, and the NAT/CGNAT mapping needed to resolve a public IP + port + time back to a subscriber.',
+   authority:'Competent authority under the 2009 Rules = Secretary, Ministry of Home Affairs (Centre) / Secretary in charge of the Home Department (State), with Review Committee oversight.',
+   pitfall:'IPDR is only meaningful with the EXACT timestamp and source port. A public IP alone (behind CGNAT) does not identify a subscriber — always capture IP + port + precise time.'},
+
+  {cat:'Evidence & Admissibility',title:'Admissibility of electronic records — the Section 63 certificate',statute:'Bharatiya Sakshya Adhiniyam, 2023 — Sections 61, 62, 63 (replaces Section 65B, Evidence Act)',
+   tagline:'The single most important card: get this wrong and the CDR/IPDR is excluded.',
+   covers:'Electronic records (a CDR/IPDR printout, CD/pen-drive, or server extract) are admissible as documents only if accompanied by the Section 63 certificate. The new Schedule requires a DUAL certificate — Part A signed by the person operating / in charge of the device or system that produced the record, and Part B signed by an expert — and the expert must state the hash value of the record and the algorithm used to obtain it.',
+   use:'Always obtain the Section 63 certificate from the telecom operator / ISP for the exact records produced, and compute and record a hash (e.g. SHA-256) of every digital exhibit at the moment of seizure. The certificate must accompany the record each time it is submitted.',
+   caselaw:'The 65B/63 certificate is mandatory for electronic evidence — Anvar P.V. v. P.K. Basheer (2014) and Arjun Panditrao Khotkar v. Kailash Kushanrao Gorantyal (2020) — now codified with the hash requirement under the BSA.',
+   pitfall:'A missing, unsigned or after-the-fact certificate, or a hash mismatch between the seized and produced copy, is the most common way CDR/IPDR evidence is thrown out.'},
+
+  {cat:'Retention',title:'Data-retention obligations (the window in which records still exist)',statute:'Unified / ISP Licence conditions (DoT); CERT-In Directions, 2022',
+   covers:'Telecom and internet licensees must retain CDR, EDR and IPDR (and related commercial records) for government scrutiny. The retention period was extended from one year to at least TWO years by the December 2021 licence amendments. CERT-In\'s 2022 directions add log-retention duties (180 days, within India) for service providers.',
+   use:'This sets the window in which historical records still exist — file your Section 94 production order before the retention window closes. For older offences, move quickly and ask the operator to PRESERVE the records pending the formal requisition.',
+   pitfall:'Delay past the retention window means the records are lawfully destroyed and become unrecoverable.'},
+
+  {cat:'Privacy & Misuse',title:'CDR procurement guidelines (anti-misuse — protects you too)',statute:'DoT / MHA executive instructions, 2013',
+   covers:'After CDR-misuse scandals, executive guidelines restricted who may requisition CDR: only an officer of the rank of Superintendent of Police (SP) and above may seek CDR from operators. The officer must maintain a directory of CDRs obtained and report it monthly to the District Magistrate, who forwards a consolidated record to the Chief Secretary.',
+   use:'Route every CDR requisition through an SP-rank-or-above authorisation and log it. This protects the investigation and the officer personally.',
+   pitfall:'Unauthorised or unlogged CDR procurement is itself actionable — it can collapse the prosecution and expose the officer to departmental and criminal liability.'},
+
+  {cat:'Privacy & Misuse',title:'Right to privacy & the proportionality test',statute:'K.S. Puttaswamy v. Union of India, (2017) 10 SCC 1',
+   covers:'Privacy is a fundamental right under Article 21. Any State intrusion — including accessing CDR/IPDR and location data — must satisfy proportionality: a legitimate aim, a rational nexus, necessity (the least-intrusive means), and a fair balance, all resting on a valid law and procedure.',
+   use:'Frame every CDR/IPDR/interception request as targeted, time-bound and necessary, with the offence and the nexus recorded on file. That documented reasoning is what makes the intrusion defensible if challenged.'},
+
+  {cat:'Privacy & Misuse',title:'Personal-data-protection context',statute:'Digital Personal Data Protection Act, 2023',
+   covers:'Establishes India\'s data-protection regime. The State and its instrumentalities have notified exemptions for specified purposes (sovereignty and security, and prevention/investigation/prosecution of offences), but the underlying principle of purpose-limited, lawful processing informs how subscriber data obtained in an investigation should be handled, shared and stored.',
+   use:'Treat CDR/IPDR and subscriber data as sensitive: access on a need-to-know basis, use only for the case, and store securely — consistent with the exemption you are relying on.'},
+];
+let _lawsInit=false;
+function renderLaws(){
+  const body=document.getElementById('lawsBody');if(!body)return;
+  const sb=document.getElementById('lawSearch'),cat=document.getElementById('lawCategory'),ex=document.getElementById('lawExpandBtn');
+  if(!_lawsInit){
+    _lawsInit=true;
+    const cats=[...new Set(LAW_REFERENCE.map(l=>l.cat))];
+    if(cat)cat.innerHTML='<option value="">All categories</option>'+cats.map(c=>'<option>'+esc(c)+'</option>').join('');
+    sb&&sb.addEventListener('input',renderLaws);
+    cat&&cat.addEventListener('change',renderLaws);
+    ex&&ex.addEventListener('click',()=>{const anyClosed=body.querySelectorAll('details:not([open])').length>0;body.querySelectorAll('details').forEach(d=>d.open=anyClosed);ex.textContent=anyClosed?'Collapse all':'Expand all';});
+  }
+  const q=(sb&&sb.value.trim().toLowerCase())||'';
+  const fc=(cat&&cat.value)||'';
+  const items=LAW_REFERENCE.filter(l=>{
+    if(fc&&l.cat!==fc)return false;
+    if(!q)return true;
+    if(!l._t)l._t=[l.title,l.statute,l.tagline,l.covers,l.use,l.authority,l.timeline,l.caselaw,l.pitfall,l.cat].filter(Boolean).join(' ').toLowerCase();
+    return l._t.includes(q);
+  });
+  const field=(label,val)=>val?'<div class="law-field"><h5>'+label+'</h5><p>'+esc(val)+'</p></div>':'';
+  let h='<div class="law-disclaimer"><b>&#9878; Practical guidance for investigators — not legal advice.</b> Statute text and procedures change; verify the current provision and your State&rsquo;s standing orders before relying on this in court.</div>';
+  if(!items.length){h+='<div class="story-muted" style="padding:24px;text-align:center">No laws match your search.</div>';}
+  else h+=items.map(l=>{const c=LAW_CATS[l.cat]||'#888';
+    return '<details class="law-card" style="--lc:'+c+'"><summary><span class="law-badge">'+esc(l.cat)+'</span><span class="law-title">'+esc(l.title)+'</span><span class="law-statute">'+esc(l.statute)+'</span></summary>'
+      +'<div class="law-body-in">'
+      +(l.tagline?'<p class="law-tagline">'+esc(l.tagline)+'</p>':'')
+      +field('What it covers',l.covers)
+      +field('How to use it in an investigation',l.use)
+      +field('Who can authorise',l.authority)
+      +field('Timeline &amp; safeguards',l.timeline)
+      +field('Case law',l.caselaw)
+      +field('Common pitfall',l.pitfall)
+      +'</div></details>';
+  }).join('');
+  body.innerHTML=h;
+}
+
 async function bootstrap(){
   await loadCases();
   try{await loadSubjectTags();}catch(e){}

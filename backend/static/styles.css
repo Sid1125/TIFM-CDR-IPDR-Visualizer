@@ -940,6 +940,25 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 .prof-tag-input{flex:1;min-width:0;border:1px solid var(--line);border-radius:5px;padding:4px 8px;font-size:.8rem;background:var(--bg);color:var(--text)}
 .graph-toggle{display:inline-flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer;user-select:none}
 .graph-toggle input{cursor:pointer}
+/* Laws / legal reference tab */
+.laws-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.laws-toolbar input[type=search]{min-width:220px;border:1px solid var(--line);border-radius:6px;padding:5px 9px;background:var(--bg);color:var(--text);font-size:.82rem}
+.laws-toolbar select{border:1px solid var(--line);border-radius:6px;padding:5px 9px;background:var(--bg);color:var(--text);font-size:.82rem}
+.laws-body{max-width:1000px;margin:0 auto;padding-bottom:40px}
+.law-disclaimer{border:1px solid var(--line);border-left:4px solid #d4a017;background:var(--surface);border-radius:7px;padding:9px 13px;font-size:.78rem;color:var(--muted);margin-bottom:14px;line-height:1.45}
+.law-card{border:1px solid var(--line);border-left:4px solid var(--lc,#888);border-radius:8px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.law-card>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px}
+.law-card>summary::-webkit-details-marker{display:none}
+.law-card>summary:hover{background:rgba(0,0,0,.03)}
+body.dark .law-card>summary:hover{background:rgba(255,255,255,.04)}
+.law-badge{flex-shrink:0;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#fff;background:var(--lc,#888);border-radius:4px;padding:2px 7px}
+.law-title{font-weight:700;font-size:.92rem;color:var(--text);flex:1;min-width:200px}
+.law-statute{font-size:.74rem;color:var(--muted);font-style:italic;white-space:nowrap}
+.law-body-in{padding:2px 16px 14px;border-top:1px solid var(--line)}
+.law-tagline{margin:10px 0 4px;font-size:.83rem;color:var(--text);font-weight:600}
+.law-field{margin-top:10px}
+.law-field h5{margin:0 0 3px;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--lc,#888);font-weight:700}
+.law-field p{margin:0;font-size:.84rem;line-height:1.5;color:var(--text)}
 .evidenceToggleBtn.flash,.flash{animation:evflash .5s ease}
 @keyframes evflash{0%{box-shadow:0 0 0 0 rgba(212,160,23,.6)}100%{box-shadow:0 0 0 8px rgba(212,160,23,0)}}
 /* Evidence tab */
