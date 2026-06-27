@@ -1883,11 +1883,15 @@ function setXcView(v){
   if(D.crossCaseTab)D.crossCaseTab.style.display=v==='list'?'':'none';
   if(D.crossCaseGraph)D.crossCaseGraph.style.display=v==='graph'?'flex':'none';
   if(D.xcGraphCaptureBtn)D.xcGraphCaptureBtn.style.display=v==='graph'?'':'none';
-  if(v==='graph')renderCrossCaseGraph();else renderCrossCaseTab();
+  if(v==='graph'){renderCrossCaseGraph();refreshCapButtons();}else renderCrossCaseTab();
 }
 if(D.xcViewList)D.xcViewList.addEventListener('click',()=>setXcView('list'));
 if(D.xcViewGraph)D.xcViewGraph.addEventListener('click',()=>setXcView('graph'));
-if(D.xcGraphCaptureBtn)D.xcGraphCaptureBtn.addEventListener('click',()=>captureSvgToEvidence(D.xcGraphSvg,'Cross-case link graph'));
+if(D.xcGraphCaptureBtn)D.xcGraphCaptureBtn.addEventListener('click',()=>{
+  const sig='graph|Cross-case link graph';
+  if(evLoad().some(x=>x.sig===sig)){unpinEvidenceBySig(sig);toast('Removed cross-case graph from evidence.');}
+  else{captureSvgToEvidence(D.xcGraphSvg,'Cross-case link graph');}
+});
 
 let xcGraphSim=null;
 async function renderCrossCaseGraph(){
@@ -1966,6 +1970,7 @@ const EVK={
   chart:{c:'#2c6f79',g:'▦',l:'Chart snapshot'},
   graph:{c:'#7b4f9c',g:'◈',l:'Graph snapshot'},
   note:{c:'#888',g:'●',l:'Note'},
+  record:{c:'#b94a48',g:'★',l:'Flagged record'},
 };
 let _storyEvents=[],_storyKinds=null,_storyXcaseCache={};
 function _fmtDT(v){try{return new Date(v).toLocaleString([], {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return String(v)}}
@@ -2128,10 +2133,10 @@ function pinEvidence(item){
   const list=evLoad();const sig=item.sig||(item.kind+'|'+item.label);
   if(list.some(x=>x.sig===sig))return false;
   list.push({id:'ev_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),sig,addedAt:new Date().toISOString(),kind:item.kind||'note',label:item.label||'',detail:item.detail||'',ts:item.ts?new Date(item.ts).toISOString():null,subject:item.subject||null,image:item.image||null});
-  evSave(list);updateEvidenceCount();renderEvidence();if(state.tab==='evidence')renderEvidenceTab();return true;
+  evSave(list);updateEvidenceCount();renderEvidence();refreshCapButtons();if(state.tab==='evidence')renderEvidenceTab();return true;
 }
-function unpinEvidence(id){evSave(evLoad().filter(x=>x.id!==id));updateEvidenceCount();renderEvidence();if(typeof renderStoryTimeline==='function')renderStoryTimeline();}
-function unpinEvidenceBySig(sig){evSave(evLoad().filter(x=>x.sig!==sig));updateEvidenceCount();renderEvidence();}
+function unpinEvidence(id){evSave(evLoad().filter(x=>x.id!==id));updateEvidenceCount();renderEvidence();refreshCapButtons();if(typeof renderStoryTimeline==='function')renderStoryTimeline();}
+function unpinEvidenceBySig(sig){evSave(evLoad().filter(x=>x.sig!==sig));updateEvidenceCount();renderEvidence();refreshCapButtons();}
 function renderEvidence(){
   if(!D.evidenceList)return;updateEvidenceCount();
   const list=evLoad();
@@ -2152,7 +2157,7 @@ function _flashPinned(msg){updateEvidenceCount();renderEvidence();toast(msg||'Pi
 function captureCanvasToEvidence(cv,title){
   try{if(!cv||cv.tagName!=='CANVAS'){alert('No chart to capture.');return;}
     const url=cv.toDataURL('image/png');if(!url||url.length<2000){alert('Nothing to capture yet — render the chart first.');return;}
-    pinEvidence({kind:'chart',label:title||'Chart',detail:'Chart snapshot · '+(activeCaseId?'case '+activeCaseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'chart|'+title+'|'+Date.now()});
+    pinEvidence({kind:'chart',label:title||'Chart',detail:'Chart snapshot · '+(activeCaseId?'case '+activeCaseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'chart|'+title});
     _flashPinned('Pinned “'+title+'” to evidence.');
   }catch(e){alert('Capture failed: '+(e.message||e));}
 }
@@ -2163,27 +2168,41 @@ function captureSvgToEvidence(host,title){
   const xml=new XMLSerializer().serializeToString(clone);
   const img=new Image();
   img.onload=function(){try{const c=document.createElement('canvas');c.width=w;c.height=hh;const ctx=c.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,hh);ctx.drawImage(img,0,0);const url=c.toDataURL('image/png');
-      pinEvidence({kind:'graph',label:title||'Graph',detail:'Graph snapshot · '+(activeCaseId?'case '+activeCaseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'graph|'+title+'|'+Date.now()});
+      pinEvidence({kind:'graph',label:title||'Graph',detail:'Graph snapshot · '+(activeCaseId?'case '+activeCaseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'graph|'+title});
       _flashPinned('Pinned “'+title+'” to evidence.');
     }catch(e){alert('Capture failed: '+(e.message||e));}};
   img.onerror=function(){alert('Capture failed (could not rasterize the graph).');};
   img.src='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(xml)));
 }
-// Add a "★ Pin" capture control to each chart card (idempotent).
+// Stateful capture control on each chart card: ☆ Pin when absent, ★ Pinned when in the folder.
+// Clicking toggles, and removing the item from the Evidence tab flips it back (refreshCapButtons).
+function _capBtnState(b){
+  const sig=b.dataset.sig;if(!sig)return;
+  const pinned=evLoad().some(x=>x.sig===sig);
+  b.classList.toggle('pinned',pinned);
+  b.textContent=pinned?'★ Pinned':'☆ Pin';
+  b.title=pinned?'Remove this chart from the evidence folder':'Capture this chart into the evidence folder';
+}
+function refreshCapButtons(){
+  document.querySelectorAll('.cap-btn[data-sig]').forEach(_capBtnState);
+  const xb=D.xcGraphCaptureBtn;
+  if(xb){const pinned=evLoad().some(x=>x.sig==='graph|Cross-case link graph');xb.classList.toggle('pinned',pinned);xb.innerHTML=pinned?'&#9733; Pinned':'&#9733; Pin graph';}
+}
 function installChartCaptureButtons(){
   document.querySelectorAll('#tab-charts .card').forEach(card=>{
     const h=card.querySelector('h3');const cv=card.querySelector('canvas');
     if(!h||!cv||h.querySelector('.cap-btn'))return;
-    const b=document.createElement('button');b.className='cap-btn';b.textContent='★ Pin';b.title='Capture this chart into the evidence folder';
-    b.onclick=()=>captureCanvasToEvidence(cv,h.textContent.replace(/[★\s]*Pin$/,'').trim());
-    h.appendChild(b);
+    const title=h.textContent.trim();
+    const b=document.createElement('button');b.className='cap-btn';b.dataset.sig='chart|'+title;
+    b.onclick=()=>{const sig=b.dataset.sig;if(evLoad().some(x=>x.sig===sig)){unpinEvidenceBySig(sig);toast('Removed “'+title+'” from evidence.');}else{captureCanvasToEvidence(cv,title);}_capBtnState(b);};
+    h.appendChild(b);_capBtnState(b);
   });
 }
 
 if(D.storySubject)D.storySubject.addEventListener('change',renderStory);
 if(D.storyRefreshBtn)D.storyRefreshBtn.addEventListener('click',()=>{_storyXcaseCache={};_infReport=null;renderStory();});
 if(D.evidenceToggleBtn)D.evidenceToggleBtn.addEventListener('click',()=>{const p=D.evidencePanel;p.style.display=p.style.display==='none'?'':'none';renderEvidence();});
-if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();renderStoryTimeline();renderEvidenceTab();}});
+if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();refreshCapButtons();renderStoryTimeline();renderEvidenceTab();}});
 
 // ---- Dedicated Evidence tab (full view of everything saved) ----
 function renderEvidenceTab(){
@@ -2205,7 +2224,7 @@ function renderEvidenceTab(){
     }).join('')+'</div>';
   }
   box.querySelectorAll('.evidence-rm').forEach(b=>b.onclick=()=>{unpinEvidence(b.dataset.id);renderEvidenceTab();});
-  const cb=box.querySelector('#evtClearBtn');if(cb)cb.onclick=()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();renderEvidenceTab();renderStoryTimeline&&renderStoryTimeline();}};
+  const cb=box.querySelector('#evtClearBtn');if(cb)cb.onclick=()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();refreshCapButtons();renderEvidenceTab();renderStoryTimeline&&renderStoryTimeline();}};
   const db=box.querySelector('#evtDossierBtn');if(db)db.onclick=()=>renderDossier();
   const xb=box.querySelector('#evtExportBtn');if(xb)xb.onclick=()=>{const blob=new Blob([JSON.stringify(evLoad(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ARGUS_evidence_'+(activeCaseId||'case')+'.json';a.click();URL.revokeObjectURL(a.href);};
 }
@@ -3266,6 +3285,20 @@ function loadAnnotations(){
     renderRecTable();
   }).catch(()=>{});
 }
+// Build an evidence item mirroring a flagged record, looked up from allRows for a meaningful blurb.
+function _recordEvidence(r,numId){
+  const row=allRows.find(x=>x.id===r.id)||{};
+  const parts=[];
+  if(row.ts)parts.push(fmt(row.ts));
+  if(row.cnt)parts.push((r.type==='CDR'?'with ':'→ ')+row.cnt);
+  if(row.dur!=null&&row.dur!=='')parts.push(row.dur+'s');
+  if(row.svc)parts.push(row.svc);
+  if(row.tow)parts.push('tower '+row.tow);
+  return {kind:'record',sig:'record|'+r.type+'|'+numId,
+    label:subjLabelTxt(row.sub||'?')+' — '+r.type,
+    detail:'Flagged record · '+(parts.join(' · ')||(r.type+' #'+numId)),
+    ts:row.ts||null,subject:row.sub||null};
+}
 function toggleAnnot(r){
   const numId=parseInt(r.id.slice(1));
   const key=r.type+'_'+numId;
@@ -3275,10 +3308,13 @@ function toggleAnnot(r){
   if(annotationsMap[key]){
     API.del('/annotations/'+annotationsMap[key].id).then(()=>{
       delete annotationsMap[key];paint();
+      unpinEvidenceBySig('record|'+r.type+'|'+numId);
     }).catch(()=>{});
   }else{
     API.post('/annotations/',{record_type:r.type,record_id:numId,tag:'flagged',note:''}).then(a=>{
       annotationsMap[key]=a;paint();
+      pinEvidence(_recordEvidence(r,numId));
+      try{toast('Record added to evidence.');}catch(e){}
     }).catch(e=>{console.error('annotation failed',e);});
   }
 }
