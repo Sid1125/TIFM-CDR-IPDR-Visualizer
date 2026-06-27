@@ -1,5 +1,5 @@
 // ====== STATE ======
-const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{}};
+const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{},subjectTags:{}};
 const API={async req(p,o){const r=await fetch(p,{credentials:'same-origin',...o,headers:{...((o&&o.headers)||{})}});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||r.status);return r.status===204?null:r.json()},get(p){return this.req(p)},post(p,b){return this.req(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},put(p,b){return this.req(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},del(p){return this.req(p,{method:'DELETE'})},async upload(p,f){const fd=new FormData();fd.append('file',f);const r=await fetch(p,{credentials:'same-origin',method:'POST',body:fd});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||'Upload failed');return r.json()}};
 
 // ====== DOM REFS ======
@@ -9,7 +9,7 @@ const D={
   sessionUser:$('sessionUser'),sessionStatus:$('sessionStatus'),logoutBtn:$('logoutBtn'),
   importStatus:$('importStatus'),cdrFile:$('cdrFile'),ipdrFile:$('ipdrFile'),towerFile:$('towerFile'),
   dashCards:$('dashCards'),crossCaseHits:$('crossCaseHits'),dashGraph:$('dashGraph'),dashPie:$('dashPieChart'),dashHeat:$('dashHeatmap'),dashBar:$('dashBarChart'),dashMatrix:$('dashMatrix'),
-  graphSubject:$('graphSubject'),graphLimit:$('graphLimit'),graphSearch:$('graphSearchInput'),graphReset:$('graphResetZoom'),graphCenter:$('graphCenterBtn'),graphStats:$('graphStats'),graphSvg:$('graphSvgContainer'),graphSidebar:$('graphSidebar'),graphDetails:$('graphNodeDetails'),
+  graphSubject:$('graphSubject'),graphLimit:$('graphLimit'),graphSearch:$('graphSearchInput'),graphReset:$('graphResetZoom'),graphCenter:$('graphCenterBtn'),graphStats:$('graphStats'),graphShowTags:$('graphShowTags'),graphSvg:$('graphSvgContainer'),graphSidebar:$('graphSidebar'),graphDetails:$('graphNodeDetails'),
   mapSubject:$('mapSubject'),mapMode:$('mapMode'),mapGo:$('mapGoBtn'),mapFit:$('mapFitBtn'),geoFenceBtn:$('geoFenceBtn'),mapStage:$('mapStage'),mapSidebar:$('mapSidebar'),mapAnalysis:$('mapAnalysis'),mapTimeBar:$('mapTimelineBar'),mapTimeLabel:$('mapTimeLabel'),mapTimeSlider:$('mapTimeSlider'),mapTimePlay:$('mapTimePlay'),
   tlSearch:$('tlSearch'),tlType:$('tlType'),tlPlayBtn:$('tlPlayBtn'),tlCompare:$('tlCompare'),tlCount:$('tlCount'),tlContainer:$('tlContainer'),
   chartServPie:$('chartServicePie'),chartHourly:$('chartHourlyBar'),chartTopContacts:$('chartTopContacts'),chartServTimeline:$('chartServiceTimeline'),
@@ -103,6 +103,30 @@ function updateChartTheme(){
 }
 function colWidth(v){if(!v)return 120;if(v.includes(':'))return 280;if(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v)||/^\+?\d{7,15}$/.test(v))return 150;return 200}
 function n(v){return v!=null?Number(v).toLocaleString():'0'}
+// ====== SUBJECT INTEL TAGS ======
+// Global-by-identifier tags loaded into state.subjectTags={subject:tag}. These helpers append the
+// tag in brackets wherever a subject is shown, so outside intel follows the number/IP everywhere.
+function subjTag(sub){return (sub!=null&&state.subjectTags[sub])||''}
+function subjLabel(sub){const t=subjTag(sub);return esc(sub)+(t?' <span class="subj-tag">('+esc(t)+')</span>':'')}
+function subjLabelTxt(sub){const t=subjTag(sub);return String(sub)+(t?' ('+t+')':'')}
+async function loadSubjectTags(){
+  try{const rows=await API.get('/subject-tags/');const m={};(rows||[]).forEach(r=>{if(r.subject)m[r.subject]=r.tag});state.subjectTags=m;}
+  catch(e){state.subjectTags=state.subjectTags||{};}
+}
+async function saveSubjectTag(sub,tag){
+  const r=await API.put('/subject-tags/',{subject:sub,tag:tag});
+  const t=(tag||'').trim();
+  if(t)state.subjectTags[sub]=t;else delete state.subjectTags[sub];
+  return r;
+}
+function saveProfileTag(sub){
+  const inp=document.getElementById('profileTagInput');if(!inp)return;
+  const val=inp.value.trim();
+  saveSubjectTag(sub,val).then(()=>{
+    try{toast(val?'Intel tag saved':'Intel tag cleared');}catch(e){}
+    if(D.profileTitle)D.profileTitle.textContent='Subject: '+subjLabelTxt(sub);
+  }).catch(e=>{try{toast('Could not save tag');}catch(_){} });
+}
 function renderMd(t){
   if(!t)return'';
   let s=esc(t);
@@ -459,7 +483,7 @@ function showSubjectRecords(sub){
   const box=document.createElement('div');
   box.style.cssText='background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:16px;max-width:700px;max-height:80vh;overflow-y:auto;font-size:0.75rem';
   box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <h3 style="margin:0">Subject: ${esc(sub)}</h3>
+    <h3 style="margin:0">Subject: ${subjLabel(sub)}</h3>
     <span style="color:var(--muted);font-size:0.7rem">${rows.length} records shown</span></div>
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="border-bottom:1px solid var(--line)"><th style="text-align:left;padding:3px">Time</th><th style="text-align:left;padding:3px">Type</th><th style="text-align:left;padding:3px">Counterpart</th><th style="text-align:left;padding:3px">Service</th><th style="text-align:left;padding:3px">Tower</th></tr></thead>
@@ -1479,7 +1503,7 @@ function renderCaseSummary(){
     {l:'Records',v:n(totalCdr+totalIpdr),sub:n(totalCdr)+' CDR & '+n(totalIpdr)+' IPDR'},
     {l:'Towers',v:n(towerCount),sub:''},
     {l:'Contacts',v:n(allCnts.size),sub:span},
-    {l:'Most Active',v:topSub?esc(topSub[0]):'n/a',sub:topSub?topSub[1]+' records':''},
+    {l:'Most Active',v:topSub?subjLabel(topSub[0]):'n/a',sub:topSub?topSub[1]+' records':''},
     {l:'Top Service',v:topSvc?esc(topSvc[0]):'n/a',sub:topSvc?topSvc[1]+' records':''},
     {l:'Top Tower',v:topTow?esc(topTow[0]):'n/a',sub:topTow?topTow[1]+' visits':''},
     {l:'Meetings',v:'<span id="dashMeetVal" style="color:var(--muted)">…</span>',sub:'<span id="dashMeetSub" style="color:var(--muted)">computing…</span>'},
@@ -1614,7 +1638,8 @@ async function renderGraph(){
       .on('drag',(e,d)=>{d._moved=true;if(!e.active)sim.alphaTarget(0.3).restart();d.fx=e.x;d.fy=e.y})
       .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;const dx=e.x-(d._sx||0),dy=e.y-(d._sy||0);if(!d._moved||dx*dx+dy*dy<36)showProfile(d.id);}));
 
-  const label=g.append('g').selectAll('text').data(nodes).join('text').text(d=>d.id.length>12?d.id.slice(0,12)+'...':d.id).attr('font-size','9').attr('dx',d=>Math.max(5,d.weight*0.2+5))   .attr('dy',3).attr('class','graph-label').style('pointer-events','none');
+  const showTags=!!(D.graphShowTags&&D.graphShowTags.checked);
+  const label=g.append('g').selectAll('text').data(nodes).join('text').text(d=>{const base=d.id.length>12?d.id.slice(0,12)+'...':d.id;if(showTags){const t=subjTag(d.id);if(t)return base+' ('+(t.length>18?t.slice(0,18)+'…':t)+')';}return base;}).attr('font-size','9').attr('dx',d=>Math.max(5,d.weight*0.2+5))   .attr('dy',3).attr('class','graph-label').style('pointer-events','none');
 
   sim.on('tick',()=>{link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);node.attr('cx',d=>d.x).attr('cy',d=>d.y);label.attr('x',d=>d.x).attr('y',d=>d.y)});
 
@@ -1630,9 +1655,10 @@ async function renderGraph(){
 if(D.graphLimit)D.graphLimit.addEventListener('change',renderGraph);
 D.graphReset.addEventListener('click',()=>location.reload());
 D.graphCenter.addEventListener('click',()=>{const svg=d3.select(D.graphSvg).select('svg');svg.transition().duration(500).call(d3.zoom().transform,d3.zoomIdentity)});
+if(D.graphShowTags)D.graphShowTags.addEventListener('change',renderGraph);
 
 function initGraphSubjects(){
-  D.graphSubject.innerHTML='<option value="">All subjects</option>'+state.subjects.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  D.graphSubject.innerHTML='<option value="">All subjects</option>'+state.subjects.map(s=>`<option value="${esc(s)}">${esc(subjLabelTxt(s))}</option>`).join('');
   if(D.graphSubject._handler)D.graphSubject.removeEventListener('change',D.graphSubject._handler);
   D.graphSubject._handler=renderGraph;
   D.graphSubject.addEventListener('change',D.graphSubject._handler);
@@ -1710,7 +1736,7 @@ async function renderCrossCaseHits(){
       const names=cs.slice(0,3).map(c=>'<b>'+esc(c.case_name)+'</b>').join(', ')+(cs.length>3?' +'+(cs.length-3)+' more':'');
       return '<div class="xcase-row" data-sub="'+esc(h.subject)+'" onclick="showProfile(this.dataset.sub)" title="Open subject profile">'
         +'<span class="xcase-dot" style="background:'+conf+'"></span>'
-        +'<span class="xcase-sub">'+esc(h.subject)+'</span>'
+        +'<span class="xcase-sub">'+subjLabel(h.subject)+'</span>'
         +'<span class="xcase-meta">also in '+(names||('<b>'+h.other_case_count+'</b> other case'+(h.other_case_count===1?'':'s')))+' &middot; '+label+(h.confidence==='low'?' &middot; low-confidence':'')+'</span></div>';
     }).join('');
     el.innerHTML='<div class="xcase-head"><span class="xcase-title">&#9888; Cross-case hits</span>'
@@ -2014,7 +2040,7 @@ function buildStoryNarrative(subject,events){
   }
   const lines=[];
   const first=events.find(e=>e.kind==='first');
-  if(first)lines.push('<b>'+esc(subject)+'</b> first appears in this case on <b>'+_fmtDT(first.ts)+'</b> ('+esc(first.detail)+').');
+  if(first)lines.push('<b>'+subjLabel(subject)+'</b> first appears in this case on <b>'+_fmtDT(first.ts)+'</b> ('+esc(first.detail)+').');
   const ids=events.filter(e=>e.kind==='identity');
   ids.forEach(c=>lines.push('On <b>'+_fmtDT(c.ts)+'</b>, '+esc(c.title.toLowerCase())+' &mdash; '+esc(c.detail)+'.'));
   const contacts=events.filter(e=>e.kind==='call');
@@ -2053,7 +2079,7 @@ function populateStorySubjects(){
   // Count once (O(records)) instead of re-filtering per comparison.
   const cnt={};allRows.forEach(r=>{if(r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
   const subs=(state.subjects||[]).slice().sort((a,b)=>(cnt[b]||0)-(cnt[a]||0));
-  sel.innerHTML='<option value="__all__">All subjects (case overview)</option>'+subs.slice(0,500).map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
+  sel.innerHTML='<option value="__all__">All subjects (case overview)</option>'+subs.slice(0,500).map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+'</option>').join('');
   if(cur&&[...sel.options].some(o=>o.value===cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
 }
 
@@ -2081,8 +2107,8 @@ function renderStoryTimeline(){
       +'<span class="story-ev-title">'+esc(e.title)+'</span>'
       +'<button class="story-pin'+(isP?' pinned':'')+'" data-sig="'+esc(sig)+'" title="'+(isP?'In evidence folder':'Add to evidence folder')+'">'+(isP?'★':'☆')+'</button></div>'
       +(e.detail?'<div class="story-ev-detail">'+esc(e.detail)+'</div>':'')
-      +(e.sub?'<span class="story-ev-sub" onclick="showProfile(\''+esc(e.sub)+'\')">'+esc(e.sub)+'</span>':'')
-      +(e.cnt?' <span class="story-ev-sub" onclick="showProfile(\''+esc(e.cnt)+'\')">'+esc(e.cnt)+'</span>':'')
+      +(e.sub?'<span class="story-ev-sub" onclick="showProfile(\''+esc(e.sub)+'\')">'+subjLabel(e.sub)+'</span>':'')
+      +(e.cnt?' <span class="story-ev-sub" onclick="showProfile(\''+esc(e.cnt)+'\')">'+subjLabel(e.cnt)+'</span>':'')
       +'</div></div>';
   });
   h+='</div>';box.innerHTML=h;
@@ -2278,7 +2304,7 @@ function populateMapSubjects(){
   if(dl)dl.innerHTML=geoSubjects.map(s=>`<option value="${esc(s)}"></option>`).join('');
   const sel=document.getElementById('mapSubjectSelect');
   if(sel){const cur=sel.value;
-    sel.innerHTML='<option value="">All subjects ('+geoSubjects.length+')</option>'+geoSubjects.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    sel.innerHTML='<option value="">All subjects ('+geoSubjects.length+')</option>'+geoSubjects.map(s=>`<option value="${esc(s)}">${esc(subjLabelTxt(s))}</option>`).join('');
     if(geoSubjects.includes(cur))sel.value=cur;}
 }
 function clearMap(){
@@ -3031,7 +3057,7 @@ function renderChartActiveSubjects(){
   _destroy('chartActiveSubjectsC');
   const ci=document.getElementById('ciActiveSubjects');
   if(ci)ci.innerHTML=Object.keys(cnt).length+' subjects &middot; top '+sorted.length+' by owned records';
-  window.chartActiveSubjectsC=new Chart(D.chartActiveSubjects,{type:'bar',data:{labels:sorted.map(s=>s[0].length>16?s[0].slice(0,16)+'…':s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{onClick:(e,els)=>{if(els.length){const f=sorted[els[0].index];if(f)showProfile(f[0])}},plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>sorted[c[0].dataIndex][0],label:c=>c.parsed.x+' records (click to open profile)'}}},indexAxis:'y',scales:{x:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
+  window.chartActiveSubjectsC=new Chart(D.chartActiveSubjects,{type:'bar',data:{labels:sorted.map(s=>{const t=subjLabelTxt(s[0]);return t.length>16?t.slice(0,16)+'…':t;}),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{onClick:(e,els)=>{if(els.length){const f=sorted[els[0].index];if(f)showProfile(f[0])}},plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>subjLabelTxt(sorted[c[0].dataIndex][0]),label:c=>c.parsed.x+' records (click to open profile)'}}},indexAxis:'y',scales:{x:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 
 function renderChartNewReturning(){
@@ -3116,7 +3142,7 @@ function renderChartTopContacts(){
   if(!D.chartTopContacts)return;
   const ci=document.getElementById('ciTopContacts');
   if(ci)ci.innerHTML=sorted.length+' shown &middot; '+grandTotal+' unique contacts total';
-  window.chartTopC=new Chart(D.chartTopContacts,{type:'bar',data:{labels:sorted.map(s=>s[0].length>15?s[0].slice(0,15)+'...':s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){const v=ctx.parsed.x;const pct=Math.round(v/totalC*100);const full=sorted[ctx.dataIndex]?sorted[ctx.dataIndex][0]:'';return full+': '+v+' ('+pct+'% of top 10)'}}}},indexAxis:'y',scales:{x:{beginAtZero:true,grid:{},title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
+  window.chartTopC=new Chart(D.chartTopContacts,{type:'bar',data:{labels:sorted.map(s=>{const t=subjLabelTxt(s[0]);return t.length>15?t.slice(0,15)+'...':t;}),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){const v=ctx.parsed.x;const pct=Math.round(v/totalC*100);const full=sorted[ctx.dataIndex]?subjLabelTxt(sorted[ctx.dataIndex][0]):'';return full+': '+v+' ('+pct+'% of top 10)'}}}},indexAxis:'y',scales:{x:{beginAtZero:true,grid:{},title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartServiceTimeline(){
   if(typeof Chart==='undefined')return;
@@ -3144,7 +3170,7 @@ function renderChartContactDirection(){
   const totalD=sorted.reduce((s,v)=>s+v[1].mo+v[1].mt,0);
   if(ci)ci.innerHTML=sorted.length+' contacts with direction data &middot; '+totalD+' total';
   if(!sorted.length)return;
-  window.chartContactDir=new Chart(D.chartContactDir,{type:'bar',data:{labels:sorted.map(s=>s[0].length>12?s[0].slice(0,12)+'...':s[0]),datasets:[{label:'Outgoing (MO)',data:sorted.map(s=>s[1].mo),backgroundColor:'#2c6f79',borderRadius:2},{label:'Incoming (MT)',data:sorted.map(s=>s[1].mt),backgroundColor:'#d4a017',borderRadius:2}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:8},padding:6}},tooltip:{mode:'index',callbacks:{label:function(ctx){return ctx.dataset.label+': '+ctx.parsed.y}}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{}}},responsive:true,maintainAspectRatio:false}});
+  window.chartContactDir=new Chart(D.chartContactDir,{type:'bar',data:{labels:sorted.map(s=>{const t=subjLabelTxt(s[0]);return t.length>12?t.slice(0,12)+'...':t;}),datasets:[{label:'Outgoing (MO)',data:sorted.map(s=>s[1].mo),backgroundColor:'#2c6f79',borderRadius:2},{label:'Incoming (MT)',data:sorted.map(s=>s[1].mt),backgroundColor:'#d4a017',borderRadius:2}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:8},padding:6}},tooltip:{mode:'index',callbacks:{label:function(ctx){return ctx.dataset.label+': '+ctx.parsed.y}}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartDurationDist(){
   if(typeof Chart==='undefined')return;
@@ -3272,8 +3298,8 @@ function recRowHtml(r){
       <td class="annot-cell" data-annot="${r.type+'_'+parseInt(r.id.slice(1))}" style="text-align:center;cursor:pointer;font-size:0.85rem" onclick="event.stopPropagation();toggleAnnot({id:'${r.id}',type:'${r.type}'})">${annotationsMap[r.type+'_'+parseInt(r.id.slice(1))]?'&#9733;':'&#9734;'}</td>
       <td>${fmt(r.ts)}</td>
       <td><span class="tag${cdr?'':' tag-alt'}">${r.type}</span></td>
-      <td style="min-width:${wSub}px;max-width:${wSub}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.sub)}">${esc(r.sub||'')}</td>
-      <td style="min-width:${wCnt}px;max-width:${wCnt}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.cnt)}">${esc(r.cnt||'')}</td>
+      <td style="min-width:${wSub}px;max-width:${wSub}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(subjLabelTxt(r.sub))}">${r.sub?subjLabel(r.sub):''}</td>
+      <td style="min-width:${wCnt}px;max-width:${wCnt}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(subjLabelTxt(r.cnt))}">${r.cnt?subjLabel(r.cnt):''}</td>
       <td>${r.dur!=null?r.dur+'s':''}</td>
       <td>${esc(cdr?r.cll||'':r.prot||'')}</td>
       <td>${esc(cdr?r.dir||'':r.apn||'')}</td>
@@ -3361,8 +3387,13 @@ function showProfile(sub){
   const svcFromSessions={};sessions.forEach(s=>{const n=s.primary?s.primary.service:(s.service||'Unknown');svcFromSessions[n]=(svcFromSessions[n]||0)+1});
   const topSessionSvcs=Object.entries(svcFromSessions).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const maxDorm=maxDormancy>24?Math.round(maxDormancy/24)+'d':Math.round(maxDormancy)+'h';
-  D.profileTitle.textContent=`Subject: ${esc(sub)}`;
+  D.profileTitle.textContent=`Subject: ${subjLabelTxt(sub)}`;
   D.profileBody.innerHTML=`
+    <div class="prof-tagbar">
+      <span class="prof-tag-label" title="Outside intel about this subject — shown in brackets wherever this number/IP appears, in every case">&#127991; Intel tag</span>
+      <input id="profileTagInput" class="prof-tag-input" maxlength="200" value="${esc(subjTag(sub))}" placeholder="e.g. financier, uses 3 SIMs, prime suspect…">
+      <button class="btn" onclick="saveProfileTag('${esc(sub).replace(/'/g,"\\'")}')">Save</button>
+    </div>
     <div class="prof-grid">
       <div class="prof-card"><div class="prof-label">Records</div><div class="prof-value">${rows.length}</div></div>
       <div class="prof-card"><div class="prof-label">Contacts</div><div class="prof-value">${contacts.size}</div></div>
@@ -3405,7 +3436,7 @@ function showProfile(sub){
       <div class="prof-list">${meetings.slice(0,8).map((m,mi)=>{
         const confColor=m.gapLevel==='high'?'var(--success)':m.gapLevel==='medium'?'var(--warn)':'var(--muted)';
         const confLabel=m.gapLevel==='high'?'High':m.gapLevel==='medium'?'Med':'Low';
-        return '<div style="padding:2px 0;display:flex;align-items:center;gap:4px"><span style="color:'+confColor+'">&#9679;</span> '+esc(m.time.toLocaleString())+' with <strong style="cursor:pointer;color:var(--accent)" onclick="showProfile(\''+esc(m.subB)+'\')">'+esc(m.subB)+'</strong> at '+twr(m.tow)+' <span style="color:'+confColor+';font-weight:600;font-size:0.68rem">['+confLabel+' '+m.score+']</span><button onclick="showMeetingOverlay(\''+esc(sub+'|'+sub)+'\','+mi+')" style="background:none;border:1px solid var(--line);color:var(--accent);padding:1px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem">View</button></div>';
+        return '<div style="padding:2px 0;display:flex;align-items:center;gap:4px"><span style="color:'+confColor+'">&#9679;</span> '+esc(m.time.toLocaleString())+' with <strong style="cursor:pointer;color:var(--accent)" onclick="showProfile(\''+esc(m.subB)+'\')">'+subjLabel(m.subB)+'</strong> at '+twr(m.tow)+' <span style="color:'+confColor+';font-weight:600;font-size:0.68rem">['+confLabel+' '+m.score+']</span><button onclick="showMeetingOverlay(\''+esc(sub+'|'+sub)+'\','+mi+')" style="background:none;border:1px solid var(--line);color:var(--accent);padding:1px 6px;border-radius:3px;cursor:pointer;font-size:0.6rem">View</button></div>';
       }).join('')}</div></div>`:''}
     <div class="prof-section"><h4>Hourly activity</h4>
       <div class="prof-hours">${hours.map((h,i)=>`<div class="prof-hour" style="background:${h>Math.max(...hours)*0.7?'#b94a48':h>Math.max(...hours)*0.4?'#d4a017':'var(--accent)'};height:${Math.max(4,(h/Math.max(...hours||1))*40)}px" title="${i}:00 - ${h}"></div>`).join('')}</div></div>
@@ -5409,7 +5440,7 @@ async function renderDossier(){
         const topt=Object.entries(tc).sort((a,b)=>b[1]-a[1]).slice(0,5);
         const mts=meetingsList.filter(m=>m.subA===sub||m.subB===sub);
         const xs=((xrep&&xrep.subjects)||[]).find(x=>x.subject===sub);
-        h+='<div class="d-poi"><div class="d-poi-h"><span class="d-poi-n">POI '+(i+1)+'</span> <b>'+esc(sub)+'</b> <span class="d-poi-type">'+esc(p.type)+'</span>'
+        h+='<div class="d-poi"><div class="d-poi-h"><span class="d-poi-n">POI '+(i+1)+'</span> <b>'+subjLabel(sub)+'</b> <span class="d-poi-type">'+esc(p.type)+'</span>'
           +(rk?' <span class="d-poi-risk d-risk-'+esc((rk.band||'').toLowerCase())+'">Risk: '+esc(rk.band||'')+' ('+n(rk.score||0)+')</span>':'')+'</div>';
         h+='<table class="d-kv">'
           +'<tr><td>Activity</td><td>'+n(p.n)+' records · '+n(p.c)+' contacts · '+n(p.t)+' towers</td></tr>'
@@ -5899,6 +5930,7 @@ D.corrSwapBtn.addEventListener('click',()=>{
 // ====== BOOTSTRAP ======
 async function bootstrap(){
   await loadCases();
+  try{await loadSubjectTags();}catch(e){}
   try{await loadCaseData();}catch(e){console.error(e)}
   D.loginPass.value='';
   resetIdle();

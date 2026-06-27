@@ -931,6 +931,15 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 .tab-badge{display:inline-block;min-width:16px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font-size:.66rem;line-height:16px;text-align:center;vertical-align:middle}
 .cap-btn{float:right;border:1px solid var(--line);background:var(--surface);color:var(--accent);border-radius:5px;font-size:.64rem;padding:1px 7px;cursor:pointer;font-weight:600}
 .cap-btn:hover{background:var(--accent);color:#fff}
+.cap-btn.pinned{background:#d4a017;border-color:#d4a017;color:#fff}
+.cap-btn.pinned:hover{background:#b94a48;border-color:#b94a48}
+/* Subject intel tags */
+.subj-tag{color:var(--muted);font-style:italic;font-weight:400}
+.prof-tagbar{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:7px 10px;background:var(--surface);border:1px solid var(--line);border-radius:7px}
+.prof-tag-label{font-size:.72rem;font-weight:600;color:var(--muted);white-space:nowrap}
+.prof-tag-input{flex:1;min-width:0;border:1px solid var(--line);border-radius:5px;padding:4px 8px;font-size:.8rem;background:var(--bg);color:var(--text)}
+.graph-toggle{display:inline-flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer;user-select:none}
+.graph-toggle input{cursor:pointer}
 .evidenceToggleBtn.flash,.flash{animation:evflash .5s ease}
 @keyframes evflash{0%{box-shadow:0 0 0 0 rgba(212,160,23,.6)}100%{box-shadow:0 0 0 8px rgba(212,160,23,0)}}
 /* Evidence tab */
