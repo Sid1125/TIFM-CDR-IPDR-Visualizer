@@ -41,6 +41,20 @@ def _parse_mapping(mapping_json: str):
         return None
 
 
+def _read_table(path: str, filename: str, nrows=None):
+    """Read an uploaded CDR/IPDR/tower file into a DataFrame, dispatching on the original filename's
+    extension so operators can hand us the formats they actually export: .csv, .txt (delimiter
+    sniffed), and Excel .xls/.xlsx — not only CSV. Defaults to CSV for unknown extensions."""
+    name = (filename or "").lower()
+    if name.endswith(".xlsx") or name.endswith(".xlsm"):
+        return pd.read_excel(path, engine="openpyxl", nrows=nrows)
+    if name.endswith(".xls"):
+        return pd.read_excel(path, engine="xlrd", nrows=nrows)
+    if name.endswith(".txt"):
+        return pd.read_csv(path, sep=None, engine="python", nrows=nrows)
+    return pd.read_csv(path, nrows=nrows)
+
+
 def _to_pydatetime(val):
     if val is None or pd.isna(val):
         return None
@@ -125,7 +139,7 @@ async def upload_cdr(
             temp_file.write(await file.read())
             temp_path = temp_file.name
 
-        df = pd.read_csv(temp_path)
+        df = _read_table(temp_path, file.filename)
         # Operator-aware mapping: resolve the file's headers onto canonical CDR fields (honouring a
         # UI-supplied override), then bail clearly if a required field can't be found.
         override = _parse_mapping(mapping_json)
@@ -208,7 +222,7 @@ async def upload_ipdr(
             temp_file.write(await file.read())
             temp_path = temp_file.name
 
-        df = pd.read_csv(temp_path)
+        df = _read_table(temp_path, file.filename)
         # Operator-aware mapping onto canonical IPDR fields (UI override honoured), then a clear
         # failure if a required field is missing.
         override = _parse_mapping(mapping_json)
@@ -291,7 +305,7 @@ async def upload_towers(
             temp_file.write(await file.read())
             temp_path = temp_file.name
 
-        df = pd.read_csv(temp_path)
+        df = _read_table(temp_path, file.filename)
         ensure_columns(df.columns, ["tower_id"])
 
         records = []
@@ -342,7 +356,7 @@ async def upload_preview(
         with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as temp_file:
             temp_file.write(await file.read())
             temp_path = temp_file.name
-        df = pd.read_csv(temp_path, nrows=50)
+        df = _read_table(temp_path, file.filename, nrows=50)
         resolved = resolve_columns(df.columns, kind, override=_parse_mapping(mapping_json))
         return {
             "kind": kind,

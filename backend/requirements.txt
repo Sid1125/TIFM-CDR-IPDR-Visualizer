@@ -3,6 +3,8 @@ uvicorn
 sqlalchemy
 psycopg2-binary
 pandas
+openpyxl
+xlrd
 python-multipart
 networkx
 pydantic

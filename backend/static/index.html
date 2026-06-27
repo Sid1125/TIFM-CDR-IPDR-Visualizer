@@ -91,9 +91,9 @@
         <p id="dashHeroSub">Upload CDR, IPDR and Tower CSVs to begin building the case.</p>
       </div>
       <div class="dash-upload">
-        <label class="up-card"><input type="file" id="cdrFile" accept=".csv"/><strong>CDR</strong><em>Call records</em></label>
-        <label class="up-card"><input type="file" id="ipdrFile" accept=".csv"/><strong>IPDR</strong><em>IP sessions</em></label>
-        <label class="up-card"><input type="file" id="towerFile" accept=".csv"/><strong>Towers</strong><em>Registry</em></label>
+        <label class="up-card"><input type="file" id="cdrFile" accept=".csv,.xls,.xlsx,.txt"/><strong>CDR</strong><em>Call records</em></label>
+        <label class="up-card"><input type="file" id="ipdrFile" accept=".csv,.xls,.xlsx,.txt"/><strong>IPDR</strong><em>IP sessions</em></label>
+        <label class="up-card"><input type="file" id="towerFile" accept=".csv,.xls,.xlsx,.txt"/><strong>Towers</strong><em>Registry</em></label>
         <div class="up-meta">
           <span id="importStatus">Upload CSV files to begin.</span>
           <button id="resetCaseBtn" class="btn-sm up-reset">Reset case</button>
@@ -369,7 +369,7 @@
       <span class="tr-sub">Permanent, case-independent master of every tower seen across all cases</span>
       <span style="flex:1"></span>
       <input id="trSearch" type="search" placeholder="Search tower id / city / state"/>
-      <input type="file" id="trImportFile" accept=".csv" style="display:none"/>
+      <input type="file" id="trImportFile" accept=".csv,.xls,.xlsx,.txt" style="display:none"/>
       <button id="trRebuildBtn" class="btn-sm" title="Backfill tower coordinates from the CDR/IPDR records already loaded">Rebuild from records</button>
       <button id="trGeocodeBtn" class="btn-sm" title="Offline reverse-geocode: name located towers with their nearest city/state (fills only where missing)">Fill place names</button>
       <button id="trImportBtn" class="btn-sm" title="Import a tower master CSV (tower_id, latitude, longitude, city, state)">Import master CSV</button>

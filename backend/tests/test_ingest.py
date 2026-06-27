@@ -142,6 +142,33 @@ class UploadFlexibleTests(unittest.TestCase):
         self.assertEqual(body["mapping"]["b_party_number"], "Called")
         self.assertEqual(body["unmapped_required"], [])
 
+    def test_xlsx_upload_imports(self):
+        # Operators often ship Excel — an .xlsx with the same aliased headers must import like CSV.
+        import io
+        df = pd.DataFrame({
+            "Caller": ["111", "333"],
+            "Called": ["222", "444"],
+            "Call Date": ["2026-01-01 10:00:00", "2026-01-02 11:00:00"],
+            "End Time": ["2026-01-01 10:05:00", "2026-01-02 11:05:00"],
+            "Duration": [300, 120],
+        })
+        buf = io.BytesIO()
+        df.to_excel(buf, index=False, engine="openpyxl")
+        buf.seek(0)
+        r = self.client.post(
+            "/upload/cdr",
+            files={"file": ("cdr.xlsx", buf.read(),
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            data={"case_id": "9", "mode": "replace"},
+        )
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["records_imported"], 2)
+        db = self.Session()
+        try:
+            self.assertEqual(db.query(CDRRecord).filter(CDRRecord.case_id == "9").count(), 2)
+        finally:
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
