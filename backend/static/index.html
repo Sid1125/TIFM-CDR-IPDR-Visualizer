@@ -57,6 +57,8 @@
         <div class="nav-menu">
           <button class="topbar-tab" data-tab="timeline">Timeline</button>
           <button class="topbar-tab" data-tab="charts">Charts</button>
+          <button class="topbar-tab" data-tab="analysisreports">Analysis Reports</button>
+          <button class="topbar-tab" data-tab="groupcompare">Group Compare</button>
           <button class="topbar-tab" data-tab="services">Services</button>
           <button class="topbar-tab" data-tab="correlation">Correlation</button>
           <button class="topbar-tab" data-tab="inferences">Inferences</button>
@@ -360,6 +362,30 @@
       <button id="lawExpandBtn" class="btn-sm" type="button">Expand all</button>
     </div>
     <div id="lawsBody" class="laws-body"></div>
+  </section>
+
+  <!-- ANALYSIS REPORTS TAB -->
+  <section id="tab-analysisreports" class="tab-content">
+    <div class="ar-toolbar">
+      <h3 style="margin:0">Analysis Reports</h3>
+      <select id="arSubject"></select>
+      <span id="arMeta" class="rec-count"></span>
+    </div>
+    <div id="arBody" class="ar-body"></div>
+  </section>
+
+  <!-- GROUP COMPARE TAB -->
+  <section id="tab-groupcompare" class="tab-content">
+    <div class="ar-toolbar">
+      <h3 style="margin:0">Group Compare — common numbers across subjects</h3>
+      <button id="gcRunBtn" class="btn-sm">Compare selected</button>
+      <button id="gcClearBtn" class="btn-sm">Clear</button>
+      <span id="gcMeta" class="rec-count"></span>
+    </div>
+    <div class="gc-wrap">
+      <div id="gcPicker" class="gc-picker"></div>
+      <div id="gcBody" class="gc-body"></div>
+    </div>
   </section>
 
   <!-- TOWER REPOSITORY TAB -->

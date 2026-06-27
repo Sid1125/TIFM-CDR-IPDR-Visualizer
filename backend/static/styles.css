@@ -959,6 +959,27 @@ body.dark .law-card>summary:hover{background:rgba(255,255,255,.04)}
 .law-field{margin-top:10px}
 .law-field h5{margin:0 0 3px;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--lc,#888);font-weight:700}
 .law-field p{margin:0;font-size:.84rem;line-height:1.5;color:var(--text)}
+/* Analysis Reports + Group Compare */
+.ar-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.ar-toolbar select{border:1px solid var(--line);border-radius:6px;padding:5px 9px;background:var(--bg);color:var(--text);font-size:.82rem;min-width:220px}
+.ar-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;padding-bottom:40px}
+.ar-card h3{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:.9rem}
+.ar-count{font-size:.7rem;color:#fff;background:var(--accent);border-radius:9px;padding:1px 8px;font-weight:700}
+.ar-card .cap-btn{float:none;margin-left:auto}
+.ar-card .cap-btn[disabled]{opacity:.4;cursor:default}
+.ar-tablewrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.ar-table{font-size:.76rem;width:100%}
+.ar-table th{position:sticky;top:0;background:var(--surface);z-index:1}
+.ar-note{font-size:.72rem;color:var(--muted);margin:2px 0 6px}
+.ar-empty{font-size:.8rem;color:var(--muted);padding:14px}
+.gc-wrap{display:flex;gap:14px;align-items:flex-start}
+.gc-picker{flex:0 0 260px;max-height:calc(100vh - 150px);overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)}
+.gc-picker-h{font-size:.74rem;font-weight:700;color:var(--muted);margin-bottom:6px}
+.gc-chk{display:flex;align-items:center;gap:6px;font-size:.78rem;padding:3px 4px;border-radius:4px;cursor:pointer}
+.gc-chk:hover{background:rgba(0,0,0,.04)}
+.gc-cn{margin-left:auto;color:var(--muted);font-size:.7rem}
+.gc-body{flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.gc-sel{grid-column:1/-1;font-size:.82rem;color:var(--text);padding:4px 0}
 .evidenceToggleBtn.flash,.flash{animation:evflash .5s ease}
 @keyframes evflash{0%{box-shadow:0 0 0 0 rgba(212,160,23,.6)}100%{box-shadow:0 0 0 8px rgba(212,160,23,0)}}
 /* Evidence tab */

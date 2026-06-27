@@ -115,8 +115,8 @@ async function loadSubjectTags(){
 }
 // ====== TELECOM REFERENCE (offline number->operator/circle, ISD, IMEI TAC) ======
 async function loadReference(){
-  try{const m=await API.get('/reference/meta');state.ref={series:m.series||{},isd:m.isd||{},seed:m.series_seed};}
-  catch(e){state.ref={series:{},isd:{}};}
+  try{const m=await API.get('/reference/meta');state.ref={series:m.series||{},isd:m.isd||{},tac:m.tac||{},seed:m.series_seed};}
+  catch(e){state.ref={series:{},isd:{},tac:{}};}
 }
 function _refDigits(v){return String(v==null?'':v).replace(/\D/g,'')}
 function _refNational(v){
@@ -144,6 +144,7 @@ function refOperator(v){return refLookup(v).operator||''}
 function refCircle(v){return refLookup(v).circle||''}
 function isIsdNum(v){return refLookup(v).is_isd}
 function refCountry(v){return refLookup(v).country||''}
+function refImei(v){const d=_refDigits(v).slice(0,8);const t=(state.ref&&state.ref.tac&&state.ref.tac[d])||null;return t?(t.make+' '+t.model):''}
 
 async function saveSubjectTag(sub,tag){
   const r=await API.put('/subject-tags/',{subject:sub,tag:tag});
@@ -1073,6 +1074,8 @@ function switchTab(tab){
   if(tab==='crosscase'){xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();}
   if(tab==='inferences')renderInferences();
   if(tab==='records')renderRecords();
+  if(tab==='analysisreports')renderAnalysisReports();
+  if(tab==='groupcompare')renderGroupCompare();
   if(tab==='laws')renderLaws();
   if(tab==='towerrepo')renderTowerRepo();
   if(tab==='ai')renderAiInsights();
@@ -6094,6 +6097,150 @@ function renderLaws(){
       +'</div></details>';
   }).join('');
   body.innerHTML=h;
+}
+
+// ====== CSV EXPORT (client-side; Phase H adds generic XLSX) ======
+function _csvCell(v){v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function downloadCsv(filename,headers,rows){
+  const lines=[headers.map(_csvCell).join(',')].concat((rows||[]).map(r=>r.map(_csvCell).join(',')));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+// ====== Shared report-table renderers ======
+function _repTableHtml(headers,rows){
+  if(!rows.length)return '<div class="ar-empty">No data.</div>';
+  return '<div class="ar-tablewrap"><table class="data-table ar-table"><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'
+    +rows.slice(0,500).map(r=>'<tr>'+r.map(c=>'<td>'+esc(c==null?'':c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'
+    +(rows.length>500?'<div class="ar-note">First 500 of '+rows.length+' rows shown — export for all.</div>':'');
+}
+function _repCard(expClass,id,title,headers,rows,note){
+  return '<div class="card ar-card"><h3>'+esc(title)+' <span class="ar-count">'+rows.length+'</span>'
+    +'<button class="cap-btn '+expClass+'" data-rep="'+id+'"'+(rows.length?'':' disabled')+'>Export CSV</button></h3>'
+    +(note?'<div class="ar-note">'+esc(note)+'</div>':'')+_repTableHtml(headers,rows)+'</div>';
+}
+const _hm=v=>{try{return new Date(v).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}catch(e){return ''}};
+const _durStr=s=>{s=+s||0;return s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s'};
+
+// ====== PHASE B — CDR ANALYSIS REPORTS ======
+let _arReports={};
+function renderAnalysisReports(){
+  const sel=document.getElementById('arSubject'),body=document.getElementById('arBody'),meta=document.getElementById('arMeta');
+  if(!sel||!body)return;
+  if(!allRows.length){body.innerHTML='<div class="ar-empty">Load a case to run analysis reports.</div>';sel.innerHTML='';if(meta)meta.textContent='';return;}
+  const cnt={};allRows.forEach(r=>{if(r.type==='CDR'&&r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
+  const subs=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
+  if(!sel._wired){sel._wired=true;sel.addEventListener('change',renderAnalysisReports);}
+  const cur=sel.value;
+  sel.innerHTML=subs.map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+' ('+cnt[s]+')</option>').join('');
+  if(cur&&subs.includes(cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
+  const sub=sel.value;
+  if(!sub){body.innerHTML='<div class="ar-empty">No CDR subjects in this case.</div>';return;}
+  _arReports={};
+  const inv=rowsFor(sub).filter(r=>r.type==='CDR'&&r.ts).slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const owned=ownedRowsFor(sub).filter(r=>r.type==='CDR'&&r.ts);
+  const other=r=>r.sub===sub?r.cnt:r.sub;
+  const isSms=r=>/sms|text/i.test(r.cll||'');
+  // group by day
+  const byDay={};inv.forEach(r=>{const k=new Date(r.ts).toLocaleDateString();(byDay[k]=byDay[k]||[]).push(r);});
+  const days=Object.keys(byDay).sort((a,b)=>new Date(a)-new Date(b));
+  const dayfl=days.map(d=>{const rs=byDay[d];const f=rs[0],l=rs[rs.length-1];return [d,_hm(f.ts)+' → '+(other(f)||'?'),_hm(l.ts)+' → '+(other(l)||'?'),rs.length];});
+  const single=days.filter(d=>byDay[d].length===1).map(d=>{const r=byDay[d][0];return [d,_hm(r.ts),other(r)||'?',isSms(r)?'SMS':'Call'];});
+  const dow=[0,0,0,0,0,0,0];inv.forEach(r=>dow[new Date(r.ts).getDay()]++);
+  const dnames=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const wk=dnames.map((nm,i)=>[nm,dow[i]]);
+  wk.push(['— Weekday total',dow[1]+dow[2]+dow[3]+dow[4]+dow[5]]);wk.push(['— Weekend total',dow[0]+dow[6]]);
+  const longest=inv.filter(r=>!isSms(r)&&r.dur!=null&&r.dur!=='').slice().sort((a,b)=>(b.dur||0)-(a.dur||0)).slice(0,30).map(r=>[fmt(r.ts),other(r)||'?',_durStr(r.dur),r.tow||'']);
+  let dCnt=0,nCnt=0;const dTow={},nTow={};
+  inv.forEach(r=>{const h=new Date(r.ts).getHours();(h>=6&&h<18)?dCnt++:nCnt++;});
+  owned.forEach(r=>{if(!r.tow)return;const h=new Date(r.ts).getHours();const o=(h>=6&&h<18)?dTow:nTow;o[r.tow]=(o[r.tow]||0)+1;});
+  const topT=o=>{const e=Object.entries(o).sort((a,b)=>b[1]-a[1])[0];return e?e[0]+' ('+e[1]+')':'—';};
+  const dn=[['Day (06:00–18:00)',dCnt,topT(dTow)],['Night (18:00–06:00)',nCnt,topT(nTow)]];
+  const isd=inv.filter(r=>isIsdNum(other(r))).map(r=>[fmt(r.ts),other(r),refCountry(other(r)),isSms(r)?'SMS':'Call']);
+  const subCircle=refCircle(sub);
+  const ostate=subCircle?inv.filter(r=>{const c=refCircle(other(r));return c&&c!==subCircle;}).map(r=>[fmt(r.ts),other(r),refCircle(other(r))]):[];
+  const off=[];for(let i=1;i<inv.length;i++){const g=(new Date(inv[i].ts)-new Date(inv[i-1].ts))/86400000;if(g>=3)off.push([fmt(inv[i-1].ts),fmt(inv[i].ts),g.toFixed(1)+' days']);}
+  const imeiMap={};owned.forEach(r=>{const k=r.imei;if(!k)return;const m=imeiMap[k]=imeiMap[k]||{first:r.ts,last:r.ts,c:0};m.c++;if(new Date(r.ts)<new Date(m.first))m.first=r.ts;if(new Date(r.ts)>new Date(m.last))m.last=r.ts;});
+  const imei=Object.keys(imeiMap).map(k=>{const m=imeiMap[k];return [k,refImei(k)||'—',fmtd(m.first),fmtd(m.last),m.c];});
+  const imsiMap={};owned.forEach(r=>{if(r.imsi)imsiMap[r.imsi]=(imsiMap[r.imsi]||0)+1;});
+  const imsi=Object.keys(imsiMap).map(k=>[k,imsiMap[k]]);
+  const bank=inv.filter(r=>isSms(r)&&/[A-Za-z]/.test(other(r)||'')).map(r=>[fmt(r.ts),other(r),'SMS']);
+  const reg=(id,headers,rows)=>{_arReports[id]={headers,rows};};
+  reg('day_first_last',['Date','First call','Last call','Records'],dayfl);
+  reg('single_call_days',['Date','Time','Contact','Type'],single);
+  reg('weekday_weekend',['Day','Records'],wk);
+  reg('longest_calls',['Time','Contact','Duration','Tower'],longest);
+  reg('day_night',['Bucket','Records','Dominant tower'],dn);
+  reg('isd_calls',['Time','Number','Country','Type'],isd);
+  reg('other_state',['Time','Number','Circle'],ostate);
+  reg('off_periods',['Last seen','Reappeared','Gap'],off);
+  reg('imei_summary',['IMEI','Make / Model','First','Last','Records'],imei);
+  reg('imsi_summary',['IMSI','Records'],imsi);
+  reg('bank_sms',['Time','Sender','Type'],bank);
+  body.innerHTML=[
+    _repCard('ar-exp','day_first_last','Day — first & last call',['Date','First call','Last call','Records'],dayfl),
+    _repCard('ar-exp','single_call_days','Single-call days',['Date','Time','Contact','Type'],single),
+    _repCard('ar-exp','weekday_weekend','Weekday vs weekend',['Day','Records'],wk),
+    _repCard('ar-exp','longest_calls','Longest-duration calls (top 30)',['Time','Contact','Duration','Tower'],longest),
+    _repCard('ar-exp','day_night','Day vs night summary',['Bucket','Records','Dominant tower'],dn),
+    _repCard('ar-exp','isd_calls','ISD / international calls',['Time','Number','Country','Type'],isd),
+    _repCard('ar-exp','other_state','Other-state calls',['Time','Number','Circle'],ostate,subCircle?('Subject circle: '+subCircle):'Subject circle unknown — extend app/data/mobile_series.json for circle coverage.'),
+    _repCard('ar-exp','off_periods','OFF / unused periods (gap ≥ 3 days)',['Last seen','Reappeared','Gap'],off),
+    _repCard('ar-exp','imei_summary','IMEI summary',['IMEI','Make / Model','First','Last','Records'],imei),
+    _repCard('ar-exp','imsi_summary','SIM / IMSI summary',['IMSI','Records'],imsi),
+    _repCard('ar-exp','bank_sms','Bank / OTP-sender SMS',['Time','Sender','Type'],bank,'Alphanumeric sender IDs (e.g. VM-HDFCBK). Requires call-type data in the dump.'),
+  ].join('');
+  if(meta)meta.textContent=inv.length+' records for this subject';
+  body.querySelectorAll('.ar-exp').forEach(b=>b.onclick=()=>{const rep=_arReports[b.dataset.rep];if(rep)downloadCsv('ARGUS_'+b.dataset.rep+'_'+sub+'.csv',rep.headers,rep.rows);});
+}
+
+// ====== PHASE C — GROUP COMPARE (common numbers across N subjects) ======
+let _gcReports={};
+function renderGroupCompare(){
+  const picker=document.getElementById('gcPicker'),body=document.getElementById('gcBody'),meta=document.getElementById('gcMeta');
+  if(!picker||!body)return;
+  if(!allRows.length){picker.innerHTML='';body.innerHTML='<div class="ar-empty">Load a case to compare subjects.</div>';if(meta)meta.textContent='';return;}
+  const cnt={};allRows.forEach(r=>{if(r.type==='CDR'&&r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
+  const subs=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
+  if(!picker._wired){picker._wired=true;
+    const rb=document.getElementById('gcRunBtn');if(rb)rb.onclick=_gcRun;
+    const cb=document.getElementById('gcClearBtn');if(cb)cb.onclick=()=>{picker.querySelectorAll('input').forEach(c=>c.checked=false);body.innerHTML='';};
+  }
+  picker.innerHTML='<div class="gc-picker-h">Select 2+ subjects</div>'+subs.slice(0,300).map(s=>'<label class="gc-chk"><input type="checkbox" value="'+esc(s)+'"> '+esc(subjLabelTxt(s))+' <span class="gc-cn">'+cnt[s]+'</span></label>').join('');
+  if(meta)meta.textContent=subs.length+' subjects';
+}
+function _gcRun(){
+  const picker=document.getElementById('gcPicker'),body=document.getElementById('gcBody');
+  const sel=[...picker.querySelectorAll('input:checked')].map(c=>c.value);
+  if(sel.length<2){body.innerHTML='<div class="ar-empty">Select at least 2 subjects, then Compare.</div>';return;}
+  const contacts={},towers={},cells={},latlng={},imeis={};
+  sel.forEach(s=>{
+    const inv=rowsFor(s).filter(r=>r.type==='CDR');const owned=ownedRowsFor(s).filter(r=>r.type==='CDR');
+    contacts[s]=new Set(inv.map(r=>r.sub===s?r.cnt:r.sub).filter(Boolean));
+    towers[s]=new Set(owned.map(r=>r.tow).filter(Boolean));
+    cells[s]=new Set(owned.map(r=>r.cell).filter(Boolean));
+    latlng[s]=new Set(owned.filter(r=>r.lat&&r.lng).map(r=>(+r.lat).toFixed(3)+','+(+r.lng).toFixed(3)));
+    imeis[s]=new Set(owned.map(r=>r.imei).filter(Boolean));
+  });
+  const inter=map=>{let acc=null;sel.forEach(s=>{const set=map[s];acc=acc===null?new Set(set):new Set([...acc].filter(x=>set.has(x)));});return [...(acc||[])];};
+  const commonContacts=inter(contacts).filter(c=>!sel.includes(c));
+  const matrix=[];sel.forEach(a=>sel.forEach(b=>{if(a===b)return;const k=rowsFor(a).filter(r=>r.type==='CDR'&&r.sub===a&&r.cnt===b).length;if(k)matrix.push([a,b,k]);}));
+  _gcReports={
+    contacts:{headers:['Common contact','Operator','Circle'],rows:commonContacts.map(c=>[c,refOperator(c),refCircle(c)])},
+    towers:{headers:['Common tower'],rows:inter(towers).map(t=>[t])},
+    cells:{headers:['Common cell ID'],rows:inter(cells).map(t=>[t])},
+    latlng:{headers:['Common location (lat,lng ~110m)'],rows:inter(latlng).map(t=>[t])},
+    imeis:{headers:['Common IMEI','Make / Model'],rows:inter(imeis).map(t=>[t,refImei(t)||'—'])},
+    matrix:{headers:['Caller','Called','Direct calls'],rows:matrix},
+  };
+  body.innerHTML='<div class="gc-sel">Comparing <b>'+sel.length+'</b> subjects: '+sel.map(s=>esc(subjLabelTxt(s))).join(', ')+'</div>'+[
+    _repCard('gc-exp','contacts','Common contacts (contacted by all '+sel.length+')',_gcReports.contacts.headers,_gcReports.contacts.rows),
+    _repCard('gc-exp','towers','Common towers',_gcReports.towers.headers,_gcReports.towers.rows),
+    _repCard('gc-exp','cells','Common cell IDs',_gcReports.cells.headers,_gcReports.cells.rows),
+    _repCard('gc-exp','latlng','Common locations',_gcReports.latlng.headers,_gcReports.latlng.rows),
+    _repCard('gc-exp','imeis','Common IMEIs',_gcReports.imeis.headers,_gcReports.imeis.rows),
+    _repCard('gc-exp','matrix','Who called whom (direct calls within the group)',_gcReports.matrix.headers,_gcReports.matrix.rows),
+  ].join('');
+  body.querySelectorAll('.gc-exp').forEach(b=>b.onclick=()=>{const rep=_gcReports[b.dataset.rep];if(rep)downloadCsv('ARGUS_group_'+b.dataset.rep+'.csv',rep.headers,rep.rows);});
 }
 
 async function bootstrap(){
