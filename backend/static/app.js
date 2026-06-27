@@ -1253,8 +1253,9 @@ async function handleUploadConfirmed(kind,file,route,mode,mapping){
       if(bits.length)msg+=' — '+bits.join(' · ');
     }
     D.importStatus.textContent=msg;
+    try{toast('✓ '+msg);}catch(e){}
     if(v&&(v.rows_dropped||v.date_failures))showValidationReport(kind,v);
-    await loadCaseData()}catch(e){D.importStatus.textContent='Upload failed: '+(e.message||'error');console.error(e)}
+    await loadCaseData()}catch(e){D.importStatus.textContent='Upload failed: '+(e.message||'error');try{toast('Upload failed: '+(e.message||'error'));}catch(_){}console.error(e)}
 }
 
 // Surface what the ingest coerced or dropped so silent misparsing becomes visible.
@@ -2365,9 +2366,11 @@ if(D.trImportFile)D.trImportFile.addEventListener('change',async function(){
     const fd=new FormData();fd.append('file',f);
     const r=await fetch('/towers/upload',{credentials:'same-origin',method:'POST',body:fd});
     if(!r.ok)throw new Error(await r.text()||'Import failed');
+    const res=await r.json().catch(()=>({}));
     try{state.towers=await API.get('/towers/')}catch(e){}  // refresh map's tower cache so new towers locate
     await renderTowerRepo();
-  }catch(e){if(el)el.innerHTML='<div class="tr-empty" style="color:var(--danger)">Import failed: '+esc(e.message||String(e))+'</div>';}
+    try{toast('✓ Tower master imported'+(res&&res.records_imported!=null?' ('+n(res.records_imported)+' rows)':'')+'.');}catch(e){}
+  }catch(e){if(el)el.innerHTML='<div class="tr-empty" style="color:var(--danger)">Import failed: '+esc(e.message||String(e))+'</div>';try{toast('Tower import failed: '+(e.message||String(e)));}catch(_){}}
   finally{this.value='';}
 });
 
