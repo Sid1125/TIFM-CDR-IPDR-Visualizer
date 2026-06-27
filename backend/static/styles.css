@@ -994,6 +994,11 @@ body.dark .law-card>summary:hover{background:rgba(255,255,255,.04)}
 /* Subscriber (SDR) card */
 .prof-sdr{margin-top:6px;padding:7px 9px;border:1px solid var(--line);border-left:3px solid #3a7d5a;border-radius:6px;background:var(--surface);font-size:.78rem;line-height:1.5}
 .prof-sdr-h{font-weight:700;color:#3a7d5a;margin-bottom:3px;font-size:.74rem;text-transform:uppercase;letter-spacing:.03em}
+/* Suspect groups */
+.susp-dot{color:#e03131;font-weight:700}
+.wl-group{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin:4px 0;padding:3px 0;border-top:1px dashed var(--line)}
+.wl-gname{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin-right:4px}
+#wlGroup{max-width:160px}
 .evidenceToggleBtn.flash,.flash{animation:evflash .5s ease}
 @keyframes evflash{0%{box-shadow:0 0 0 0 rgba(212,160,23,.6)}100%{box-shadow:0 0 0 8px rgba(212,160,23,0)}}
 /* Evidence tab */

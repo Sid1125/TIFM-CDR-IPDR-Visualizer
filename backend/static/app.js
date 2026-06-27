@@ -146,6 +146,27 @@ function isIsdNum(v){return refLookup(v).is_isd}
 function refCountry(v){return refLookup(v).country||''}
 function refImei(v){const d=_refDigits(v).slice(0,8);const t=(state.ref&&state.ref.tac&&state.ref.tac[d])||null;return t?(t.make+' '+t.model):''}
 
+// ====== SUSPECT GROUPS (named watchlist groups + cross-UI highlight) ======
+async function loadSuspects(){
+  try{const [v,g]=await Promise.all([API.get('/watchlist/values'),API.get('/watchlist/groups')]);
+    state.suspects=v||[];state.suspectSet=new Set((v||[]).map(x=>String(x.value)));state.suspectGroups=g||[];}
+  catch(e){state.suspects=[];state.suspectSet=new Set();state.suspectGroups=[];}
+}
+function isSuspect(v){return !!(v!=null&&state.suspectSet&&state.suspectSet.has(String(v)));}
+window.addToSuspectGroup=async function(value,kind){
+  value=String(value==null?'':value).trim();if(!value)return;
+  const def=state._lastGroup||((state.suspectGroups||[])[0]||{}).group_name||'Default';
+  const group=prompt('Add "'+value+'" to which suspect group?',def);
+  if(group===null)return;
+  state._lastGroup=(group||'').trim()||'Default';
+  try{await API.post('/watchlist',{value:value,kind:kind||undefined,group_name:state._lastGroup,case_id:activeCaseId||null});
+    await loadSuspects();try{toast('Added “'+value+'” to suspect group “'+state._lastGroup+'”.');}catch(e){}
+    if(state.tab==='records')renderRecTable();
+    if(state.tab==='graph')renderGraph();
+    if(state.tab==='inferences'){_infCache=null;renderInferences(true);}
+  }catch(e){try{toast('Could not add to suspect group');}catch(_){}}
+};
+
 async function saveSubjectTag(sub,tag){
   const r=await API.put('/subject-tags/',{subject:sub,tag:tag});
   const t=(tag||'').trim();
@@ -1660,7 +1681,7 @@ async function renderGraph(){
   curGraphNodes=nodes;curGraphLinks=links;curGraphSim=sim;
 
   const link=g.append('g').selectAll('line').data(links).join('line').attr('stroke','#dccfc0').attr('stroke-width',d=>Math.max(0.5,Math.min(6,d.weight*0.5))).attr('stroke-opacity',0.6);
-  const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))).style('fill',d=>d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'var(--accent)')).attr('stroke','#fff').attr('stroke-width',1.5).style('cursor','pointer')
+  const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))).style('fill',d=>d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'var(--accent)')).attr('stroke',d=>isSuspect(d.id)?'#e03131':'#fff').attr('stroke-width',d=>isSuspect(d.id)?3.5:1.5).style('cursor','pointer')
     .on('mouseover',(e,d)=>{
       const deg=curCentrality?curCentrality.degree.find(x=>x[0]===d.id):null;
       D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>
@@ -3371,8 +3392,8 @@ function recRowHtml(r){
       <td class="annot-cell" data-annot="${r.type+'_'+parseInt(r.id.slice(1))}" style="text-align:center;cursor:pointer;font-size:0.85rem" onclick="event.stopPropagation();toggleAnnot({id:'${r.id}',type:'${r.type}'})">${annotationsMap[r.type+'_'+parseInt(r.id.slice(1))]?'&#9733;':'&#9734;'}</td>
       <td>${fmt(r.ts)}</td>
       <td><span class="tag${cdr?'':' tag-alt'}">${r.type}</span></td>
-      <td style="min-width:${wSub}px;max-width:${wSub}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(subjLabelTxt(r.sub))}">${r.sub?subjLabel(r.sub):''}</td>
-      <td style="min-width:${wCnt}px;max-width:${wCnt}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(subjLabelTxt(r.cnt))}">${r.cnt?subjLabel(r.cnt):''}</td>
+      <td style="min-width:${wSub}px;max-width:${wSub}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(subjLabelTxt(r.sub))}">${isSuspect(r.sub)?'<span class="susp-dot" title="In a suspect group">&#9678;</span> ':''}${r.sub?subjLabel(r.sub):''}</td>
+      <td style="min-width:${wCnt}px;max-width:${wCnt}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(subjLabelTxt(r.cnt))}">${isSuspect(r.cnt)?'<span class="susp-dot" title="In a suspect group">&#9678;</span> ':''}${r.cnt?subjLabel(r.cnt):''}</td>
       <td>${r.dur!=null?r.dur+'s':''}</td>
       <td>${esc(cdr?r.cll||'':r.prot||'')}</td>
       <td>${esc(cdr?r.dir||'':r.apn||'')}</td>
@@ -3466,6 +3487,7 @@ function showProfile(sub){
       <span class="prof-tag-label" title="Outside intel about this subject — shown in brackets wherever this number/IP appears, in every case">&#127991; Intel tag</span>
       <input id="profileTagInput" class="prof-tag-input" maxlength="200" value="${esc(subjTag(sub))}" placeholder="e.g. financier, uses 3 SIMs, prime suspect…">
       <button class="btn" onclick="saveProfileTag('${esc(sub).replace(/'/g,"\\'")}')">Save</button>
+      <button class="btn" title="Add this subject to a suspect group" onclick="addToSuspectGroup('${esc(sub).replace(/'/g,"\\'")}')">${isSuspect(sub)?'&#9678; In group':'&#43; Suspect group'}</button>
     </div>
     <div class="prof-grid">
       <div class="prof-card"><div class="prof-label">Records</div><div class="prof-value">${rows.length}</div></div>
@@ -3880,19 +3902,26 @@ function _exportsHtml(){
 }
 function _watchlistBarHtml(rep){
   const hits=(rep&&rep.watchlist_hits)||[];
-  const chips=(_wl||[]).map(e=>'<span class="wl-chip">'+esc(e.value)+' <span class="k">'+esc(e.kind)+'</span> <a onclick="wlRemove('+e.id+')" title="remove">&times;</a></span>').join('');
+  // Group chips by suspect group.
+  const byGroup={};(_wl||[]).forEach(e=>{const g=e.group_name||'Default';(byGroup[g]=byGroup[g]||[]).push(e);});
+  const groups=Object.keys(byGroup).sort();
+  const chips=groups.map(g=>'<div class="wl-group"><span class="wl-gname">'+esc(g)+'</span>'
+    +byGroup[g].map(e=>'<span class="wl-chip">'+esc(e.value)+' <span class="k">'+esc(e.kind)+'</span> <a onclick="wlRemove('+e.id+')" title="remove">&times;</a></span>').join('')+'</div>').join('');
+  const knownGroups=[...new Set([...(state.suspectGroups||[]).map(x=>x.group_name),...groups,'Default'])];
   return '<div class="wl-bar">'
-    +'<div class="wl-row"><strong>Watchlist</strong>'
-    +'<input id="wlInput" placeholder="phone number or IP address" onkeydown="if(event.key===\'Enter\')wlAdd()"/>'
+    +'<div class="wl-row"><strong>Suspect groups</strong>'
+    +'<input id="wlInput" placeholder="number / IP / IMEI / cell-id" onkeydown="if(event.key===\'Enter\')wlAdd()"/>'
+    +'<input id="wlGroup" list="wlGroupList" placeholder="group (Default)" value="'+esc(state._lastGroup||'Default')+'"/>'
+    +'<datalist id="wlGroupList">'+knownGroups.map(g=>'<option value="'+esc(g)+'">').join('')+'</datalist>'
     +'<button class="btn-sm" onclick="wlAdd()">Add</button>'
     +'<button id="wlExportBtn" class="btn-sm wl-export" onclick="wlExport()" title="Download the full analysis as an official, audit-logged Markdown case report">&#8623; Export analysis (.md)</button></div>'
-    +(chips?'<div class="wl-chips">'+chips+'</div>':'<div class="wl-empty">No watchlist entries. Add a number/IP to force it to the top as Critical.</div>')
-    +(hits.length?'<div class="wl-hits">&#9873; '+hits.length+' watchlist match'+(hits.length>1?'es':'')+' &mdash; forced to Critical at the top of the lists.</div>':'')
+    +(chips?'<div class="wl-chips">'+chips+'</div>':'<div class="wl-empty">No suspect-group entries. Add a number/IP/IMEI/cell-id — it is forced to the top as Critical and highlighted across records & graph.</div>')
+    +(hits.length?'<div class="wl-hits">&#9873; '+hits.length+' suspect-group match'+(hits.length>1?'es':'')+' &mdash; forced to Critical at the top of the lists.</div>':'')
     +'<details class="wl-exports"><summary>Export history <span id="wlExportNote" class="wl-note"></span></summary><div id="wlExportsList">'+_exportsHtml()+'</div></details>'
     +'</div>';
 }
-window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;try{await API.post('/watchlist',{value:v,case_id:activeCaseId||null});await loadWatchlist();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
-window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;const g=($('wlGroup')&&$('wlGroup').value||'Default').trim()||'Default';state._lastGroup=g;try{await API.post('/watchlist',{value:v,group_name:g,case_id:activeCaseId||null});await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 function _caseSafe(){const cn=(D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex]?.text)||'case';return cn.replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'case';}
 window.wlExport=async function(){
   const btn=$('wlExportBtn');const prev=btn?btn.innerHTML:'';if(btn){btn.innerHTML='Exporting…';btn.disabled=true;}
@@ -6341,6 +6370,7 @@ async function bootstrap(){
   await loadCases();
   try{await loadSubjectTags();}catch(e){}
   try{await loadReference();}catch(e){}
+  try{await loadSuspects();}catch(e){}
   try{await loadCaseData();}catch(e){console.error(e)}
   D.loginPass.value='';
   resetIdle();

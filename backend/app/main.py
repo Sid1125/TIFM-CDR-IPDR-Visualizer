@@ -86,10 +86,26 @@ def _ensure_indexes():
         pass
 
 
+def _ensure_columns():
+    """Idempotently add columns introduced after a table already exists (create_all won't ALTER an
+    existing table). Failures are non-fatal (e.g. column already present)."""
+    from sqlalchemy import text
+    stmts = [
+        "ALTER TABLE watchlist_entries ADD COLUMN group_name VARCHAR",
+    ]
+    for s in stmts:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(s))
+        except Exception:
+            pass
+
+
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
     _ensure_indexes()
+    _ensure_columns()
     with SessionLocal() as db:
         bootstrap_default_user(db)
 
