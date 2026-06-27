@@ -1290,8 +1290,10 @@ function showValidationReport(kind,v){
   modal.style.display='flex';
 }
 // Replace the direct upload listeners with preview triggers
-['cdr','ipdr','towers','sdr'].forEach(k=>{
-  const el=document.getElementById(k+'File');
+// NB: the towers input id is 'towerFile' (singular), so map kinds to ids explicitly rather than
+// k+'File' — otherwise the towers tile silently gets no change handler.
+[['cdr','cdrFile'],['ipdr','ipdrFile'],['towers','towerFile'],['sdr','sdrFile']].forEach(([k,id])=>{
+  const el=document.getElementById(id);
   if(el)el.addEventListener('change',function(){const f=this.files&&this.files[0];if(f)showUploadPreview(k,f)});
 });
 D.resetCaseBtn.addEventListener('click',resetCase);
