@@ -965,7 +965,8 @@ body.dark .law-card>summary:hover{background:rgba(255,255,255,.04)}
 .ar-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;padding-bottom:40px}
 .ar-card h3{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:.9rem}
 .ar-count{font-size:.7rem;color:#fff;background:var(--accent);border-radius:9px;padding:1px 8px;font-weight:700}
-.ar-card .cap-btn{float:none;margin-left:auto}
+.ar-card .cap-btn{float:none}
+.ar-exp-grp{margin-left:auto;display:inline-flex;gap:5px}
 .ar-card .cap-btn[disabled]{opacity:.4;cursor:default}
 .ar-tablewrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:6px}
 .ar-table{font-size:.76rem;width:100%}

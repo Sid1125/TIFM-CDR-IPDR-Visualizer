@@ -3425,13 +3425,23 @@ function renderRecTable(){
   if(D.recService.value!=='all')rows=rows.filter(r=>r.svc===D.recService.value);
   const q=D.recSearch.value.trim().toLowerCase();
   if(q)rows=rows.filter(r=>`${r.sub} ${r.cnt} ${r.tow} ${r.cll||''} ${r.prot||''} ${r.imsi||''} ${r.imei||''}`.toLowerCase().includes(q));
+  _recRows=rows;
   D.recCount.textContent=rows.length+' records';
   D.recBody.innerHTML=rows.map(recRowHtml).join('');
   if(D.recLoadMore)D.recLoadMore.style.display='none';
 }
+let _recRows=[];
+function _recExport(){
+  const headers=['Time','Type','Subject','Counterpart','Dur(s)','Cell/Detail','Dir/APN','Service','SrcPort','DstPort','Tower','CellID','LAC','IMSI','IMEI','MSISDN','Lat','Lng','Case'];
+  const data=(_recRows||[]).map(r=>{const cdr=r.type==='CDR';return [fmt(r.ts),r.type,subjLabelTxt(r.sub||''),subjLabelTxt(r.cnt||''),r.dur!=null?r.dur:'',cdr?(r.cll||''):(r.prot||''),cdr?(r.dir||''):(r.apn||''),r.svc||'',cdr?'':(r.sport!=null?r.sport:''),cdr?'':(r.dport!=null?r.dport:''),r.tow||'',r.cell||'',r.lac||'',r.imsi||'',r.imei||'',r.msisdn||'',r.lat||'',r.lng||'',r.case_id||''];});
+  return {headers,rows:data};
+}
 D.recSearch.addEventListener('input',renderRecTable);
 D.recType.addEventListener('change',renderRecTable);
 D.recService.addEventListener('change',renderRecTable);
+{const a=$('recExportCsv'),b=$('recExportXlsx');
+ if(a)a.addEventListener('click',()=>{const e=_recExport();downloadCsv('ARGUS_records.csv',e.headers,e.rows);});
+ if(b)b.addEventListener('click',()=>{const e=_recExport();downloadXlsx('ARGUS_records.xlsx','Records',e.headers,e.rows);});}
 
 // ====== 7. SUBJECT PROFILE ======
 function showProfile(sub){
@@ -6157,6 +6167,19 @@ function downloadCsv(filename,headers,rows){
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
+async function downloadXlsx(filename,sheet,headers,rows){
+  try{
+    const r=await fetch('/export/xlsx',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sheet_name:sheet,filename:filename,headers:headers,rows:rows})});
+    if(!r.ok)throw new Error(await r.text());
+    const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }catch(e){try{toast('XLSX export failed');}catch(_){}}
+}
+// Wire both CSV and XLSX export buttons in a container against a {id:{headers,rows}} report map.
+function _wireExports(box,reps,csvClass,fileBase){
+  box.querySelectorAll('.'+csvClass).forEach(b=>b.onclick=()=>{const rep=reps[b.dataset.rep];if(rep)downloadCsv(fileBase+'_'+b.dataset.rep+'.csv',rep.headers,rep.rows);});
+  box.querySelectorAll('.'+csvClass+'-x').forEach(b=>b.onclick=()=>{const rep=reps[b.dataset.rep];if(rep)downloadXlsx(fileBase+'_'+b.dataset.rep+'.xlsx',b.dataset.rep,rep.headers,rep.rows);});
+}
 // ====== Shared report-table renderers ======
 function _repTableHtml(headers,rows){
   if(!rows.length)return '<div class="ar-empty">No data.</div>';
@@ -6165,8 +6188,10 @@ function _repTableHtml(headers,rows){
     +(rows.length>500?'<div class="ar-note">First 500 of '+rows.length+' rows shown — export for all.</div>':'');
 }
 function _repCard(expClass,id,title,headers,rows,note){
+  const dis=rows.length?'':' disabled';
   return '<div class="card ar-card"><h3>'+esc(title)+' <span class="ar-count">'+rows.length+'</span>'
-    +'<button class="cap-btn '+expClass+'" data-rep="'+id+'"'+(rows.length?'':' disabled')+'>Export CSV</button></h3>'
+    +'<span class="ar-exp-grp"><button class="cap-btn '+expClass+'" data-rep="'+id+'"'+dis+'>CSV</button>'
+    +'<button class="cap-btn '+expClass+'-x" data-rep="'+id+'"'+dis+'>XLSX</button></span></h3>'
     +(note?'<div class="ar-note">'+esc(note)+'</div>':'')+_repTableHtml(headers,rows)+'</div>';
 }
 const _hm=v=>{try{return new Date(v).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}catch(e){return ''}};
@@ -6241,7 +6266,7 @@ function renderAnalysisReports(){
     _repCard('ar-exp','bank_sms','Bank / OTP-sender SMS',['Time','Sender','Type'],bank,'Alphanumeric sender IDs (e.g. VM-HDFCBK). Requires call-type data in the dump.'),
   ].join('');
   if(meta)meta.textContent=inv.length+' records for this subject';
-  body.querySelectorAll('.ar-exp').forEach(b=>b.onclick=()=>{const rep=_arReports[b.dataset.rep];if(rep)downloadCsv('ARGUS_'+b.dataset.rep+'_'+sub+'.csv',rep.headers,rep.rows);});
+  _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
 }
 
 // ====== PHASE C — GROUP COMPARE (common numbers across N subjects) ======
@@ -6291,7 +6316,7 @@ function _gcRun(){
     _repCard('gc-exp','imeis','Common IMEIs',_gcReports.imeis.headers,_gcReports.imeis.rows),
     _repCard('gc-exp','matrix','Who called whom (direct calls within the group)',_gcReports.matrix.headers,_gcReports.matrix.rows),
   ].join('');
-  body.querySelectorAll('.gc-exp').forEach(b=>b.onclick=()=>{const rep=_gcReports[b.dataset.rep];if(rep)downloadCsv('ARGUS_group_'+b.dataset.rep+'.csv',rep.headers,rep.rows);});
+  _wireExports(body,_gcReports,'gc-exp','ARGUS_group');
 }
 
 // ====== PHASE D — TOWER DUMP ANALYSIS ======
@@ -6352,7 +6377,7 @@ async function _tdRun(kind){
       body.innerHTML=_repCard('td-exp','imeispersim','SIMs used with more than one IMEI',_tdReports.imeispersim.headers,r1)
         +_repCard('td-exp','simsperimei','IMEIs used with more than one SIM',_tdReports.simsperimei.headers,r2);
     }
-    body.querySelectorAll('.td-exp').forEach(b=>b.onclick=()=>{const rep=_tdReports[b.dataset.rep];if(rep)downloadCsv('ARGUS_towerdump_'+b.dataset.rep+'.csv',rep.headers,rep.rows);});
+    _wireExports(body,_tdReports,'td-exp','ARGUS_towerdump');
   }catch(e){body.innerHTML='<div class="ar-empty">Failed: '+esc(e.message||String(e))+'</div>';}
 }
 async function _tdUnderTower(label){
@@ -6362,7 +6387,7 @@ async function _tdUnderTower(label){
     const rows=j.rows.map(r=>[r.msisdn,refOperator(r.msisdn),refCircle(r.msisdn),r.appearances,r.imeis.join(' | ')]);
     _tdReports.undertower={headers:['Number','Operator','Circle','Appearances','IMEIs'],rows};
     body.innerHTML=_repCard('td-exp','undertower','Under tower — '+esc(label),_tdReports.undertower.headers,rows,j.total+' distinct numbers.');
-    body.querySelectorAll('.td-exp').forEach(b=>b.onclick=()=>{const rep=_tdReports[b.dataset.rep];if(rep)downloadCsv('ARGUS_towerdump_undertower.csv',rep.headers,rep.rows);});
+    _wireExports(body,_tdReports,'td-exp','ARGUS_towerdump');
   }catch(e){body.innerHTML='<div class="ar-empty">Failed: '+esc(e.message||String(e))+'</div>';}
 }
 
