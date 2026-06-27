@@ -113,6 +113,38 @@ async function loadSubjectTags(){
   try{const rows=await API.get('/subject-tags/');const m={};(rows||[]).forEach(r=>{if(r.subject)m[r.subject]=r.tag});state.subjectTags=m;}
   catch(e){state.subjectTags=state.subjectTags||{};}
 }
+// ====== TELECOM REFERENCE (offline number->operator/circle, ISD, IMEI TAC) ======
+async function loadReference(){
+  try{const m=await API.get('/reference/meta');state.ref={series:m.series||{},isd:m.isd||{},seed:m.series_seed};}
+  catch(e){state.ref={series:{},isd:{}};}
+}
+function _refDigits(v){return String(v==null?'':v).replace(/\D/g,'')}
+function _refNational(v){
+  let d=_refDigits(v);const hadPlus=String(v||'').startsWith('+')||d.startsWith('00');
+  if(d.startsWith('00'))d=d.slice(2);
+  if(d.startsWith('91')&&d.length>10)return{national:d.slice(-10),d,hadPlus};
+  if(d.length===10&&'6789'.includes(d[0]))return{national:d,d,hadPlus};
+  if(d.length===11&&d[0]==='0')return{national:d.slice(1),d,hadPlus};
+  return{national:null,d,hadPlus};
+}
+function refIsdCountry(v){
+  const ref=state.ref||{};let d=_refDigits(v);if(d.startsWith('00'))d=d.slice(2);
+  for(let ln=Math.min(4,d.length);ln>=1;ln--){const p=d.slice(0,ln);if(ref.isd&&ref.isd[p])return{code:p,country:ref.isd[p]};}
+  return null;
+}
+function refLookup(v){
+  const ref=state.ref||{series:{},isd:{}};const {national,d,hadPlus}=_refNational(v);
+  const out={national,is_isd:false,country:null,operator:null,circle:null};
+  if(national){for(const ln of [5,4]){const p=national.slice(0,ln);if(ref.series&&ref.series[p]){out.operator=ref.series[p].operator;out.circle=ref.series[p].circle;break;}}return out;}
+  const isd=refIsdCountry(hadPlus?v:d);
+  if(isd&&isd.code!=='91'){out.is_isd=true;out.country=isd.country;}
+  return out;
+}
+function refOperator(v){return refLookup(v).operator||''}
+function refCircle(v){return refLookup(v).circle||''}
+function isIsdNum(v){return refLookup(v).is_isd}
+function refCountry(v){return refLookup(v).country||''}
+
 async function saveSubjectTag(sub,tag){
   const r=await API.put('/subject-tags/',{subject:sub,tag:tag});
   const t=(tag||'').trim();
@@ -3448,6 +3480,7 @@ function showProfile(sub){
       <div class="prof-section">
         <h4>Identity</h4>
         <div class="prof-id">
+          ${(()=>{const rl=refLookup(sub);const bits=[];if(rl.operator)bits.push(esc(rl.operator));if(rl.circle)bits.push(esc(rl.circle));if(rl.is_isd&&rl.country)bits.push('Intl: '+esc(rl.country));return bits.length?'<div><strong>Operator / Circle</strong> '+bits.join(' &middot; ')+'</div>':'';})()}
           ${allMsisdns.size?`<div><strong>MSISDN</strong> ${[...allMsisdns].join(', ')}</div>`:''}
           ${allImeis.size?`<div><strong>IMEI</strong> ${[...allImeis].join(', ')}</div>`:''}
           ${allImsis.size?`<div><strong>IMSI</strong> ${[...allImsis].join(', ')}</div>`:''}
@@ -6066,6 +6099,7 @@ function renderLaws(){
 async function bootstrap(){
   await loadCases();
   try{await loadSubjectTags();}catch(e){}
+  try{await loadReference();}catch(e){}
   try{await loadCaseData();}catch(e){console.error(e)}
   D.loginPass.value='';
   resetIdle();

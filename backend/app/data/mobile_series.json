@@ -1,0 +1,27 @@
+{
+  "_note": "India mobile number series -> {operator, circle} of ORIGINAL allocation, keyed by the first 4-5 digits of the 10-digit number. This is a SEED for the lookup mechanism, not a complete table. Post-MNP the current operator may differ from allocation, but the allocated CIRCLE (telecom zone / state) is a reliable signal for 'other-state' analysis. Replace/extend 'by_prefix' with the official DoT National Numbering Plan data for full coverage; unknown prefixes return 'Unknown' gracefully.",
+  "seed": true,
+  "by_prefix": {
+    "9810": {"operator": "Airtel", "circle": "Delhi"},
+    "9811": {"operator": "Airtel", "circle": "Delhi"},
+    "9871": {"operator": "Airtel", "circle": "Delhi"},
+    "9818": {"operator": "Vodafone Idea", "circle": "Delhi"},
+    "9820": {"operator": "Vodafone Idea", "circle": "Mumbai"},
+    "9821": {"operator": "Vodafone Idea", "circle": "Mumbai"},
+    "9920": {"operator": "Vodafone Idea", "circle": "Mumbai"},
+    "9833": {"operator": "Vodafone Idea", "circle": "Mumbai"},
+    "9840": {"operator": "Airtel", "circle": "Tamil Nadu"},
+    "9841": {"operator": "Airtel", "circle": "Tamil Nadu"},
+    "9844": {"operator": "Airtel", "circle": "Karnataka"},
+    "9845": {"operator": "Airtel", "circle": "Karnataka"},
+    "9847": {"operator": "Airtel", "circle": "Kerala"},
+    "9849": {"operator": "Airtel", "circle": "Andhra Pradesh / Telangana"},
+    "9830": {"operator": "Airtel", "circle": "Kolkata"},
+    "9831": {"operator": "Airtel", "circle": "Kolkata"},
+    "9425": {"operator": "BSNL", "circle": "Madhya Pradesh"},
+    "9426": {"operator": "Vodafone Idea", "circle": "Gujarat"},
+    "9414": {"operator": "Airtel", "circle": "Rajasthan"},
+    "9415": {"operator": "BSNL", "circle": "Uttar Pradesh (East)"},
+    "9839": {"operator": "Vodafone Idea", "circle": "Uttar Pradesh (East)"}
+  }
+}
