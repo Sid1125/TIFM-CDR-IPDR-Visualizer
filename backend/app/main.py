@@ -23,6 +23,7 @@ from app.api.cases import router as cases_router
 from app.api.cross_case import router as cross_case_router
 from app.api.audit import router as audit_router
 from app.api.reference import router as reference_router
+from app.api.tower_dump import router as tower_dump_router
 from app.api.ai import router as ai_router
 from app.core.config import settings
 from app.core.database import Base
@@ -38,6 +39,7 @@ from app.models import annotation  # noqa: F401
 from app.models import subject_tag  # noqa: F401
 from app.models import case  # noqa: F401
 from app.models import audit_log  # noqa: F401
+from app.models import tower_dump  # noqa: F401
 
 app = FastAPI(title=settings.APP_NAME)
 static_dir = Path(__file__).resolve().parents[1] / "static"
@@ -107,5 +109,6 @@ app.include_router(cases_router, prefix="/cases", tags=["Cases"], dependencies=[
 app.include_router(cross_case_router, prefix="/cross-case", tags=["Cross-case"], dependencies=[Depends(get_current_user)])
 app.include_router(audit_router, prefix="/audit", tags=["Audit"], dependencies=[Depends(get_current_user)])
 app.include_router(reference_router, prefix="/reference", tags=["Reference"], dependencies=[Depends(get_current_user)])
+app.include_router(tower_dump_router, prefix="/tower-dump", tags=["Tower Dump"], dependencies=[Depends(get_current_user)])
 app.include_router(ai_router, prefix="/ai", tags=["AI"], dependencies=[Depends(get_current_user)])
 app.mount("/static", StaticFiles(directory=static_dir), name="static")

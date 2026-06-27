@@ -980,6 +980,17 @@ body.dark .law-card>summary:hover{background:rgba(255,255,255,.04)}
 .gc-cn{margin-left:auto;color:var(--muted);font-size:.7rem}
 .gc-body{flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
 .gc-sel{grid-column:1/-1;font-size:.82rem;color:var(--text);padding:4px 0}
+/* Tower Dump */
+.td-import{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.td-import input[type=text]{flex:1;min-width:220px;border:1px solid var(--line);border-radius:6px;padding:5px 9px;background:var(--bg);color:var(--text);font-size:.82rem}
+.td-main{display:flex;gap:14px;align-items:flex-start}
+.td-side{flex:0 0 300px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)}
+.td-dumplist{max-height:42vh;overflow:auto;margin-bottom:8px}
+.td-dumplist .gc-chk{flex-wrap:wrap}
+.td-ut{margin-left:6px;border:1px solid var(--line);background:var(--bg);color:var(--accent);border-radius:4px;font-size:.64rem;padding:0 5px;cursor:pointer}
+.td-actions{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.td-min{font-size:.74rem;color:var(--muted)}
+.td-body{flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
 .evidenceToggleBtn.flash,.flash{animation:evflash .5s ease}
 @keyframes evflash{0%{box-shadow:0 0 0 0 rgba(212,160,23,.6)}100%{box-shadow:0 0 0 8px rgba(212,160,23,0)}}
 /* Evidence tab */

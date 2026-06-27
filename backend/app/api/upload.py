@@ -339,6 +339,83 @@ async def upload_towers(
             os.remove(temp_path)
 
 
+@router.post("/tower-dump", response_model=UploadResponse)
+async def upload_tower_dump(
+    request: Request,
+    file: UploadFile = File(...),
+    case_id: str = Form(""),
+    dump_label: str = Form(""),
+    mode: str = Form("replace"),
+    mapping_json: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Import a tower dump (the bulk list of numbers on a cell over a window) into its own table,
+    tagged by dump_label so several dumps in a case can be cross-analysed. Kept separate from CDR."""
+    from app.models.tower_dump import TowerDumpRecord
+    label = (dump_label or "").strip() or (file.filename or "dump").rsplit(".", 1)[0]
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as temp_file:
+            temp_file.write(await file.read())
+            temp_path = temp_file.name
+
+        df = _read_table(temp_path, file.filename)
+        override = _parse_mapping(mapping_json)
+        resolved = resolve_columns(df.columns, "dump", override=override)
+        if resolved["unmapped_required"]:
+            raise HTTPException(
+                status_code=422,
+                detail="Could not map required tower-dump column(s): " + ", ".join(resolved["unmapped_required"]),
+            )
+        df, report = coerce_frame(df, "dump", resolved["mapping"])
+
+        # Replace mode clears this dump_label within the case; append adds to it.
+        if mode.lower() != "append":
+            q = db.query(TowerDumpRecord).filter(TowerDumpRecord.dump_label == label)
+            q = q.filter(TowerDumpRecord.case_id == case_id) if case_id else q.filter(
+                (TowerDumpRecord.case_id.is_(None)) | (TowerDumpRecord.case_id == ""))
+            q.delete(synchronize_session=False)
+
+        records = []
+        for _, row in df.iterrows():
+            records.append(TowerDumpRecord(
+                case_id=case_id or None,
+                dump_label=label,
+                msisdn=_to_str(row.get("msisdn")),
+                imsi=_to_str(row.get("imsi")),
+                imei=_to_str(row.get("imei")),
+                other_party=_to_str(row.get("other_party")),
+                start_time=_to_pydatetime(row.get("start_time")),
+                end_time=_to_pydatetime(row.get("end_time")),
+                call_type=_to_str(row.get("call_type")),
+                tower_id=_to_str(row.get("tower_id")),
+                cell_id=_to_str(row.get("cell_id")),
+                lac=_to_str(row.get("lac")),
+                latitude=_to_float(row.get("latitude")),
+                longitude=_to_float(row.get("longitude")),
+            ))
+        db.add_all(records)
+        _harvest_towers(db, df)  # a dump still teaches the tower repo its cells/coordinates
+        db.commit()
+
+        log_action(db, user, request, "upload", case_id=case_id or None, target=label,
+                   detail={"kind": "tower_dump", "dump_label": label, "mode": mode.lower(),
+                           "rows_imported": len(records), "rows_dropped": report["rows_dropped"],
+                           "filename": file.filename})
+        report["dump_label"] = label
+        return UploadResponse(success=True, records_imported=len(records), validation=report)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
 @router.post("/preview")
 async def upload_preview(
     file: UploadFile = File(...),

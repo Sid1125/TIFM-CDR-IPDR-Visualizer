@@ -22,11 +22,16 @@ CANONICAL = {
         "bytes_uploaded", "bytes_downloaded", "tower_id", "cell_id", "lac",
         "latitude", "longitude", "apn", "rat",
     ],
+    "dump": [
+        "msisdn", "imsi", "imei", "other_party", "start_time", "end_time", "call_type",
+        "tower_id", "cell_id", "lac", "latitude", "longitude",
+    ],
 }
 
 REQUIRED = {
     "cdr": ["a_party_number", "b_party_number", "start_time", "end_time", "duration_seconds"],
     "ipdr": ["start_time", "end_time", "source_ip", "destination_ip"],
+    "dump": ["msisdn", "start_time"],
 }
 
 # canonical -> known header aliases (matched after normalization). The canonical name itself is
@@ -77,6 +82,23 @@ ALIASES = {
         "longitude": ["long", "lng", "lon", "tower_long", "tower_lng"],
         "apn": ["access_point_name", "apn_name"],
         "rat": ["radio_access_technology", "network_type", "technology", "bearer"],
+    },
+    "dump": {
+        "msisdn": ["mobile_number", "number", "msisdn", "a_party", "aparty", "calling_number",
+                   "party", "subscriber", "subscriber_number", "caller", "msisdn_a", "a_no"],
+        "other_party": ["b_party", "bparty", "called", "called_number", "other_party", "b_no",
+                        "called_party", "to_number"],
+        "start_time": ["starttime", "call_date", "datetime", "date_time", "start", "start_date",
+                       "event_time", "timestamp", "date", "first_seen"],
+        "end_time": ["endtime", "end", "stop_time", "last_seen"],
+        "call_type": ["calltype", "type", "event_type", "service_type"],
+        "imei": ["imei_number", "handset", "device_id", "imei_no"],
+        "imsi": ["imsi_number", "sim", "imsi_no"],
+        "tower_id": ["towerid", "cgi", "site_id", "cell_global_id", "tower", "first_cgi"],
+        "cell_id": ["cellid", "ci", "cell"],
+        "lac": ["location_area_code", "tac"],
+        "latitude": ["lat", "tower_lat"],
+        "longitude": ["long", "lng", "lon", "tower_long", "tower_lng"],
     },
 }
 
