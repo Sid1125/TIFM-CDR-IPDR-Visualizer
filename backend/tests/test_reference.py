@@ -40,12 +40,12 @@ class ReferenceServiceTests(unittest.TestCase):
         self.assertEqual(out["country"], "United Arab Emirates")
 
     def test_unknown_series_graceful(self):
-        out = ref.lookup_number("6000000000")
-        self.assertIsNone(out["circle"])  # not in seed -> Unknown, no crash
+        out = ref.lookup_number("9809000000")  # 9809 is unallocated in the numbering plan
+        self.assertIsNone(out["circle"])  # not in table -> Unknown, no crash
 
     def test_imei_tac(self):
-        out = ref.lookup_imei("35328111123456")
-        self.assertEqual(out["tac"], "35328111")
+        out = ref.lookup_imei("35508675123456")  # verified iPhone 14 Pro Max TAC
+        self.assertEqual(out["tac"], "35508675")
         self.assertEqual(out["make"], "Apple")
         out2 = ref.lookup_imei("99999999000000")
         self.assertIsNone(out2["make"])

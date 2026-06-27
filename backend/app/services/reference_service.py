@@ -23,8 +23,12 @@ def _load(name: str, default):
 
 
 _ISD = _load("isd_codes.json", {}).get("codes", {})
-_SERIES = _load("mobile_series.json", {}).get("by_prefix", {})
-_TAC = _load("imei_tac.json", {}).get("by_tac", {})
+# Built-in datasets, optionally extended by a user-supplied *_full.json drop-in (e.g. the full DoT
+# numbering plan or the Osmocom TAC DB). The full file's entries win on conflict.
+_SERIES = {**_load("mobile_series.json", {}).get("by_prefix", {}),
+           **_load("mobile_series_full.json", {}).get("by_prefix", {})}
+_TAC = {**_load("imei_tac.json", {}).get("by_tac", {}),
+        **_load("imei_tac_full.json", {}).get("by_tac", {})}
 
 
 def _digits(value: str) -> str:
@@ -99,6 +103,6 @@ def lookup_imei(value: str) -> dict:
 def reference_meta() -> dict:
     """The small maps the client caches to enrich displays locally (series + isd).
     TAC stays server-side (potentially large)."""
-    return {"series": _SERIES, "isd": _ISD,
+    return {"series": _SERIES, "isd": _ISD, "tac": _TAC,
             "series_seed": _load("mobile_series.json", {}).get("seed", False),
             "counts": {"series": len(_SERIES), "isd": len(_ISD), "tac": len(_TAC)}}

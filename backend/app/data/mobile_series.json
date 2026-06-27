@@ -1,27 +1,7532 @@
 {
-  "_note": "India mobile number series -> {operator, circle} of ORIGINAL allocation, keyed by the first 4-5 digits of the 10-digit number. This is a SEED for the lookup mechanism, not a complete table. Post-MNP the current operator may differ from allocation, but the allocated CIRCLE (telecom zone / state) is a reliable signal for 'other-state' analysis. Replace/extend 'by_prefix' with the official DoT National Numbering Plan data for full coverage; unknown prefixes return 'Unknown' gracefully.",
-  "seed": true,
-  "by_prefix": {
-    "9810": {"operator": "Airtel", "circle": "Delhi"},
-    "9811": {"operator": "Airtel", "circle": "Delhi"},
-    "9871": {"operator": "Airtel", "circle": "Delhi"},
-    "9818": {"operator": "Vodafone Idea", "circle": "Delhi"},
-    "9820": {"operator": "Vodafone Idea", "circle": "Mumbai"},
-    "9821": {"operator": "Vodafone Idea", "circle": "Mumbai"},
-    "9920": {"operator": "Vodafone Idea", "circle": "Mumbai"},
-    "9833": {"operator": "Vodafone Idea", "circle": "Mumbai"},
-    "9840": {"operator": "Airtel", "circle": "Tamil Nadu"},
-    "9841": {"operator": "Airtel", "circle": "Tamil Nadu"},
-    "9844": {"operator": "Airtel", "circle": "Karnataka"},
-    "9845": {"operator": "Airtel", "circle": "Karnataka"},
-    "9847": {"operator": "Airtel", "circle": "Kerala"},
-    "9849": {"operator": "Airtel", "circle": "Andhra Pradesh / Telangana"},
-    "9830": {"operator": "Airtel", "circle": "Kolkata"},
-    "9831": {"operator": "Airtel", "circle": "Kolkata"},
-    "9425": {"operator": "BSNL", "circle": "Madhya Pradesh"},
-    "9426": {"operator": "Vodafone Idea", "circle": "Gujarat"},
-    "9414": {"operator": "Airtel", "circle": "Rajasthan"},
-    "9415": {"operator": "BSNL", "circle": "Uttar Pradesh (East)"},
-    "9839": {"operator": "Vodafone Idea", "circle": "Uttar Pradesh (East)"}
+ "_note": "India mobile number series -> {operator, circle} of ORIGINAL allocation, keyed by the first 4 digits of the 10-digit number. Source: Wikipedia 'Mobile telephone numbering in India' national numbering plan (6/7/8/9 series). Post-MNP the CURRENT operator may differ from allocation, but the allocated CIRCLE (telecom zone/state) is reliable for 'other-state' analysis. Unknown/unallocated prefixes return Unknown gracefully. To extend/override, drop a 'mobile_series_full.json' with the same {by_prefix:{...}} shape into this folder; its entries win on conflict.",
+ "seed": false,
+ "source": "Wikipedia: Mobile telephone numbering in India",
+ "count": 1881,
+ "by_prefix": {
+  "6000": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "6001": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "6002": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "6003": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6005": {
+   "operator": "Reliance Jio",
+   "circle": "Jammu & Kashmir"
+  },
+  "6006": {
+   "operator": "Reliance Jio",
+   "circle": "Jammu & Kashmir"
+  },
+  "6026": {
+   "operator": "BSNL/MTNL",
+   "circle": "Assam"
+  },
+  "6032": {
+   "operator": "BSNL/MTNL",
+   "circle": "North East"
+  },
+  "6035": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "6038": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "6051": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6052": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6053": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6054": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6055": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6056": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "6057": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "6058": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "6059": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "6060": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6061": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6062": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "6063": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6064": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6065": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6066": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6067": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6068": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6069": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "6070": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6071": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6072": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6074": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6075": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6076": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6077": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6078": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6079": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6080": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "6081": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6082": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "6083": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "6084": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "6085": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "6087": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "6088": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6089": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "6090": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "6091": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "6092": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "6093": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "6094": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "6095": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "6096": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "6097": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "6098": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "6099": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "6200": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "6201": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "6202": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "6203": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "6204": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "6205": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "6206": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "6207": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "6208": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "6209": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "6230": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "6232": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "6238": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "6260": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6261": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6262": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "6263": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6264": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6265": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6266": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6267": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6268": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "6269": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "6270": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6271": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6272": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6274": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6275": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6276": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6277": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6278": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6279": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6280": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "6281": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6282": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "6283": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "6284": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "6287": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "6288": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6289": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "6290": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "6291": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "6292": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "6293": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "6294": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "6295": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "6296": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "6297": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "6298": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "6299": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "6300": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "6301": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "6302": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "6303": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "6304": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "6305": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "6306": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6307": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6309": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "6330": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "6331": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "6332": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "6333": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "6334": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "6336": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "6338": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "6341": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6352": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6353": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6354": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6355": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "6356": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "6357": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "6358": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "6359": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "6360": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "6361": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "6362": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "6363": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "6364": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "6365": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "6366": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "6367": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6368": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6369": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6370": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6371": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6372": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "6374": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6375": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6376": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6377": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6378": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "6379": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6380": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6381": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6382": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6383": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "6384": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "6385": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "6386": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6387": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6388": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6389": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "6390": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "6391": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "6392": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6393": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6394": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6395": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "6396": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "6397": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "6398": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "6399": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7000": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "7001": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "7002": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7003": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "7004": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7005": {
+   "operator": "Reliance Jio",
+   "circle": "North East"
+  },
+  "7006": {
+   "operator": "Reliance Jio",
+   "circle": "Jammu & Kashmir"
+  },
+  "7007": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7008": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "7009": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "7010": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7011": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7012": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "7013": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "7014": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "7015": {
+   "operator": "Reliance Jio",
+   "circle": "Haryana"
+  },
+  "7016": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "7017": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "7018": {
+   "operator": "Reliance Jio",
+   "circle": "Himachal Pradesh"
+  },
+  "7019": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "7020": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "7021": {
+   "operator": "Reliance Jio",
+   "circle": "Mumbai"
+  },
+  "7022": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7023": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7024": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7025": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7026": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "7027": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "7028": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7029": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "7030": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7038": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7039": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "7042": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "7043": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7044": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "7045": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "7046": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7047": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7048": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7049": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7050": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7051": {
+   "operator": "Airtel",
+   "circle": "Jammu & Kashmir"
+  },
+  "7052": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7053": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "7054": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7055": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7056": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "7057": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7058": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7059": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7060": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "7061": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7062": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "7063": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7064": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7065": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7066": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7067": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "7068": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7069": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7070": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7072": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7073": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7074": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7075": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7076": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7077": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7079": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7080": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7081": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7082": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "7083": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7084": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7085": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "7086": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "7087": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "7088": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7089": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7090": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "7091": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7092": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7093": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7094": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7095": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7096": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7103": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "7104": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7106": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "7107": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7109": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7112": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "7114": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7115": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7116": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7117": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "7118": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7119": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "7120": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7121": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7123": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7124": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7125": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7126": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7127": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7128": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7129": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7130": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7132": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7133": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7135": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7136": {
+   "operator": "Reliance Jio",
+   "circle": "Mumbai"
+  },
+  "7138": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7139": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7140": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7141": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7142": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7143": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7144": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7145": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7146": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7147": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "7148": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7149": {
+   "operator": "Reliance Jio",
+   "circle": "Jammu & Kashmir"
+  },
+  "7150": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7151": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7152": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "7153": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7154": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7155": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7156": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7157": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7158": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7159": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7160": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7161": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7162": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7163": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7164": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7165": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7166": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7167": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7168": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7169": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7170": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7171": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "7172": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7173": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7174": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7175": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7176": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7177": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7178": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7179": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7180": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "7181": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7182": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7183": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "7184": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7185": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7186": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7187": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7188": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7189": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7190": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7191": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7192": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7193": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7194": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7195": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7196": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7197": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7198": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7199": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7201": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7202": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7203": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7204": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7205": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7206": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "7207": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7208": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "7209": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "7210": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7211": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "7212": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7213": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "7214": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "7215": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7216": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7217": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7218": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7219": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7220": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7222": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7223": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7224": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7225": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7226": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7227": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7228": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7229": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7230": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7231": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7232": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7233": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7234": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7235": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7236": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7237": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7238": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7239": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7240": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7241": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7242": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7243": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "7244": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "7245": {
+   "operator": "Reliance Jio",
+   "circle": "North East"
+  },
+  "7246": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7247": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7248": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7249": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "7250": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7251": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7252": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7253": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7254": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7255": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7256": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7257": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7258": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7259": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7260": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7261": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7262": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7263": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7264": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7265": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7266": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7268": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7269": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "7270": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7271": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7272": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7273": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7274": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7275": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7276": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "7277": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7278": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7279": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7280": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7281": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7282": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7283": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7284": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7285": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7286": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7287": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7288": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7289": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7290": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7291": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7292": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7293": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7294": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7295": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7296": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7297": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7298": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7299": {
+   "operator": "Reliance Jio",
+   "circle": "North East"
+  },
+  "7300": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "7302": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "7303": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7304": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "7305": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7306": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "7307": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7308": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7309": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7310": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "7311": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7312": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7313": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7314": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7315": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7316": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7317": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7318": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7319": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7320": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7321": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7322": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7323": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7324": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7325": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7326": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7327": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7328": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7329": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7330": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7331": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7332": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7333": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7334": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7335": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7336": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7337": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7338": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7339": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7340": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "7341": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7342": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7343": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7344": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "7345": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7346": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "7347": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "7348": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7349": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7350": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7351": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7352": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7353": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "7354": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7355": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7356": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "7357": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7358": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7359": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7360": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7361": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7362": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7363": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7364": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7365": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7366": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7367": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7368": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7369": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7370": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7371": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7372": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7373": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7374": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7375": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7376": {
+   "operator": "BSNL/MTNL",
+   "circle": "UP East"
+  },
+  "7377": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7378": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7379": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7380": {
+   "operator": "BSNL/MTNL",
+   "circle": "Punjab"
+  },
+  "7381": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7382": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "7383": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7384": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7385": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7386": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7387": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7388": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7389": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7390": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7391": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7392": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7393": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7394": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7395": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7396": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7397": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7398": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7399": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7400": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "7401": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7402": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7403": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7404": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7405": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7406": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "7407": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7408": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7409": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7410": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7411": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7412": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7413": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7414": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7415": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7416": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7417": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7418": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7419": {
+   "operator": "Reliance Jio",
+   "circle": "Haryana"
+  },
+  "7420": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7421": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7422": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7423": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7424": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7425": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7426": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7427": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7428": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7429": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "7430": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7431": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7432": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7433": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7434": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7435": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7436": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7437": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7438": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7439": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7440": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7441": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7442": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7443": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7444": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7445": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7446": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "7447": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "7448": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7449": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "7450": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "7451": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7452": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7453": {
+   "operator": "BSNL/MTNL",
+   "circle": "UP East"
+  },
+  "7454": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "7455": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7456": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "7457": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7458": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7459": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7460": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7461": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7462": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7463": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7464": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7465": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7466": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7467": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7468": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7469": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7470": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7471": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7472": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7473": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7474": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7475": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7476": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "7477": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7478": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7479": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7480": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7481": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7482": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7483": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "7484": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7485": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7486": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7487": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7488": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7489": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7490": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "7491": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7492": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7493": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7494": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7495": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "7496": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "7497": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7498": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7499": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7500": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7501": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7502": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7503": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7504": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7505": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "7506": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "7507": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7508": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "7509": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7510": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7511": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7512": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "7513": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "7514": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "7515": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7516": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7517": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7518": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7519": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7520": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7521": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7522": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7523": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7524": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7525": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7526": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "7527": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "7528": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "7529": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "7530": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7531": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7532": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7533": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7534": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7535": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7536": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7537": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7538": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7539": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7540": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7541": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7542": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7543": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7544": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7545": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7546": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7547": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7552": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7553": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7554": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7555": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7556": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7557": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7558": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7559": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7560": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7561": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7562": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7563": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7564": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7565": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7566": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7567": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7568": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7575": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7576": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7577": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "7578": {
+   "operator": "BSNL/MTNL",
+   "circle": "UP West"
+  },
+  "7579": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7580": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7581": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7582": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7583": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7584": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7585": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7586": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7587": {
+   "operator": "BSNL/MTNL",
+   "circle": "Madhya Pradesh"
+  },
+  "7589": {
+   "operator": "BSNL/MTNL",
+   "circle": "Punjab"
+  },
+  "7590": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "7591": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7592": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7593": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7594": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7595": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "7596": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "7597": {
+   "operator": "BSNL/MTNL",
+   "circle": "Rajasthan"
+  },
+  "7598": {
+   "operator": "BSNL/MTNL",
+   "circle": "Tamil Nadu"
+  },
+  "7599": {
+   "operator": "BSNL/MTNL",
+   "circle": "UP West"
+  },
+  "7600": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7601": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7602": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7603": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7604": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7605": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7606": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7607": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7608": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7609": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7610": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7611": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7612": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7613": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7614": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "7615": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7616": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7617": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7618": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7619": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7620": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "7621": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7622": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7623": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7624": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7625": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7626": {
+   "operator": "BSNL/MTNL",
+   "circle": "Punjab"
+  },
+  "7627": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "7628": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "7629": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "7630": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "7631": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7632": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7633": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7634": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7635": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "7636": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "7637": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "7638": {
+   "operator": "Vodafone Idea",
+   "circle": "North East"
+  },
+  "7639": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7640": {
+   "operator": "Vodafone Idea",
+   "circle": "North East"
+  },
+  "7641": {
+   "operator": "Vodafone Idea",
+   "circle": "North East"
+  },
+  "7642": {
+   "operator": "Vodafone Idea",
+   "circle": "North East"
+  },
+  "7643": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7644": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7645": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7646": {
+   "operator": "BSNL/MTNL",
+   "circle": "Madhya Pradesh"
+  },
+  "7647": {
+   "operator": "BSNL/MTNL",
+   "circle": "Madhya Pradesh"
+  },
+  "7648": {
+   "operator": "BSNL/MTNL",
+   "circle": "Madhya Pradesh"
+  },
+  "7649": {
+   "operator": "BSNL/MTNL",
+   "circle": "Himachal Pradesh"
+  },
+  "7650": {
+   "operator": "BSNL/MTNL",
+   "circle": "Himachal Pradesh"
+  },
+  "7651": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7652": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7653": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7654": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7655": {
+   "operator": "BSNL/MTNL",
+   "circle": "Odisha"
+  },
+  "7656": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7657": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7658": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7659": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7660": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7661": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7662": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "7663": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "7664": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "7665": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7666": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "7667": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "7668": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7669": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7670": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7671": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "7672": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7673": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7674": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7675": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7676": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "7677": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7678": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7679": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "7680": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7681": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7682": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7683": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7684": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7685": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7686": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7687": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7688": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7689": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7690": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7691": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7692": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7693": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7694": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7695": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7696": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "7697": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7698": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7699": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7700": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7701": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7702": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7703": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7704": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7705": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7706": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7707": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7708": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7709": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7710": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "7711": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7712": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7713": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7714": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7715": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7716": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7717": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7718": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "7719": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7720": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7721": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7722": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7723": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7724": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7725": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7726": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7727": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7728": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7729": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7730": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7731": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7732": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7733": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7734": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7735": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7736": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7737": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7738": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "7739": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7740": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7741": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7742": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "7743": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7744": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7745": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7746": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7747": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7748": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7749": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "7750": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7751": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7752": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7753": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7754": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7755": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7756": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7757": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7758": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7759": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7760": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7761": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7762": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7763": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7764": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7765": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7766": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7767": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7768": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7770": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7771": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7772": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7773": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7774": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7775": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7776": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7777": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7778": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7779": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7780": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7781": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7782": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7783": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7784": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7785": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7786": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7787": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7788": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7789": {
+   "operator": "Reliance Jio",
+   "circle": "Jammu & Kashmir"
+  },
+  "7790": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7791": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7792": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "7793": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7794": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7795": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7796": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7797": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7798": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7799": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7800": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7801": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7802": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7803": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7804": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7805": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7806": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7807": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "7808": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "7815": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7816": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7820": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7821": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7822": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7823": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7824": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7825": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7826": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7827": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7829": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "7830": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7831": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "7832": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "7833": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "7834": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7835": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7836": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7837": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "7838": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "7839": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "7840": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "7841": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7842": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7843": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7844": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "7845": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7846": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7847": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7848": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7849": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7850": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7851": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7852": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7853": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7854": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7855": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "7856": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7857": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7858": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "7859": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7860": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "7861": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "7862": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "7863": {
+   "operator": "Reliance Jio",
+   "circle": "North East"
+  },
+  "7864": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "7865": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "7866": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7867": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7868": {
+   "operator": "BSNL/MTNL",
+   "circle": "Delhi"
+  },
+  "7869": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7870": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "7871": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7872": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "7873": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "7874": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "7875": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7876": {
+   "operator": "Reliance Jio",
+   "circle": "Himachal Pradesh"
+  },
+  "7877": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "7878": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "7879": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "7880": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7881": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7882": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "7883": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7884": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "7885": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7886": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "7887": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "7888": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "7889": {
+   "operator": "Reliance Jio",
+   "circle": "Jammu & Kashmir"
+  },
+  "7890": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "7891": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "7892": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "7893": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7894": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "7895": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "7896": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "7897": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "7898": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7899": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "7900": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "7901": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "7902": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "7903": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7904": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7905": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7906": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "7907": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "7908": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "7909": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "7910": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7911": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7912": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7913": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7914": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7915": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7916": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7917": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7918": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7919": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7920": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7969": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "7971": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "7972": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "7973": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "7974": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "7975": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "7976": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "7977": {
+   "operator": "Reliance Jio",
+   "circle": "Mumbai"
+  },
+  "7978": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "7979": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7980": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "7981": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "7982": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "7983": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "7984": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "7985": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "7986": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "7987": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "7988": {
+   "operator": "Reliance Jio",
+   "circle": "Haryana"
+  },
+  "7989": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "7990": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "7991": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7992": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "7993": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7994": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "7995": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "7996": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "7997": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "7998": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "7999": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "8002": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8003": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8004": {
+   "operator": "BSNL/MTNL",
+   "circle": "UP East"
+  },
+  "8005": {
+   "operator": "BSNL/MTNL",
+   "circle": "UP East"
+  },
+  "8006": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8007": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8008": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8009": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8010": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "8011": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8018": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8019": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8030": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8031": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8032": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8033": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8034": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8035": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8038": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "8039": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8046": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8054": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "8056": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "8072": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "8073": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "8074": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8075": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "8076": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8077": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "8078": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "8081": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "8083": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8084": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8085": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "8089": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "8105": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "8106": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8121": {
+   "operator": "BSNL/MTNL",
+   "circle": "Delhi"
+  },
+  "8122": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "8126": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8127": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8128": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "8129": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "8130": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8131": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8132": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8133": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8134": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8135": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8136": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "8137": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "8138": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "8139": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8150": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8152": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8153": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8154": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8155": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8156": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8157": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8158": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8159": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8160": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "8164": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8167": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8168": {
+   "operator": "Reliance Jio",
+   "circle": "Haryana"
+  },
+  "8169": {
+   "operator": "Reliance Jio",
+   "circle": "Mumbai"
+  },
+  "8170": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8172": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8173": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8174": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8175": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8176": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8177": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8178": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8179": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8180": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8182": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "8183": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8184": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8185": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8186": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8187": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8188": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8189": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8190": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8191": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8192": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8193": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8194": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "8195": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "8196": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "8197": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "8198": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "8199": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8202": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8207": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8208": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "8209": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "8210": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "8217": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "8218": {
+   "operator": "Reliance Jio",
+   "circle": "UP West"
+  },
+  "8219": {
+   "operator": "Reliance Jio",
+   "circle": "Himachal Pradesh"
+  },
+  "8220": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "8221": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8222": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8223": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8224": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8225": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8226": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8227": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8228": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8229": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8230": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "8232": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8238": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "8240": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "8247": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8248": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "8249": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "8250": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "8252": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "8256": {
+   "operator": "Vodafone Idea",
+   "circle": "North East"
+  },
+  "8257": {
+   "operator": "Vodafone Idea",
+   "circle": "North East"
+  },
+  "8258": {
+   "operator": "Vodafone Idea",
+   "circle": "North East"
+  },
+  "8259": {
+   "operator": "Vodafone Idea",
+   "circle": "North East"
+  },
+  "8262": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8263": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8264": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8266": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8269": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "8270": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8271": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8272": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8273": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8275": {
+   "operator": "BSNL/MTNL",
+   "circle": "Maharashtra"
+  },
+  "8276": {
+   "operator": "BSNL/MTNL",
+   "circle": "Haryana"
+  },
+  "8277": {
+   "operator": "BSNL/MTNL",
+   "circle": "Karnataka"
+  },
+  "8278": {
+   "operator": "BSNL/MTNL",
+   "circle": "Haryana"
+  },
+  "8280": {
+   "operator": "BSNL/MTNL",
+   "circle": "Odisha"
+  },
+  "8281": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "8282": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8283": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8287": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8288": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8290": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8291": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8292": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8294": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8295": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "8296": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "8297": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8298": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8299": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "8300": {
+   "operator": "BSNL/MTNL",
+   "circle": "Tamil Nadu"
+  },
+  "8301": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "8304": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "8309": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8310": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "8318": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8328": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8329": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "8330": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "8331": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "8332": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "8333": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "8334": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8335": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8336": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8338": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "8341": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8342": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "8343": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8345": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8346": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8347": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8348": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8349": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "8350": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "8351": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "8352": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "8355": {
+   "operator": "Reliance Jio",
+   "circle": "Mumbai"
+  },
+  "8361": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "8362": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "8368": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8369": {
+   "operator": "Reliance Jio",
+   "circle": "Mumbai"
+  },
+  "8370": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8371": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8372": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8373": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8374": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8375": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8376": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8377": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8378": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8379": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8380": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8382": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8383": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8384": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8386": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8387": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8388": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8390": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8391": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "8392": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8393": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8394": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8395": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8396": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8397": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8398": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8399": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "8400": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8402": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "8403": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "8404": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8405": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8406": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8407": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8408": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8409": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8411": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8412": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8413": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8414": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8415": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8416": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8418": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8419": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "8420": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "8421": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8422": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "8423": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8425": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "8427": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8428": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "8429": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8433": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8434": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8438": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "8442": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8450": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8451": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8452": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8454": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8455": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8456": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8457": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "8458": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8459": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "8461": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8462": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8463": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8464": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8465": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8466": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8468": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8469": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8470": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8473": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8474": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8475": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8476": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8477": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8478": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8479": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8480": {
+   "operator": "BSNL/MTNL",
+   "circle": "Odisha"
+  },
+  "8481": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8482": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "8483": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8484": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8485": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8486": {
+   "operator": "Vodafone Idea",
+   "circle": "Assam"
+  },
+  "8487": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8488": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8489": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "8490": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "8491": {
+   "operator": "Airtel",
+   "circle": "Jammu & Kashmir"
+  },
+  "8492": {
+   "operator": "Airtel",
+   "circle": "Jammu & Kashmir"
+  },
+  "8493": {
+   "operator": "Airtel",
+   "circle": "Jammu & Kashmir"
+  },
+  "8494": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8495": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8496": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8497": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8498": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8499": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "8500": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "8501": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8502": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "8503": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "8504": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "8505": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8506": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8507": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8510": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "8511": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "8512": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8513": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8514": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8515": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8516": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8517": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8518": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8519": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8520": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8521": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8522": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8523": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8524": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8525": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8527": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8528": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8529": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8530": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8531": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8532": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8533": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8534": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8535": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8536": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8538": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8539": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8540": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8541": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8543": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8544": {
+   "operator": "BSNL/MTNL",
+   "circle": "Bihar"
+  },
+  "8547": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kerala"
+  },
+  "8548": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "8549": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8550": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8551": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8552": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8553": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8554": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8555": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8556": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "8557": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "8558": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "8559": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8560": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8561": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8562": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8563": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8565": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8568": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8569": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "8570": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "8571": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "8572": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "8573": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8574": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8575": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8576": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8577": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8578": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8579": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8580": {
+   "operator": "BSNL/MTNL",
+   "circle": "Bihar"
+  },
+  "8581": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8582": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "8583": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "8584": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "8585": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8586": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8587": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8588": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8589": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8590": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "8591": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8592": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8593": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8594": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "8595": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8596": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "8597": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8598": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "8599": {
+   "operator": "Vodafone Idea",
+   "circle": "Odisha"
+  },
+  "8601": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8602": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "8605": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8606": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8607": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8608": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8609": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8610": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "8611": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8612": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8613": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8614": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8615": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8618": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "8621": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8622": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8626": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8627": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8628": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8629": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8638": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "8639": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8640": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8643": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "8646": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8650": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8651": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8652": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8653": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "8654": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8655": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8656": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8657": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8658": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8659": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "8661": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8663": {
+   "operator": "BSNL/MTNL",
+   "circle": "Odisha"
+  },
+  "8665": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8667": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "8668": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "8669": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8670": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8671": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8674": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8675": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8676": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8677": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8678": {
+   "operator": "Vodafone Idea",
+   "circle": "Bihar"
+  },
+  "8679": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8680": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8681": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8682": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8683": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8684": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8685": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8686": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8687": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8688": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8689": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "8690": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8691": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "8692": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "8694": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "8695": {
+   "operator": "Vodafone Idea",
+   "circle": "West Bengal"
+  },
+  "8696": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "8697": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8698": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8699": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8800": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8801": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8802": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8805": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8806": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8807": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8809": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8810": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8811": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8812": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8813": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8814": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8815": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "8816": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8820": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8821": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8822": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8823": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8824": {
+   "operator": "Reliance Jio",
+   "circle": "Rajasthan"
+  },
+  "8825": {
+   "operator": "Reliance Jio",
+   "circle": "Jammu & Kashmir"
+  },
+  "8826": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8827": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "8828": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "8829": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8830": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "8831": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8832": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8833": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8834": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8835": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8838": {
+   "operator": "Reliance Jio",
+   "circle": "Tamil Nadu"
+  },
+  "8839": {
+   "operator": "Reliance Jio",
+   "circle": "Madhya Pradesh"
+  },
+  "8840": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "8841": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8842": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8844": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8845": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "8846": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8847": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "8848": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "8849": {
+   "operator": "Reliance Jio",
+   "circle": "Gujarat"
+  },
+  "8850": {
+   "operator": "Reliance Jio",
+   "circle": "Mumbai"
+  },
+  "8851": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8852": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8853": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8854": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8855": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8856": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8857": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8858": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8859": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8860": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8861": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "8862": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8863": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8864": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8865": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8866": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8867": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8868": {
+   "operator": "BSNL/MTNL",
+   "circle": "Delhi"
+  },
+  "8870": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "8871": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "8872": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8873": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8874": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "8875": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "8876": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8877": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8878": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8879": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8880": {
+   "operator": "Reliance Jio",
+   "circle": "North East"
+  },
+  "8881": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8882": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8883": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "8884": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8885": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8886": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "8887": {
+   "operator": "Reliance Jio",
+   "circle": "UP East"
+  },
+  "8888": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8889": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8890": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8891": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8892": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "8893": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "8894": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8895": {
+   "operator": "BSNL/MTNL",
+   "circle": "Odisha"
+  },
+  "8896": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "8897": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8898": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "8899": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8900": {
+   "operator": "BSNL/MTNL",
+   "circle": "West Bengal"
+  },
+  "8902": {
+   "operator": "BSNL/MTNL",
+   "circle": "Kolkata"
+  },
+  "8903": {
+   "operator": "BSNL/MTNL",
+   "circle": "Tamil Nadu"
+  },
+  "8904": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8905": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8906": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8907": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8910": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "8911": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8912": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8913": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8914": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8915": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8916": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8917": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "8918": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "8919": {
+   "operator": "Reliance Jio",
+   "circle": "Andhra Pradesh"
+  },
+  "8920": {
+   "operator": "Reliance Jio",
+   "circle": "Delhi"
+  },
+  "8921": {
+   "operator": "Reliance Jio",
+   "circle": "Kerala"
+  },
+  "8922": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8923": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8924": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8925": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8926": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8927": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8928": {
+   "operator": "Reliance Jio",
+   "circle": "Mumbai"
+  },
+  "8929": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "8930": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "8931": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8932": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8933": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8934": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8935": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8936": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8937": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8938": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8939": {
+   "operator": "Vodafone Idea",
+   "circle": "Chennai"
+  },
+  "8940": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "8941": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "8942": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8943": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "8944": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8945": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8946": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8947": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8948": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8949": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8950": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8951": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8952": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "8953": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8954": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8955": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8956": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8958": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "8959": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "8960": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "8961": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "8962": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "8963": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8964": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8965": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8966": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "8967": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8968": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "8969": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "8970": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "8971": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "8972": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "8973": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "8974": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8975": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8976": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8977": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8978": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "8979": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "8980": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8981": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "8982": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "8983": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "8984": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "8985": {
+   "operator": "BSNL/MTNL",
+   "circle": "Andhra Pradesh"
+  },
+  "8986": {
+   "operator": "BSNL/MTNL",
+   "circle": "Bihar"
+  },
+  "8987": {
+   "operator": "BSNL/MTNL",
+   "circle": "Bihar"
+  },
+  "8988": {
+   "operator": "BSNL/MTNL",
+   "circle": "Himachal Pradesh"
+  },
+  "8989": {
+   "operator": "BSNL/MTNL",
+   "circle": "Madhya Pradesh"
+  },
+  "8990": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "8991": {
+   "operator": "BSNL/MTNL",
+   "circle": "Maharashtra"
+  },
+  "8992": {
+   "operator": "BSNL/MTNL",
+   "circle": "Punjab"
+  },
+  "8993": {
+   "operator": "BSNL/MTNL",
+   "circle": "Rajasthan"
+  },
+  "8994": {
+   "operator": "BSNL/MTNL",
+   "circle": "Tamil Nadu"
+  },
+  "8995": {
+   "operator": "BSNL/MTNL",
+   "circle": "UP West"
+  },
+  "8996": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8997": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "8998": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "8999": {
+   "operator": "Reliance Jio",
+   "circle": "Maharashtra"
+  },
+  "9800": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "9801": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "9805": {
+   "operator": "Airtel",
+   "circle": "Himachal Pradesh"
+  },
+  "9810": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "9811": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "9812": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "9813": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "9814": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "9815": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "9817": {
+   "operator": "Reliance Jio",
+   "circle": "Haryana"
+  },
+  "9818": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "9819": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "9820": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "9821": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "9822": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "9823": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "9824": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9825": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9826": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "9827": {
+   "operator": "Reliance Jio",
+   "circle": "Odisha"
+  },
+  "9828": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "9829": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "9830": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "9831": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "9832": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "9833": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "9834": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "9835": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "9836": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "9837": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "9838": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "9839": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "9840": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "9842": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "9843": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "9844": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "9845": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "9846": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "9847": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "9848": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "9849": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "9850": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "9853": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "9855": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "9860": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "9861": {
+   "operator": "Reliance Jio",
+   "circle": "North East"
+  },
+  "9862": {
+   "operator": "Airtel",
+   "circle": "North East"
+  },
+  "9863": {
+   "operator": "Reliance Jio",
+   "circle": "North East"
+  },
+  "9864": {
+   "operator": "Reliance Jio",
+   "circle": "Assam"
+  },
+  "9865": {
+   "operator": "Reliance Jio",
+   "circle": "Karnataka"
+  },
+  "9866": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "9867": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "9868": {
+   "operator": "BSNL/MTNL",
+   "circle": "Delhi"
+  },
+  "9869": {
+   "operator": "BSNL/MTNL",
+   "circle": "Mumbai"
+  },
+  "9870": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "9871": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "9872": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "9873": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "9874": {
+   "operator": "Vodafone Idea",
+   "circle": "Kolkata"
+  },
+  "9875": {
+   "operator": "Reliance Jio",
+   "circle": "Kolkata"
+  },
+  "9876": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "9877": {
+   "operator": "Reliance Jio",
+   "circle": "Punjab"
+  },
+  "9878": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "9879": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9880": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "9881": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "9882": {
+   "operator": "Vodafone Idea",
+   "circle": "Himachal Pradesh"
+  },
+  "9883": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "9884": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "9885": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "9886": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "9887": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "9888": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "9889": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "9890": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "9891": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "9892": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "9893": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "9894": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "9895": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "9896": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "9897": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "9898": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "9899": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "9900": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "9901": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "9902": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "9903": {
+   "operator": "Airtel",
+   "circle": "Kolkata"
+  },
+  "9904": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9905": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "9906": {
+   "operator": "Airtel",
+   "circle": "Jammu & Kashmir"
+  },
+  "9907": {
+   "operator": "Reliance Jio",
+   "circle": "West Bengal"
+  },
+  "9908": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "9909": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9910": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "9911": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "9912": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "9913": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9914": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "9915": {
+   "operator": "Airtel",
+   "circle": "Punjab"
+  },
+  "9916": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "9917": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "9918": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "9919": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "9920": {
+   "operator": "Vodafone Idea",
+   "circle": "Mumbai"
+  },
+  "9921": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "9922": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "9923": {
+   "operator": "Vodafone Idea",
+   "circle": "Maharashtra"
+  },
+  "9924": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9925": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9926": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "9927": {
+   "operator": "Vodafone Idea",
+   "circle": "UP West"
+  },
+  "9928": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "9929": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "9930": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "9931": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "9932": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "9933": {
+   "operator": "Airtel",
+   "circle": "West Bengal"
+  },
+  "9934": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "9935": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "9936": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "9937": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "9938": {
+   "operator": "Airtel",
+   "circle": "Odisha"
+  },
+  "9939": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "9940": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "9941": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "9942": {
+   "operator": "Reliance Jio",
+   "circle": "Bihar"
+  },
+  "9943": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "9944": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "9945": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "9946": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "9947": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "9948": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "9949": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "9950": {
+   "operator": "Airtel",
+   "circle": "Rajasthan"
+  },
+  "9951": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "9952": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "9953": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "9954": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "9955": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "9956": {
+   "operator": "Airtel",
+   "circle": "UP East"
+  },
+  "9957": {
+   "operator": "Airtel",
+   "circle": "Assam"
+  },
+  "9958": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "9959": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "9960": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "9961": {
+   "operator": "Vodafone Idea",
+   "circle": "Kerala"
+  },
+  "9962": {
+   "operator": "Vodafone Idea",
+   "circle": "Tamil Nadu"
+  },
+  "9963": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "9964": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "9966": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "9967": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "9970": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "9971": {
+   "operator": "Airtel",
+   "circle": "Delhi"
+  },
+  "9972": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "9973": {
+   "operator": "Airtel",
+   "circle": "Bihar"
+  },
+  "9974": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "9975": {
+   "operator": "Airtel",
+   "circle": "Maharashtra"
+  },
+  "9977": {
+   "operator": "Vodafone Idea",
+   "circle": "Madhya Pradesh"
+  },
+  "9978": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9979": {
+   "operator": "Vodafone Idea",
+   "circle": "Gujarat"
+  },
+  "9980": {
+   "operator": "Airtel",
+   "circle": "Karnataka"
+  },
+  "9981": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "9982": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "9983": {
+   "operator": "Vodafone Idea",
+   "circle": "Rajasthan"
+  },
+  "9984": {
+   "operator": "Vodafone Idea",
+   "circle": "UP East"
+  },
+  "9985": {
+   "operator": "Vodafone Idea",
+   "circle": "Andhra Pradesh"
+  },
+  "9986": {
+   "operator": "Vodafone Idea",
+   "circle": "Karnataka"
+  },
+  "9987": {
+   "operator": "Airtel",
+   "circle": "Mumbai"
+  },
+  "9988": {
+   "operator": "Vodafone Idea",
+   "circle": "Punjab"
+  },
+  "9989": {
+   "operator": "Airtel",
+   "circle": "Andhra Pradesh"
+  },
+  "9990": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
+  },
+  "9991": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "9992": {
+   "operator": "Vodafone Idea",
+   "circle": "Haryana"
+  },
+  "9993": {
+   "operator": "Airtel",
+   "circle": "Madhya Pradesh"
+  },
+  "9994": {
+   "operator": "Airtel",
+   "circle": "Tamil Nadu"
+  },
+  "9995": {
+   "operator": "Airtel",
+   "circle": "Kerala"
+  },
+  "9996": {
+   "operator": "Airtel",
+   "circle": "Haryana"
+  },
+  "9997": {
+   "operator": "Airtel",
+   "circle": "UP West"
+  },
+  "9998": {
+   "operator": "Airtel",
+   "circle": "Gujarat"
+  },
+  "9999": {
+   "operator": "Vodafone Idea",
+   "circle": "Delhi"
   }
+ }
 }
