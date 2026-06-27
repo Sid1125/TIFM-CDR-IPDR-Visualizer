@@ -26,12 +26,17 @@ CANONICAL = {
         "msisdn", "imsi", "imei", "other_party", "start_time", "end_time", "call_type",
         "tower_id", "cell_id", "lac", "latitude", "longitude",
     ],
+    "sdr": [
+        "msisdn", "imsi", "imei", "name", "address", "alt_number", "id_proof",
+        "activation_date", "operator",
+    ],
 }
 
 REQUIRED = {
     "cdr": ["a_party_number", "b_party_number", "start_time", "end_time", "duration_seconds"],
     "ipdr": ["start_time", "end_time", "source_ip", "destination_ip"],
     "dump": ["msisdn", "start_time"],
+    "sdr": ["msisdn"],
 }
 
 # canonical -> known header aliases (matched after normalization). The canonical name itself is
@@ -99,6 +104,19 @@ ALIASES = {
         "lac": ["location_area_code", "tac"],
         "latitude": ["lat", "tower_lat"],
         "longitude": ["long", "lng", "lon", "tower_long", "tower_lng"],
+    },
+    "sdr": {
+        "msisdn": ["mobile_number", "number", "msisdn", "phone", "contact_number", "target_number",
+                   "mobile", "msisdn_no", "subscriber_number"],
+        "name": ["subscriber_name", "customer_name", "cust_name", "sub_name", "full_name", "name"],
+        "address": ["addr", "residential_address", "address1", "customer_address", "current_address"],
+        "alt_number": ["alternate_number", "alt_no", "alternate_contact", "alt_mobile",
+                       "secondary_number", "alternate_mobile"],
+        "id_proof": ["id", "idproof", "id_document", "poi", "poa", "document", "id_type"],
+        "activation_date": ["activation", "doa", "date_of_activation", "activated_on", "activation_dt"],
+        "operator": ["provider", "telco", "carrier", "service_provider", "tsp"],
+        "imsi": ["imsi_number", "sim"],
+        "imei": ["imei_number", "handset", "device_id"],
     },
 }
 

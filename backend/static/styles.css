@@ -991,6 +991,9 @@ body.dark .law-card>summary:hover{background:rgba(255,255,255,.04)}
 .td-actions{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
 .td-min{font-size:.74rem;color:var(--muted)}
 .td-body{flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+/* Subscriber (SDR) card */
+.prof-sdr{margin-top:6px;padding:7px 9px;border:1px solid var(--line);border-left:3px solid #3a7d5a;border-radius:6px;background:var(--surface);font-size:.78rem;line-height:1.5}
+.prof-sdr-h{font-weight:700;color:#3a7d5a;margin-bottom:3px;font-size:.74rem;text-transform:uppercase;letter-spacing:.03em}
 .evidenceToggleBtn.flash,.flash{animation:evflash .5s ease}
 @keyframes evflash{0%{box-shadow:0 0 0 0 rgba(212,160,23,.6)}100%{box-shadow:0 0 0 8px rgba(212,160,23,0)}}
 /* Evidence tab */

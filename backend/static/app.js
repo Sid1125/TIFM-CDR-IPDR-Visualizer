@@ -1118,8 +1118,8 @@ function showUploadPreview(kind,file){
     const text=e.target.result;
     const preview=parseCsvPreview(text);
     if(!preview){D.importStatus.textContent='Could not parse CSV.';return}
-    const routes={cdr:'/upload/cdr',ipdr:'/upload/ipdr',towers:'/upload/towers'};
-    const kindLabel={cdr:'CDR',ipdr:'IPDR',towers:'Towers'};
+    const routes={cdr:'/upload/cdr',ipdr:'/upload/ipdr',towers:'/upload/towers',sdr:'/upload/sdr'};
+    const kindLabel={cdr:'CDR',ipdr:'IPDR',towers:'Towers',sdr:'SDR'};
     let modal=document.getElementById('uploadPreviewModal');
     if(!modal){
       modal=document.createElement('div');modal.id='uploadPreviewModal';modal.className='modal-overlay';
@@ -1268,7 +1268,7 @@ function showValidationReport(kind,v){
   modal.style.display='flex';
 }
 // Replace the direct upload listeners with preview triggers
-['cdr','ipdr','towers'].forEach(k=>{
+['cdr','ipdr','towers','sdr'].forEach(k=>{
   const el=document.getElementById(k+'File');
   if(el)el.addEventListener('change',function(){const f=this.files&&this.files[0];if(f)showUploadPreview(k,f)});
 });
@@ -3485,6 +3485,7 @@ function showProfile(sub){
         <h4>Identity</h4>
         <div class="prof-id">
           ${(()=>{const rl=refLookup(sub);const bits=[];if(rl.operator)bits.push(esc(rl.operator));if(rl.circle)bits.push(esc(rl.circle));if(rl.is_isd&&rl.country)bits.push('Intl: '+esc(rl.country));return bits.length?'<div><strong>Operator / Circle</strong> '+bits.join(' &middot; ')+'</div>':'';})()}
+          <div id="profileSubscriber"></div>
           ${allMsisdns.size?`<div><strong>MSISDN</strong> ${[...allMsisdns].join(', ')}</div>`:''}
           ${allImeis.size?`<div><strong>IMEI</strong> ${[...allImeis].join(', ')}</div>`:''}
           ${allImsis.size?`<div><strong>IMSI</strong> ${[...allImsis].join(', ')}</div>`:''}
@@ -3524,6 +3525,22 @@ function showProfile(sub){
   `;
   D.profile.style.display='flex';
   fillProfileCrossCase(sub);
+  fillProfileSubscriber(sub);
+}
+// SDR / subscriber identity card in the profile (async; only shows when an SDR record exists).
+async function fillProfileSubscriber(sub){
+  const box=document.getElementById('profileSubscriber');if(!box)return;
+  try{
+    const s=await API.get('/subscribers/'+encodeURIComponent(sub));
+    if(!s||!s.found){box.innerHTML='';return;}
+    const row=(label,val)=>val?'<div><strong>'+label+'</strong> '+esc(val)+'</div>':'';
+    box.innerHTML='<div class="prof-sdr">'
+      +'<div class="prof-sdr-h">&#128100; Subscriber (SDR)</div>'
+      +row('Name',s.name)+row('Address',s.address)
+      +(s.alt_number?'<div><strong>Alt number</strong> <span style="cursor:pointer;color:var(--accent)" onclick="showProfile(\''+esc(s.alt_number)+'\')">'+esc(s.alt_number)+'</span></div>':'')
+      +row('ID proof',s.id_proof)+row('Activation',s.activation_date)+row('Operator',s.operator)
+      +'</div>';
+  }catch(e){box.innerHTML='';}
 }
 D.profileClose.addEventListener('click',()=>D.profile.style.display='none');
 D.profile.addEventListener('click',e=>{if(e.target===D.profile)D.profile.style.display='none'});
@@ -5501,6 +5518,9 @@ async function renderDossier(){
 
     // ── 3. Persons of interest (detailed) ──
     h+='<section class="dossier-section"><h2>3. Persons of Interest</h2>';
+    // Prefetch subscriber (SDR) identities for the profiled POIs.
+    let _sdrMap={};
+    try{const fs2=await Promise.all(poiList.map(p=>API.get('/subscribers/'+encodeURIComponent(p.s)).catch(()=>null)));poiList.forEach((p,idx)=>{const f=fs2[idx];if(f&&f.found)_sdrMap[p.s]=f;});}catch(e){}
     if(poiList.length){
       poiList.forEach((p,i)=>{
         const sub=p.s;const rk=riskMap[sub];
@@ -5519,6 +5539,7 @@ async function renderDossier(){
         h+='<table class="d-kv">'
           +'<tr><td>Activity</td><td>'+n(p.n)+' records · '+n(p.c)+' contacts · '+n(p.t)+' towers</td></tr>'
           +'<tr><td>First / last seen</td><td>'+(fs?esc(_fmtDT(fs)):'—')+'  →  '+(ls?esc(_fmtDT(ls)):'—')+'</td></tr>';
+        {const sdr=_sdrMap[sub];if(sdr)h+='<tr><td>Subscriber (SDR)</td><td>'+[sdr.name,sdr.address,sdr.alt_number?('Alt: '+sdr.alt_number):'',sdr.id_proof,sdr.operator].filter(Boolean).map(esc).join(' &middot; ')+'</td></tr>';}
         if(idents.length)h+='<tr><td>Devices / SIMs</td><td>'+idents.slice(0,4).map(d=>'IMEI '+esc(d.imei||'—')+' / IMSI '+esc(d.imsi||'—')).join('<br>')+'</td></tr>';
         if(topc.length)h+='<tr><td>Top contacts</td><td>'+topc.map(([c,k])=>esc(c)+' ('+n(k)+')').join(', ')+'</td></tr>';
         if(topt.length)h+='<tr><td>Top towers</td><td>'+topt.map(([t,k])=>{const m=tm[t]||{};return esc(t)+(m.city?' — '+esc(m.city):'')+' ('+n(k)+')';}).join('<br>')+'</td></tr>';

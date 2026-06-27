@@ -41,18 +41,20 @@ def _parse_mapping(mapping_json: str):
         return None
 
 
-def _read_table(path: str, filename: str, nrows=None):
+def _read_table(path: str, filename: str, nrows=None, dtype=None):
     """Read an uploaded CDR/IPDR/tower file into a DataFrame, dispatching on the original filename's
     extension so operators can hand us the formats they actually export: .csv, .txt (delimiter
-    sniffed), and Excel .xls/.xlsx — not only CSV. Defaults to CSV for unknown extensions."""
+    sniffed), and Excel .xls/.xlsx — not only CSV. Defaults to CSV for unknown extensions.
+    `dtype=str` reads everything as text (used for SDR, where a blank cell must not floatify an
+    identifier column like 9811099887 -> '9811099887.0')."""
     name = (filename or "").lower()
     if name.endswith(".xlsx") or name.endswith(".xlsm"):
-        return pd.read_excel(path, engine="openpyxl", nrows=nrows)
+        return pd.read_excel(path, engine="openpyxl", nrows=nrows, dtype=dtype)
     if name.endswith(".xls"):
-        return pd.read_excel(path, engine="xlrd", nrows=nrows)
+        return pd.read_excel(path, engine="xlrd", nrows=nrows, dtype=dtype)
     if name.endswith(".txt"):
-        return pd.read_csv(path, sep=None, engine="python", nrows=nrows)
-    return pd.read_csv(path, nrows=nrows)
+        return pd.read_csv(path, sep=None, engine="python", nrows=nrows, dtype=dtype)
+    return pd.read_csv(path, nrows=nrows, dtype=dtype)
 
 
 def _to_pydatetime(val):
@@ -405,6 +407,72 @@ async def upload_tower_dump(
                            "filename": file.filename})
         report["dump_label"] = label
         return UploadResponse(success=True, records_imported=len(records), validation=report)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+@router.post("/sdr", response_model=UploadResponse)
+async def upload_sdr(
+    request: Request,
+    file: UploadFile = File(...),
+    case_id: str = Form(""),
+    mapping_json: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Import Subscriber Detail Records (SDR / CAF) and upsert them GLOBALLY by MSISDN (latest
+    wins), so the real identity behind a number follows it across cases. No time anchor, so this
+    path doesn't use coerce_frame's date-drop — it maps and upserts directly."""
+    from app.models.subscriber import Subscriber
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as temp_file:
+            temp_file.write(await file.read())
+            temp_path = temp_file.name
+
+        df = _read_table(temp_path, file.filename, dtype=str)
+        override = _parse_mapping(mapping_json)
+        resolved = resolve_columns(df.columns, "sdr", override=override)
+        if resolved["unmapped_required"]:
+            raise HTTPException(
+                status_code=422,
+                detail="Could not map required SDR column(s): " + ", ".join(resolved["unmapped_required"]),
+            )
+        mapping = resolved["mapping"]
+        imported, skipped = 0, 0
+        for _, row in df.iterrows():
+            msisdn = _to_str(row.get(mapping["msisdn"]))
+            if not msisdn:
+                skipped += 1
+                continue
+            fields = {canon: _to_str(row.get(actual)) for canon, actual in mapping.items()}
+            existing = db.query(Subscriber).filter(Subscriber.msisdn == msisdn).one_or_none()
+            if existing is None:
+                existing = Subscriber(msisdn=msisdn)
+                db.add(existing)
+            for canon in ("imsi", "imei", "name", "address", "alt_number", "id_proof",
+                          "activation_date", "operator"):
+                val = fields.get(canon)
+                if val:
+                    setattr(existing, canon, val)
+            existing.case_id = case_id or existing.case_id
+            existing.updated_by = user.username
+            imported += 1
+        db.commit()
+
+        log_action(db, user, request, "upload", case_id=case_id or None,
+                   detail={"kind": "sdr", "rows_imported": imported, "rows_skipped": skipped,
+                           "filename": file.filename})
+        return UploadResponse(success=True, records_imported=imported,
+                              validation={"rows_total": int(len(df)), "rows_imported": imported,
+                                          "rows_dropped": skipped, "mapping": mapping})
     except HTTPException:
         db.rollback()
         raise
