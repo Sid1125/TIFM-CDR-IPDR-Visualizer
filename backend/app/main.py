@@ -18,6 +18,7 @@ from app.api.timeline import router as timeline_router
 from app.api.upload import router as upload_router
 from app.api.towers import router as towers_router
 from app.api.annotations import router as annotations_router
+from app.api.subject_tags import router as subject_tags_router
 from app.api.cases import router as cases_router
 from app.api.cross_case import router as cross_case_router
 from app.api.audit import router as audit_router
@@ -33,6 +34,7 @@ from app.models import auth  # noqa: F401
 from app.models import ipdr  # noqa: F401
 from app.models import tower  # noqa: F401
 from app.models import annotation  # noqa: F401
+from app.models import subject_tag  # noqa: F401
 from app.models import case  # noqa: F401
 from app.models import audit_log  # noqa: F401
 
@@ -99,6 +101,7 @@ app.include_router(graph_router, prefix="/graph", tags=["Graph"], dependencies=[
 app.include_router(timeline_router, prefix="/timeline", tags=["Timeline"], dependencies=[Depends(get_current_user)])
 app.include_router(stats_router, prefix="/stats", tags=["Statistics"], dependencies=[Depends(get_current_user)])
 app.include_router(annotations_router, prefix="/annotations", tags=["Annotations"], dependencies=[Depends(get_current_user)])
+app.include_router(subject_tags_router, prefix="/subject-tags", tags=["Subject Tags"], dependencies=[Depends(get_current_user)])
 app.include_router(cases_router, prefix="/cases", tags=["Cases"], dependencies=[Depends(get_current_user)])
 app.include_router(cross_case_router, prefix="/cross-case", tags=["Cross-case"], dependencies=[Depends(get_current_user)])
 app.include_router(audit_router, prefix="/audit", tags=["Audit"], dependencies=[Depends(get_current_user)])
