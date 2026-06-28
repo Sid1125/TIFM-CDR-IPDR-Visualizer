@@ -111,8 +111,8 @@ setup falls back to SQLite — handy for a quick look, but Postgres is the inten
 
 ```bash
 # 1. Clone
-git clone <repo-url>
-cd <repo>/backend
+git clone https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer
+cd TIFM-CDR-IPDR-Visualizer/backend
 
 # 2. Virtual environment
 python -m venv .venv
