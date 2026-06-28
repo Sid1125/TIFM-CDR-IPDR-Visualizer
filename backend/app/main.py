@@ -90,12 +90,26 @@ def _ensure_indexes():
     both Postgres and SQLite; failures (e.g. older engines) are non-fatal."""
     from sqlalchemy import text
     stmts = [
+        # CDR — existing
         "CREATE INDEX IF NOT EXISTS ix_cdr_case_start ON cdr_records (case_id, start_time)",
         "CREATE INDEX IF NOT EXISTS ix_cdr_case_tower ON cdr_records (case_id, tower_id)",
         "CREATE INDEX IF NOT EXISTS ix_cdr_case_aparty ON cdr_records (case_id, a_party_number)",
+        # CDR — new: identity queries and b-party joins are blind without these
+        "CREATE INDEX IF NOT EXISTS ix_cdr_case_bparty ON cdr_records (case_id, b_party_number)",
+        "CREATE INDEX IF NOT EXISTS ix_cdr_case_imsi ON cdr_records (case_id, imsi)",
+        "CREATE INDEX IF NOT EXISTS ix_cdr_case_imei ON cdr_records (case_id, imei)",
+        "CREATE INDEX IF NOT EXISTS ix_cdr_case_msisdn ON cdr_records (case_id, msisdn)",
+        # IPDR — existing
         "CREATE INDEX IF NOT EXISTS ix_ipdr_case_start ON ipdr_records (case_id, start_time)",
         "CREATE INDEX IF NOT EXISTS ix_ipdr_case_tower ON ipdr_records (case_id, tower_id)",
         "CREATE INDEX IF NOT EXISTS ix_ipdr_case_srcip ON ipdr_records (case_id, source_ip)",
+        # IPDR — new: MSISDN and destination-IP queries hit full-table scan without these
+        "CREATE INDEX IF NOT EXISTS ix_ipdr_case_msisdn ON ipdr_records (case_id, msisdn)",
+        "CREATE INDEX IF NOT EXISTS ix_ipdr_case_destip ON ipdr_records (case_id, destination_ip)",
+        "CREATE INDEX IF NOT EXISTS ix_ipdr_case_imsi ON ipdr_records (case_id, imsi)",
+        "CREATE INDEX IF NOT EXISTS ix_ipdr_case_imei ON ipdr_records (case_id, imei)",
+        # analytics_cache — case_id already indexed; add key for point lookups
+        "CREATE INDEX IF NOT EXISTS ix_analytics_case_key ON analytics_cache (case_id, key)",
     ]
     try:
         with engine.begin() as conn:
