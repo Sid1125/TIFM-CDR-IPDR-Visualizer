@@ -1,3 +1,81 @@
+// ====== WEB WORKERS ======
+// Lazy-create workers once — reuse across calls.  Falls back to inline execution
+// (same thread) when Workers are not supported (e.g. file:// origin).
+const _W = {
+  _ai: null,
+  _export: null,
+  _aiPending: [],   // queue of {resolve, reject} waiting for the AI result
+  _aiRunning: false,
+
+  ai() {
+    if (!this._ai && typeof Worker !== 'undefined') {
+      try {
+        this._ai = new Worker('/static/workers/ai-worker.js');
+        this._ai.onmessage = (e) => {
+          const msg = e.data;
+          if (msg.type === 'done') {
+            this._aiRunning = false;
+            this._aiPending.forEach(({resolve}) => resolve(msg.result));
+            this._aiPending = [];
+          } else if (msg.type === 'error') {
+            this._aiRunning = false;
+            this._aiPending.forEach(({reject}) => reject(new Error(msg.message)));
+            this._aiPending = [];
+          }
+          // 'progress' messages are ignored for now
+        };
+        this._ai.onerror = (err) => {
+          this._aiRunning = false;
+          this._aiPending.forEach(({reject}) => reject(err));
+          this._aiPending = [];
+          this._ai = null;  // recreate on next call
+        };
+      } catch (_) {}
+    }
+    return this._ai;
+  },
+
+  // Returns a Promise that resolves with the AI result object.
+  // If allRows is large, this runs in the worker; otherwise inline.
+  computeAi(rows, wl) {
+    const worker = this.ai();
+    if (!worker) return Promise.resolve(_aiComputeInline(rows, wl));
+    return new Promise((resolve, reject) => {
+      this._aiPending.push({resolve, reject});
+      if (!this._aiRunning) {
+        this._aiRunning = true;
+        worker.postMessage({type: 'compute', rows, watchlist: wl});
+      }
+    });
+  },
+
+  // Export to CSV or XLSX off-main-thread.
+  export(format, headers, rows, filename) {
+    if (typeof Worker === 'undefined') {
+      return Promise.resolve(null);  // caller falls back to sync export
+    }
+    try {
+      if (!this._export) {
+        this._export = new Worker('/static/workers/export-worker.js');
+      }
+      return new Promise((resolve, reject) => {
+        const w = this._export;
+        w.onmessage = (e) => {
+          if (e.data.type === 'done') {
+            resolve(e.data);
+          } else if (e.data.type === 'error') {
+            reject(new Error(e.data.message));
+          }
+        };
+        w.onerror = (err) => { this._export = null; reject(err); };
+        w.postMessage({type: format, headers, rows, filename});
+      });
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  },
+};
+
 // ====== STATE ======
 const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{},subjectTags:{},_ownedSubjects:[],_cdrStats:null,_ipdrStats:null,_cd:null,_totalCdr:0,_totalIpdr:0};
 // _ownedSubjects: distinct a_party numbers from server (for analysis+group-compare pickers)
@@ -69,6 +147,8 @@ async function _bgLoadAll(total,caseId,gen){
     more.forEach(r=>{if(r.sub)state.subjects.push(r.sub);if(r.cnt)state.subjects.push(r.cnt);});
     state.subjects=[...new Set(state.subjects)].sort();
     if(banner)banner.style.display='none';
+    // Pre-warm AI cache in background worker now that allRows is complete
+    try{_prefetchAiCache();}catch(e){}
     // Re-render live features that depend on allRows
     try{renderTimeline&&renderTimeline();}catch(e){}
     try{renderDashboard();}catch(e){}
@@ -1591,22 +1671,67 @@ function meetingTotals(){return _meetings||{list:[],total:0,high:0,medium:0,low:
 
 // -- Analytics Cache --
 window._aiCache=null;
+window._aiCachePartial=null;  // pre-warmed by web worker; consumed by getAiCache()
+window._aiCachePromise=null;
+
+/**
+ * Kick off the AI worker pre-warm.  Called after background load completes.
+ * Result lands in _aiCachePartial; getAiCache() picks it up synchronously.
+ */
+function _prefetchAiCache(){
+  if(window._aiCachePartial||window._aiCachePromise||!allRows.length)return;
+  window._aiCachePromise=_W.computeAi(allRows,_wl||[]).then(result=>{
+    window._aiCachePartial=result;
+    window._aiCachePromise=null;
+  }).catch(()=>{window._aiCachePromise=null;});
+}
+
 function getAiCache(){
   if(window._aiCache)return window._aiCache;
   const c={};
-  // Precompute once, consumed by all AI sections
   c.subCount=state.subjects.length;
   c.totalRows=allRows.length;
-  c.pairCounts={};allRows.forEach(r=>{if(r.sub&&r.cnt){const k=[r.sub,r.cnt].sort().join('|');c.pairCounts[k]=(c.pairCounts[k]||0)+1}});
-  c.subDays=new Map();allRows.forEach(r=>{if(!r.tsMs||!r.sub)return;const d=new Date(r.tsMs).toLocaleDateString();if(!c.subDays.has(r.sub))c.subDays.set(r.sub,new Map());c.subDays.get(r.sub).set(d,(c.subDays.get(r.sub).get(d)||0)+1)});
-  c.svcCounts={};allRows.forEach(r=>{const s=r.svc||'Unknown';c.svcCounts[s]=(c.svcCounts[s]||0)+1});
-  c.allMeetings=detectMeetings({allPairs:true});
+
+  // Use pre-warmed worker result when available (avoids blocking the main thread)
+  const partial=window._aiCachePartial;
+  if(partial){
+    c.pairCounts=partial.pairCounts||{};
+    // Convert sub_days plain object -> Map<sub, Map<date, n>>
+    c.subDays=new Map();
+    Object.entries(partial.subDays||{}).forEach(([sub,days])=>{
+      c.subDays.set(sub,new Map(Object.entries(days)));
+    });
+    c.svcCounts=partial.svcCounts||{};
+    c.allMeetings=partial.allMeetings||[];
+  }else{
+    // Inline fallback (worker not ready or not supported)
+    c.pairCounts={};allRows.forEach(r=>{if(r.sub&&r.cnt){const k=[r.sub,r.cnt].sort().join('|');c.pairCounts[k]=(c.pairCounts[k]||0)+1}});
+    c.subDays=new Map();allRows.forEach(r=>{if(!r.tsMs||!r.sub)return;const d=new Date(r.tsMs).toLocaleDateString();if(!c.subDays.has(r.sub))c.subDays.set(r.sub,new Map());c.subDays.get(r.sub).set(d,(c.subDays.get(r.sub).get(d)||0)+1)});
+    c.svcCounts={};allRows.forEach(r=>{const s=r.svc||'Unknown';c.svcCounts[s]=(c.svcCounts[s]||0)+1});
+    c.allMeetings=detectMeetings({allPairs:true});
+  }
+
   c.changeCache={};
   state.subjects.slice(0,30).forEach(s=>{c.changeCache[s]=buildIdentityProfile(s).changes});
   window._aiCache=c;
   return c;
 }
-function invalidateAiCache(){window._aiCache=null}
+function invalidateAiCache(){window._aiCache=null;window._aiCachePartial=null;window._aiCachePromise=null;}
+
+// Inline fallback — same logic as ai-worker.js for environments without Worker support.
+function _aiComputeInline(rows,wl){
+  const pairCounts={};const subDays={};const svcCounts={};const towerHour=new Map();
+  rows.forEach(r=>{
+    if(r.type==='CDR'&&r.sub&&r.cnt){const k=r.sub+'|'+r.cnt;pairCounts[k]=(pairCounts[k]||0)+1;}
+    if(r.sub&&r.tsMs){const d=new Date(r.tsMs).toISOString().slice(0,10);if(!subDays[r.sub])subDays[r.sub]={};subDays[r.sub][d]=(subDays[r.sub][d]||0)+1;}
+    if(r.type==='CDR'&&r.sub){if(!svcCounts[r.sub])svcCounts[r.sub]={CALL:0,SMS:0,DATA:0};const ct=(r.callType||'').toUpperCase();if(ct.includes('CALL')||ct.includes('VOICE'))svcCounts[r.sub].CALL++;else if(ct.includes('SMS')||ct.includes('TEXT'))svcCounts[r.sub].SMS++;else svcCounts[r.sub].DATA++;}
+    if(r.type==='CDR'&&r.sub&&r.tower&&r.tsMs){const dt=new Date(r.tsMs);const thKey=r.tower+'|'+dt.toISOString().slice(0,10)+'|'+dt.getUTCHours();if(!towerHour.has(thKey))towerHour.set(thKey,[]);towerHour.get(thKey).push({sub:r.sub,ts:r.tsMs,lat:r.lat,lon:r.lon});}
+  });
+  const allMeetings=[];
+  for(const[thKey,entries]of towerHour){if(entries.length<2)continue;const tower=thKey.split('|')[0];const bySub=new Map();entries.forEach(e=>{if(!bySub.has(e.sub))bySub.set(e.sub,e);});const subs=[...bySub.keys()];for(let a=0;a<subs.length&&allMeetings.length<5000;a++){for(let b=a+1;b<subs.length&&allMeetings.length<5000;b++){const ea=bySub.get(subs[a]);allMeetings.push({a:subs[a],b:subs[b],ts:ea.ts,tower,lat:ea.lat,lon:ea.lon});}}}
+  return {pairCounts,subDays,svcCounts,allMeetings};
+}
+
 // -- Z-score spike detection --
 // Requires: minimum 5-day baseline, minimum 20 records on spike day, z-score > 2.5
 function findSpikes(subDays){
@@ -6526,14 +6651,32 @@ function renderLaws(){
   body.innerHTML=h;
 }
 
-// ====== CSV EXPORT (client-side; Phase H adds generic XLSX) ======
+// ====== CSV EXPORT ======
 function _csvCell(v){v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
-function downloadCsv(filename,headers,rows){
+function _csvSync(filename,headers,rows){
   const lines=[headers.map(_csvCell).join(',')].concat((rows||[]).map(r=>r.map(_csvCell).join(',')));
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
+function downloadCsv(filename,headers,rows){
+  // Use worker for large exports to keep main thread free; fall back to sync for small ones
+  if(rows&&rows.length>5000){
+    _W.export('csv',headers,rows,filename).then(res=>{
+      if(!res)return _csvSync(filename,headers,rows);
+      const a=document.createElement('a');a.href=res.blobUrl;a.download=res.filename;a.click();
+      setTimeout(()=>URL.revokeObjectURL(res.blobUrl),2000);
+    }).catch(()=>_csvSync(filename,headers,rows));
+  }else{
+    _csvSync(filename,headers,rows);
+  }
+}
 async function downloadXlsx(filename,sheet,headers,rows){
+  // Try worker (offline-capable, no network) then fall back to server /export/xlsx
+  try{
+    const res=await _W.export('xlsx',headers,rows,filename);
+    if(res&&res.blobUrl){const a=document.createElement('a');a.href=res.blobUrl;a.download=res.filename;a.click();setTimeout(()=>URL.revokeObjectURL(res.blobUrl),2000);return;}
+  }catch(_){}
+  // Server fallback
   try{
     const r=await fetch('/export/xlsx',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sheet_name:sheet,filename:filename,headers:headers,rows:rows})});
