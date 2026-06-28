@@ -3774,12 +3774,33 @@ function _recExport(){
   const data=src.map(r=>{const cdr=r.type==='CDR';return [fmt(r.ts),r.type,subjLabelTxt(r.sub||''),subjLabelTxt(r.cnt||''),r.dur!=null?r.dur:'',cdr?(r.cll||''):(r.prot||''),cdr?(r.dir||''):(r.apn||''),r.svc||'',cdr?'':(r.sport!=null?r.sport:''),cdr?'':(r.dport!=null?r.dport:''),r.tow||'',r.cell||'',r.lac||'',r.imsi||'',r.imei||'',r.msisdn||'',r.lat||'',r.lng||'',r.case_id||''];});
   return {headers,rows:data};
 }
+// Server-side export: pulls all matching rows from the DB (not allRows) so the download
+// always matches every page of the paginated table, regardless of background load state.
+async function _recServerExport(fmt){
+  const q=(D.recSearch.value||'').trim();
+  const t=D.recType.value;
+  const svc=D.recService.value;
+  const p=new URLSearchParams({format:fmt});
+  if(activeCaseId)p.set('case_id',activeCaseId);
+  if(t)p.set('type',t);
+  if(svc)p.set('service',svc);
+  if(q)p.set('search',q);
+  try{
+    const r=await fetch('/export/records?'+p.toString(),{credentials:'same-origin'});
+    if(!r.ok)throw new Error(await r.text()||r.status);
+    const blob=await r.blob();
+    const cd=r.headers.get('Content-Disposition')||'';
+    const fname=cd.match(/filename="([^"]+)"/)?.[1]||('ARGUS_records.'+fmt);
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  }catch(e){toast('Export failed: '+(e.message||e));}
+}
 D.recSearch.addEventListener('input',debounce(()=>{_recPage.offset=0;renderRecTable();}));
 D.recType.addEventListener('change',()=>{_recPage.offset=0;renderRecTable();});
 D.recService.addEventListener('change',()=>{_recPage.offset=0;renderRecTable();});
 {const a=$('recExportCsv'),b=$('recExportXlsx');
- if(a)a.addEventListener('click',()=>{const e=_recExport();downloadCsv('ARGUS_records.csv',e.headers,e.rows);});
- if(b)b.addEventListener('click',()=>{const e=_recExport();downloadXlsx('ARGUS_records.xlsx','Records',e.headers,e.rows);});}
+ if(a)a.addEventListener('click',()=>_recServerExport('csv'));
+ if(b)b.addEventListener('click',()=>_recServerExport('xlsx'));}
 
 // ====== 7. SUBJECT PROFILE ======
 function showProfile(sub){
@@ -6673,18 +6694,12 @@ function downloadCsv(filename,headers,rows){
   }
 }
 async function downloadXlsx(filename,sheet,headers,rows){
-  // Try worker (offline-capable, no network) then fall back to server /export/xlsx
-  try{
-    const res=await _W.export('xlsx',headers,rows,filename);
-    if(res&&res.blobUrl){const a=document.createElement('a');a.href=res.blobUrl;a.download=res.filename;a.click();setTimeout(()=>URL.revokeObjectURL(res.blobUrl),2000);return;}
-  }catch(_){}
-  // Server fallback
   try{
     const r=await fetch('/export/xlsx',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sheet_name:sheet,filename:filename,headers:headers,rows:rows})});
     if(!r.ok)throw new Error(await r.text());
     const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  }catch(e){try{toast('XLSX export failed');}catch(_){}}
+  }catch(e){try{toast('XLSX export failed: '+(e.message||e));}catch(_){}}
 }
 // Wire both CSV and XLSX export buttons in a container against a {id:{headers,rows}} report map.
 function _wireExports(box,reps,csvClass,fileBase){
