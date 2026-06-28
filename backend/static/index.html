@@ -371,9 +371,14 @@
   <!-- ANALYSIS REPORTS TAB -->
   <section id="tab-analysisreports" class="tab-content">
     <div class="ar-toolbar">
-      <h3 style="margin:0">Analysis Reports</h3>
-      <select id="arSubject"></select>
-      <span id="arMeta" class="rec-count"></span>
+      <div class="ar-toolbar-info">
+        <h3>Analysis Reports</h3>
+        <span class="ar-toolbar-sub">Per-subject CDR breakdowns — activity patterns, devices, ISD calls, off-periods</span>
+      </div>
+      <div class="ar-toolbar-right">
+        <select id="arSubject"></select>
+        <span id="arMeta" class="rec-count"></span>
+      </div>
     </div>
     <div id="arBody" class="ar-body"></div>
   </section>
@@ -381,10 +386,15 @@
   <!-- GROUP COMPARE TAB -->
   <section id="tab-groupcompare" class="tab-content">
     <div class="ar-toolbar">
-      <h3 style="margin:0">Group Compare — common numbers across subjects</h3>
-      <button id="gcRunBtn" class="btn-sm">Compare selected</button>
-      <button id="gcClearBtn" class="btn-sm">Clear</button>
-      <span id="gcMeta" class="rec-count"></span>
+      <div class="ar-toolbar-info">
+        <h3>Group Compare</h3>
+        <span class="ar-toolbar-sub">Common contacts, towers, locations and IMEIs across any set of subjects</span>
+      </div>
+      <div class="ar-toolbar-right">
+        <button id="gcRunBtn" class="btn">Compare selected</button>
+        <button id="gcClearBtn" class="btn-sm">Clear</button>
+        <span id="gcMeta" class="rec-count"></span>
+      </div>
     </div>
     <div class="gc-wrap">
       <div id="gcPicker" class="gc-picker"></div>
@@ -395,21 +405,21 @@
   <!-- TOWER DUMP TAB -->
   <section id="tab-towerdump" class="tab-content">
     <div class="td-import">
-      <strong>Import tower dump</strong>
+      <div class="td-import-lbl">Import tower dump<small>CSV / XLS / XLSX / TXT</small></div>
       <input type="file" id="tdFile" accept=".csv,.xls,.xlsx,.txt"/>
-      <input type="text" id="tdLabel" placeholder="Dump label (e.g. Tower-A 12 Jun 20:00-21:00)"/>
-      <button id="tdImportBtn" class="btn-sm">Import</button>
+      <input type="text" id="tdLabel" placeholder="Dump label — e.g. Tower-A · 12 Jun 20:00–21:00"/>
+      <button id="tdImportBtn" class="btn">Import</button>
       <span id="tdImportStatus" class="rec-count"></span>
     </div>
     <div class="td-main">
       <div class="td-side">
-        <div class="gc-picker-h">Dumps in this case</div>
+        <div class="td-side-h">Dumps in this case</div>
         <div id="tdDumpList" class="td-dumplist"></div>
         <div class="td-actions">
-          <label class="td-min">Present in ≥ <input type="number" id="tdMin" value="2" min="2" style="width:48px"> dumps</label>
-          <button id="tdCommonBtn" class="btn-sm">Common numbers</button>
-          <button id="tdUncommonBtn" class="btn-sm">Un-common</button>
-          <button id="tdMultBtn" class="btn-sm">SIM/IMEI multiplicity</button>
+          <label class="td-min">Present in ≥ <input type="number" id="tdMin" value="2" min="2"> of selected dumps</label>
+          <button id="tdCommonBtn" class="td-action-primary">Common numbers</button>
+          <button id="tdUncommonBtn" class="td-action-outline">Un-common (elimination)</button>
+          <button id="tdMultBtn" class="td-action-outline">SIM / IMEI multiplicity</button>
         </div>
       </div>
       <div id="tdBody" class="td-body"></div>

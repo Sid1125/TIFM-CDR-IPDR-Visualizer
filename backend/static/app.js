@@ -6329,18 +6329,36 @@ function _wireExports(box,reps,csvClass,fileBase){
   box.querySelectorAll('.'+csvClass+'-x').forEach(b=>b.onclick=()=>{const rep=reps[b.dataset.rep];if(rep)downloadXlsx(fileBase+'_'+b.dataset.rep+'.xlsx',b.dataset.rep,rep.headers,rep.rows);});
 }
 // ====== Shared report-table renderers ======
+const _AR_COLOR={
+  imei_summary:'var(--warn)',imsi_summary:'var(--warn)',
+  isd_calls:'var(--success)',other_state:'var(--success)',
+  latlng:'var(--success)',towers:'var(--success)',undertower:'var(--success)',
+  matrix:'#7356bf',contacts:'#7356bf',cells:'var(--success)',
+};
+const _AR_ICON={
+  day_first_last:'DAY',single_call_days:'1×',weekday_weekend:'WK',longest_calls:'DUR',
+  day_night:'D/N',isd_calls:'ISD',other_state:'OOS',off_periods:'OFF',
+  imei_summary:'IMEI',imsi_summary:'SIM',bank_sms:'OTP',
+  contacts:'COM',towers:'TWR',cells:'CEL',latlng:'LOC',imeis:'DEV',matrix:'MAP',
+  common:'COM',uncommon:'UNQ',imeispersim:'DEV',simsperimei:'SIM',undertower:'TWR',
+};
 function _repTableHtml(headers,rows){
-  if(!rows.length)return '<div class="ar-empty">No data.</div>';
+  if(!rows.length)return '<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No data for this report.</span></div>';
   return '<div class="ar-tablewrap"><table class="data-table ar-table"><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'
     +rows.slice(0,500).map(r=>'<tr>'+r.map(c=>'<td>'+esc(c==null?'':c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'
     +(rows.length>500?'<div class="ar-note">First 500 of '+rows.length+' rows shown — export for all.</div>':'');
 }
 function _repCard(expClass,id,title,headers,rows,note){
   const dis=rows.length?'':' disabled';
-  return '<div class="card ar-card"><h3>'+esc(title)+' <span class="ar-count">'+rows.length+'</span>'
-    +'<span class="ar-exp-grp"><button class="cap-btn '+expClass+'" data-rep="'+id+'"'+dis+'>CSV</button>'
-    +'<button class="cap-btn '+expClass+'-x" data-rep="'+id+'"'+dis+'>XLSX</button></span></h3>'
-    +(note?'<div class="ar-note">'+esc(note)+'</div>':'')+_repTableHtml(headers,rows)+'</div>';
+  const col=_AR_COLOR[id]||'var(--accent)';
+  const ico=_AR_ICON[id]||'';
+  const iconHtml=ico?'<span class="ar-card-icon">'+ico+'</span>':'';
+  const badgeCls='ar-count'+(rows.length===0?' zero':'');
+  return '<div class="card ar-card" style="--ar-c:'+col+'">'+
+    '<h3>'+iconHtml+esc(title)+' <span class="'+badgeCls+'">'+rows.length+'</span>'+
+    '<span class="ar-exp-grp"><button class="cap-btn '+expClass+'" data-rep="'+id+'"'+dis+'>CSV</button>'+
+    '<button class="cap-btn '+expClass+'-x" data-rep="'+id+'"'+dis+'>XLSX</button></span></h3>'+
+    (note?'<div class="ar-note">'+esc(note)+'</div>':'')+_repTableHtml(headers,rows)+'</div>';
 }
 const _hm=v=>{try{return new Date(v).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}catch(e){return ''}};
 const _durStr=s=>{s=+s||0;return s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s'};
@@ -6350,7 +6368,7 @@ let _arReports={};
 function renderAnalysisReports(){
   const sel=document.getElementById('arSubject'),body=document.getElementById('arBody'),meta=document.getElementById('arMeta');
   if(!sel||!body)return;
-  if(!allRows.length){body.innerHTML='<div class="ar-empty">Load a case to run analysis reports.</div>';sel.innerHTML='';if(meta)meta.textContent='';return;}
+  if(!allRows.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Load a case to run analysis reports.</span></div>';sel.innerHTML='';if(meta)meta.textContent='';return;}
   const cnt={};allRows.forEach(r=>{if(r.type==='CDR'&&r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
   const subs=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
   if(!sel._wired){sel._wired=true;sel.addEventListener('change',renderAnalysisReports);}
@@ -6358,7 +6376,7 @@ function renderAnalysisReports(){
   sel.innerHTML=subs.map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+' ('+cnt[s]+')</option>').join('');
   if(cur&&subs.includes(cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
   const sub=sel.value;
-  if(!sub){body.innerHTML='<div class="ar-empty">No CDR subjects in this case.</div>';return;}
+  if(!sub){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR subjects in this case.</span></div>';return;}
   _arReports={};
   const inv=rowsFor(sub).filter(r=>r.type==='CDR'&&r.ts).slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
   const owned=ownedRowsFor(sub).filter(r=>r.type==='CDR'&&r.ts);
@@ -6435,7 +6453,7 @@ function renderGroupCompare(){
 function _gcRun(){
   const picker=document.getElementById('gcPicker'),body=document.getElementById('gcBody');
   const sel=[...picker.querySelectorAll('input:checked')].map(c=>c.value);
-  if(sel.length<2){body.innerHTML='<div class="ar-empty">Select at least 2 subjects, then Compare.</div>';return;}
+  if(sel.length<2){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 2 subjects, then click Compare.</span></div>';return;}
   const contacts={},towers={},cells={},latlng={},imeis={};
   sel.forEach(s=>{
     const inv=rowsFor(s).filter(r=>r.type==='CDR');const owned=ownedRowsFor(s).filter(r=>r.type==='CDR');
@@ -6493,17 +6511,17 @@ async function _tdLoadDumps(){
   const list=document.getElementById('tdDumpList');if(!list)return;
   try{
     const dumps=await API.get('/tower-dump/dumps?case_id='+encodeURIComponent(activeCaseId||''));
-    if(!dumps.length){list.innerHTML='<div class="ar-empty">No dumps imported for this case yet.</div>';return;}
-    list.innerHTML=dumps.map(d=>'<label class="gc-chk"><input type="checkbox" value="'+esc(d.dump_label)+'" checked> '+esc(d.dump_label)+' <span class="gc-cn">'+d.distinct_numbers+' nos · '+d.rows+'</span> <button class="td-ut" data-label="'+esc(d.dump_label)+'" title="List all numbers under this dump">under-tower</button></label>').join('');
+    if(!dumps.length){list.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No dumps imported for this case yet.</span></div>';return;}
+    list.innerHTML=dumps.map(d=>'<label class="gc-chk"><input type="checkbox" value="'+esc(d.dump_label)+'" checked> '+esc(d.dump_label)+' <span class="gc-cn">'+d.distinct_numbers+'&thinsp;nos</span> <button class="td-ut" data-label="'+esc(d.dump_label)+'" title="List all numbers under this dump">under-tower</button></label>').join('');
     list.querySelectorAll('.td-ut').forEach(b=>b.onclick=ev=>{ev.preventDefault();_tdUnderTower(b.dataset.label);});
-  }catch(e){list.innerHTML='<div class="ar-empty">Could not load dumps.</div>';}
+  }catch(e){list.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⚠</span><span class="ar-empty-txt">Could not load dumps.</span></div>';}
 }
 async function _tdRun(kind){
   const body=document.getElementById('tdBody');const labels=_tdSelectedLabels();
-  if(labels.length<2&&kind!=='multiplicity'){body.innerHTML='<div class="ar-empty">Select at least 2 dumps.</div>';return;}
-  if(!labels.length){body.innerHTML='<div class="ar-empty">Select at least 1 dump.</div>';return;}
+  if(labels.length<2&&kind!=='multiplicity'){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 2 dumps first.</span></div>';return;}
+  if(!labels.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 1 dump first.</span></div>';return;}
   const cid=encodeURIComponent(activeCaseId||''),ls=encodeURIComponent(labels.join(','));
-  body.innerHTML='<div class="ar-empty">Running…</div>';
+  body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico" style="animation:spin 1s linear infinite">◌</span><span class="ar-empty-txt">Running…</span></div>';
   try{
     if(kind==='common'){
       const min=Math.max(2,parseInt(document.getElementById('tdMin').value)||2);
@@ -6526,10 +6544,10 @@ async function _tdRun(kind){
         +_repCard('td-exp','simsperimei','IMEIs used with more than one SIM',_tdReports.simsperimei.headers,r2);
     }
     _wireExports(body,_tdReports,'td-exp','ARGUS_towerdump');
-  }catch(e){body.innerHTML='<div class="ar-empty">Failed: '+esc(e.message||String(e))+'</div>';}
+  }catch(e){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⚠</span><span class="ar-empty-txt">Failed: '+esc(e.message||String(e))+'</span></div>';}
 }
 async function _tdUnderTower(label){
-  const body=document.getElementById('tdBody');body.innerHTML='<div class="ar-empty">Running…</div>';
+  const body=document.getElementById('tdBody');body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Loading…</span></div>';
   try{
     const j=await API.get('/tower-dump/under-tower?case_id='+encodeURIComponent(activeCaseId||'')+'&label='+encodeURIComponent(label));
     const rows=j.rows.map(r=>[r.msisdn,refOperator(r.msisdn),refCircle(r.msisdn),r.appearances,r.imeis.join(' | ')]);
