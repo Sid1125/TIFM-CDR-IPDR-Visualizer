@@ -79,6 +79,14 @@ def add_watchlist(payload: dict, db: Session = Depends(get_db)):
     return _serialize(entry)
 
 
+@router.delete("/by-value")
+def delete_by_value(value: str = Query(...), db: Session = Depends(get_db)):
+    """Remove every watchlist entry with this value across all cases/groups."""
+    db.query(WatchlistEntry).filter(WatchlistEntry.value == value).delete()
+    db.commit()
+    return {"ok": True}
+
+
 @router.delete("/{entry_id}")
 def delete_watchlist(entry_id: int, db: Session = Depends(get_db)):
     entry = db.get(WatchlistEntry, entry_id)

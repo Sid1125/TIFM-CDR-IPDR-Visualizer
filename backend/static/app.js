@@ -4295,13 +4295,13 @@ function _watchlistBarHtml(rep){
 window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;const g=($('wlGroup')&&$('wlGroup').value||'Default').trim()||'Default';state._lastGroup=g;try{await API.post('/watchlist',{value:v,group_name:g,case_id:activeCaseId||null});await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 window.removeFromSuspectGroup=async function(value){
-  const entries=(_wl||[]).filter(e=>e.value===value);
-  if(!entries.length)return;
-  for(const e of entries){try{await API.del('/watchlist/'+e.id);}catch(_){}}
+  // Use /watchlist/by-value so removal works regardless of which case the entry was
+  // created in — _wl is case-scoped and would miss cross-case suspect entries.
+  try{await API.del('/watchlist/by-value?value='+encodeURIComponent(value));}catch(e){toast('Remove failed: '+e.message);return;}
   await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;
   if(state.tab==='graph')renderGraph();
   if(state.tab==='inferences')renderInferences(true);
-  showProfile(value); // refresh profile modal to flip button back to "+ Suspect group"
+  showProfile(value);
 };
 function _caseSafe(){const cn=(D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex]?.text)||'case';return cn.replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'case';}
 window.wlExport=async function(){
