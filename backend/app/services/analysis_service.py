@@ -347,10 +347,44 @@ def get_chart_data(db: Session, case_id: str | None) -> dict:
     }
 
 
-# ── CDR reports ───────────────────────────────────────────────────────────────
+# ── CDR / IPDR reports (provider-based) ──────────────────────────────────────
+#
+# Implementation lives in report_providers.py (CDRProvider, IPDRProvider).
+# These functions are thin public wrappers kept for backward-compat with every
+# call-site that imports from analysis_service.
+#
+# Adding a new data source: implement DataProvider in report_providers.py and
+# expose a wrapper here.  No changes needed in the API layer or tests.
 
 def get_cdr_reports(db: Session, case_id: str | None, sub: str) -> dict:
-    """11-section analysis report for one CDR subject. Mirrors renderAnalysisReports() logic."""
+    """CDR analysis report for one subject — delegates to CDRProvider."""
+    from app.services.report_providers import CDRProvider
+    return CDRProvider(db, case_id, sub).build_report()
+
+
+def get_ipdr_reports(db: Session, case_id: str | None, sub: str) -> dict:
+    """IPDR analysis report for one subject — delegates to IPDRProvider."""
+    from app.services.report_providers import IPDRProvider
+    return IPDRProvider(db, case_id, sub).build_report()
+
+
+# ── group compare (engine-based) ──────────────────────────────────────────────
+
+def get_group_compare(db: Session, case_id: str | None, subjects: list[str]) -> dict:
+    """Multi-subject comparison via CompareEngine[CDRCompareAdapter, IPDRCompareAdapter]."""
+    from app.services.compare_engine import CDRCompareAdapter, CompareEngine, IPDRCompareAdapter
+    engine = CompareEngine(
+        adapters=[CDRCompareAdapter(db, case_id), IPDRCompareAdapter(db, case_id)],
+        subjects=subjects,
+    )
+    return engine.compare()
+
+
+# ── LEGACY STUBS (kept so existing tests/imports don't break) ────────────────
+# The old monolithic implementations below have been replaced by the provider
+# classes above.  Delete this section once all callers have been verified.
+
+def _LEGACY_get_cdr_reports(db: Session, case_id: str | None, sub: str) -> dict:  # type: ignore[return]
     q = db.query(CDRRecord).filter(
         or_(CDRRecord.a_party_number == sub, CDRRecord.b_party_number == sub)
     )
@@ -529,15 +563,8 @@ def get_cdr_reports(db: Session, case_id: str | None, sub: str) -> dict:
     }
 
 
-# ── IPDR reports ──────────────────────────────────────────────────────────────
-
-def get_ipdr_reports(db: Session, case_id: str | None, sub: str) -> dict:
-    """IPDR-native analysis report for one IP/MSISDN subject.
-
-    Strictly separate from CDR reports — never mixes the two sources. Covers daily
-    session volume, data throughput, protocol breakdown, top destinations, off-periods,
-    port usage, and tower footprint. Mirrors the CDR report structure so the UI can
-    render it with the same _repCard helper."""
+def _LEGACY_get_ipdr_reports(db: Session, case_id: str | None, sub: str) -> dict:  # noqa: N802
+    """Legacy monolith — superseded by IPDRProvider.build_report()."""
     def _iq(*cols):
         q = db.query(*cols).filter(
             or_(IPDRRecord.source_ip == sub, IPDRRecord.msisdn == sub)
@@ -689,9 +716,8 @@ def get_ipdr_reports(db: Session, case_id: str | None, sub: str) -> dict:
 
 # ── group compare ─────────────────────────────────────────────────────────────
 
-def get_group_compare(db: Session, case_id: str | None, subjects: list[str]) -> dict:
-    """Common contacts/towers/cells/lat-lng/IMEIs across all selected subjects,
-    plus the who-called-whom matrix."""
+def _LEGACY_get_group_compare(db: Session, case_id: str | None, subjects: list[str]) -> dict:  # noqa: N802
+    """Legacy monolith — superseded by CompareEngine."""
     contacts: dict[str, set] = {}
     towers: dict[str, set] = {}
     cells: dict[str, set] = {}
