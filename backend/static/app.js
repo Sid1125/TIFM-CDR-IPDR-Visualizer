@@ -3782,8 +3782,8 @@ async function _recServerExport(fmt){
   const svc=D.recService.value;
   const p=new URLSearchParams({format:fmt});
   if(activeCaseId)p.set('case_id',activeCaseId);
-  if(t)p.set('type',t);
-  if(svc)p.set('service',svc);
+  if(t&&t!=='all')p.set('type',t);
+  if(svc&&svc!=='all')p.set('service',svc);
   if(q)p.set('search',q);
   try{
     const r=await fetch('/export/records?'+p.toString(),{credentials:'same-origin'});
