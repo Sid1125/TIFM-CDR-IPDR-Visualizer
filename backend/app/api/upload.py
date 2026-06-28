@@ -6,6 +6,7 @@ import tempfile
 
 import pandas as pd
 from fastapi import APIRouter
+from fastapi import BackgroundTasks
 from fastapi import Depends
 from fastapi import File
 from fastapi import Form
@@ -23,6 +24,8 @@ from app.schemas.upload import UploadResponse
 from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
 from app.services.ingest_service import coerce_frame
+from app.services.analytics_materialize_service import materialize_case
+from app.core.database import SessionLocal
 from app.services.ingest_service import resolve_columns
 from app.utils.validators import ensure_columns
 
@@ -124,9 +127,20 @@ def _harvest_towers(db: Session, df) -> int:
     return added
 
 
+def _bg_materialize(case_id: str | None) -> None:
+    """Spawn a fresh Session for background analytics so the upload Session can
+    close normally — BackgroundTasks run after the response is sent."""
+    db = SessionLocal()
+    try:
+        materialize_case(db, case_id)
+    finally:
+        db.close()
+
+
 @router.post("/cdr", response_model=UploadResponse)
 async def upload_cdr(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     case_id: str = Form(""),
     mode: str = Form("replace"),
@@ -196,6 +210,7 @@ async def upload_cdr(
         log_action(db, user, request, "upload", case_id=case_id or None,
                    detail={"kind": "cdr", "mode": mode.lower(), "rows_imported": len(records),
                            "rows_dropped": report["rows_dropped"], "filename": file.filename})
+        background_tasks.add_task(_bg_materialize, case_id or None)
         return UploadResponse(success=True, records_imported=len(records), validation=report)
     except HTTPException:
         db.rollback()
@@ -211,6 +226,7 @@ async def upload_cdr(
 @router.post("/ipdr", response_model=UploadResponse)
 async def upload_ipdr(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     case_id: str = Form(""),
     mode: str = Form("replace"),
@@ -284,6 +300,7 @@ async def upload_ipdr(
         log_action(db, user, request, "upload", case_id=case_id or None,
                    detail={"kind": "ipdr", "mode": mode.lower(), "rows_imported": len(records),
                            "rows_dropped": report["rows_dropped"], "filename": file.filename})
+        background_tasks.add_task(_bg_materialize, case_id or None)
         return UploadResponse(success=True, records_imported=len(records), validation=report)
     except HTTPException:
         db.rollback()

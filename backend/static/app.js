@@ -1380,7 +1380,9 @@ async function handleUploadConfirmed(kind,file,route,mode,mapping){
     D.importStatus.textContent=msg;
     try{toast('✓ '+msg);}catch(e){}
     if(v&&(v.rows_dropped||v.date_failures))showValidationReport(kind,v);
-    await loadCaseData()}catch(e){D.importStatus.textContent='Upload failed: '+(e.message||'error');try{toast('Upload failed: '+(e.message||'error'));}catch(_){}console.error(e)}
+    await loadCaseData();
+    if(kind==='cdr'||kind==='ipdr'){setTimeout(()=>{try{toast('⚙ Computing analytics in background — charts & reports will be instant on next open.');}catch(e){}},800);}
+  }catch(e){D.importStatus.textContent='Upload failed: '+(e.message||'error');try{toast('Upload failed: '+(e.message||'error'));}catch(_){}console.error(e)}
 }
 
 // Surface what the ingest coerced or dropped so silent misparsing becomes visible.
@@ -3242,8 +3244,10 @@ D.tlCompare.addEventListener('change',renderTimeline);
 async function renderCharts(){
   if(!_tabNeedsRender('charts'))return;
   const qp=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
-  try{state._cd=await API.get('/analysis/chart-data'+qp);}
-  catch(e){console.error('chart-data fetch:',e);return;} // don't mark rendered — tab switch will retry
+  try{
+    const mat=await API.get('/analytics/dashboard'+qp).catch(()=>null);
+    state._cd=(mat&&Object.keys(mat).length)?mat:await API.get('/analysis/chart-data'+qp);
+  }catch(e){console.error('chart-data fetch:',e);return;} // don't mark rendered — tab switch will retry
   renderChartServicePie();
   renderChartHourly();
   renderChartTopContacts();
@@ -6596,7 +6600,9 @@ async function renderAnalysisReports(){
   const qp=new URLSearchParams({sub});
   if(activeCaseId)qp.set('case_id',activeCaseId);
   try{
-    const data=await API.get('/analysis/cdr-reports?'+qp.toString());
+    // Try materialised cache first; fall back to live CDR endpoint on miss
+    const matData=await API.get('/analytics/reports?'+qp.toString()).catch(()=>null);
+    const data=matData&&(matData.total_records!==undefined)?matData:await API.get('/analysis/cdr-reports?'+qp.toString());
     if(!data.total_records){
       // Try IPDR-native reports for this subject before declaring "no data"
       const iqp=new URLSearchParams({sub});
