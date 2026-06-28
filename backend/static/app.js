@@ -1815,7 +1815,7 @@ function renderCaseSummary(){
     {l:'Meetings',v:'<span id="dashMeetVal" style="color:var(--muted)">…</span>',sub:'<span id="dashMeetSub" style="color:var(--muted)">computing…</span>'},
     {l:'Comm. Direction',v:dirCounts.mo||dirCounts.mt?n(dirCounts.mo)+'MO / '+n(dirCounts.mt)+'MT':'n/a',sub:''},
     {l:'Activity Spikes',v:n(bursts),sub:'Anomalous days'},
-    {l:'Case Span',v:span,sub:times.length?new Date(Math.min(...times)).toLocaleDateString()+' — '+new Date(Math.max(...times)).toLocaleDateString():''},
+    {l:'Case Span',v:span,sub:_spanMax>-Infinity?new Date(_spanMin).toLocaleDateString()+' — '+new Date(_spanMax).toLocaleDateString():''},
   ].map(c=>`<div class="cs-item"><div class="cs-label">${c.l}</div><div class="cs-value">${c.v}</div>${c.sub?'<div class="cs-sub">'+c.sub+'</div>':''}</div>`).join('');
   D.csMeta.textContent=`${totalSubjects} subjects — ${totalCdr+totalIpdr} records — ${allCnts.size} contacts — ${span}`;
   refreshDashMeetings();
