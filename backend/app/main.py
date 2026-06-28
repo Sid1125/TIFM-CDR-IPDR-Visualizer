@@ -46,9 +46,24 @@ from app.models import tower_dump  # noqa: F401
 from app.models import subscriber  # noqa: F401
 
 from fastapi.middleware.gzip import GZipMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 app = FastAPI(title=settings.APP_NAME)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+class _StaticCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path in ("/static/app.js", "/static/styles.css"):
+            response.headers["Cache-Control"] = "no-cache"
+        elif path.startswith("/static/vendor/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
+app.add_middleware(_StaticCacheMiddleware)
 static_dir = Path(__file__).resolve().parents[1] / "static"
 
 
