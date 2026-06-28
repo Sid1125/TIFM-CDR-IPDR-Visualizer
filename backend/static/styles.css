@@ -137,6 +137,8 @@ a{color:var(--accent);text-decoration:none}
 .tl-toolbar select,.tl-toolbar input{padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:0.82rem}
 .tl-toolbar input{flex:1;max-width:300px}
 .tl-count{font-size:0.8rem;color:var(--muted);margin-left:auto}
+.tl-more-btn{display:block;width:100%;padding:10px;margin:6px 0;background:var(--surface);border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-size:0.8rem;cursor:pointer;text-align:center;transition:background 0.12s}
+.tl-more-btn:hover{background:var(--accent-light);color:var(--accent)}
 .tl-container{padding:8px 0;overflow-y:auto;height:calc(100vh - 132px)}
 .tl-entity{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:7px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:box-shadow 0.15s}
 .tl-entity:hover{box-shadow:0 2px 8px rgba(0,0,0,0.07)}

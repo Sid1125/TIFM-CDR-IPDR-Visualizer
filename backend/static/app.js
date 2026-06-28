@@ -16,6 +16,38 @@ function debounce(fn,ms=220){let t;return(...a)=>{clearTimeout(t);t=setTimeout((
 function _totalCdrFn(){return(state._cdrStats&&state._cdrStats.total_records)||state.cdr.length||0;}
 function _totalIpdrFn(){return(state._ipdrStats&&state._ipdrStats.total_records)||state.ipdr.length||0;}
 
+// ── Shared analytics caches ──────────────────────────────────────────────────
+// Keyed by entity name; invalidated automatically when allRows grows (background load).
+const _rSess={},_rIdent={};let _cacheRowLen=-1;
+function _clearAnalyticsCaches(){
+  if(allRows.length===_cacheRowLen)return;
+  _cacheRowLen=allRows.length;
+  Object.keys(_rSess).forEach(k=>delete _rSess[k]);
+  Object.keys(_rIdent).forEach(k=>delete _rIdent[k]);
+  _dashAgg=null;_dashAggLen=-1;  // also stale — recompute on next renderDashboard
+}
+// Single-pass dashboard aggregation cache — 7 allRows passes → 1
+let _dashAgg=null,_dashAggLen=-1;
+function _getDashAgg(){
+  if(_dashAggLen===allRows.length&&_dashAgg)return _dashAgg;
+  const contactCounts={},towerCounts={},svcCounts={},subDays=new Map();
+  let totalEvents=0;
+  for(const r of allRows){
+    if(r.cnt)contactCounts[r.cnt]=(contactCounts[r.cnt]||0)+1;
+    if(r.tow)towerCounts[r.tow]=(towerCounts[r.tow]||0)+1;
+    const sv=r.svc||'Unknown';svcCounts[sv]=(svcCounts[sv]||0)+1;
+    if(r.type==='CDR'||(r.type==='IPDR'&&r.svc))totalEvents++;
+    if(r.ts&&r.sub){const d=r.ts.slice(0,10);if(!subDays.has(r.sub))subDays.set(r.sub,new Map());subDays.get(r.sub).set(d,(subDays.get(r.sub).get(d)||0)+1);}
+  }
+  // reconstructSessions is self-caching — calling per-subject here populates cache for the tabs
+  const totalSessions=state.subjects.reduce((sum,s)=>sum+reconstructSessions(s).length,0);
+  let totalBursts=0;
+  subDays.forEach(days=>{const counts=[...days.values()];if(counts.length<3)return;const avg=counts.reduce((a,c)=>a+c,0)/counts.length,thr=Math.max(avg*3,20);days.forEach(c=>{if(c>=thr)totalBursts++;});});
+  _dashAgg={contactCounts,towerCounts,svcCounts,totalEvents,totalSessions,totalBursts};
+  _dashAggLen=allRows.length;
+  return _dashAgg;
+}
+
 // Background loader: fetches ALL remaining records after the initial 500-row paint.
 // Once done, allRows has the full dataset and features like timeline/map/story/graph work accurately.
 let _bgLoadGen=0;
@@ -445,6 +477,8 @@ const DISTINCTIVE_INDICATORS=[
 // -- Identity Resolution --
 // Builds per-subject identity profiles linking MSISDN, IMEI, IMSI
 function buildIdentityProfile(sub){
+  _clearAnalyticsCaches();
+  if(_rIdent[sub])return _rIdent[sub];
   // Only records the subject OWNS (their own device/SIM) describe their identity. A
   // record where the subject is merely the counterpart (callee) carries the *other*
   // party's imei/imsi/msisdn — including those produced bogus "SIM swaps".
@@ -490,7 +524,7 @@ function buildIdentityProfile(sub){
       s.msisdns.forEach(m=>{if(!id.msisdns.includes(m))id.msisdns.push(m)});
     }
   });
-  return{identities,changes};
+  return(_rIdent[sub]={identities,changes});
 }
 // -- Dataset Quality Metrics --
 function computeQualityMetrics(){
@@ -1074,6 +1108,8 @@ function recPortFamily(r){
 // parallel sessions instead of fragmenting, and each track splits on a family-adaptive
 // idle gap rather than one fixed threshold.
 function reconstructSessions(entity){
+  _clearAnalyticsCaches();
+  if(_rSess[entity])return _rSess[entity];
   // IPDR data sessions belong to IP subjects (source/destination IP), not to phone numbers —
   // CDR/IPDR are kept strictly separate, so a phone (CDR) subject is voice/SMS only and has no
   // data sessions of its own. Match the entity only as a source/destination IP; do NOT join
@@ -1097,7 +1133,7 @@ function reconstructSessions(entity){
   }
   Object.keys(open).forEach(flush);
   sessions.sort((a,b)=>new Date(a.start)-new Date(b.start));
-  return sessions;
+  return(_rSess[entity]=sessions);
 }
 // -- Timeline Narrative Engine --
 // Builds a chronological narrative: Communication ? Movement ? Meetings ? Service Usage
@@ -1390,18 +1426,13 @@ function renderDashboard(){
   }
   const total=_totalCdrFn()+_totalIpdrFn();
   const totalCdr=_totalCdrFn(),totalIpdr=_totalIpdrFn();
-  // Compute sessions and events separately
-  const sessionCounts=new Map();allRows.forEach(r=>{const k=r.sub;if(k){sessionCounts.set(k,(sessionCounts.get(k)||0)+1)}});
-  const totalSessions=state.subjects.reduce((sum,s)=>sum+reconstructSessions(s).length,0);
-  const totalEvents=allRows.filter(r=>r.type==='CDR'||(r.type==='IPDR'&&r.svc)).length;
-  // Use server stats for accurate totals; allRows sample for contact/tower/svc approximations
-  const uniqueContactsCount=(state._cdrStats&&state._cdrStats.unique_b_party)||new Set(allRows.map(r=>r.cnt).filter(Boolean)).size;
-  const uniqueSubjectsCount=(state._cdrStats&&state._cdrStats.unique_a_party)||new Set(allRows.map(r=>r.sub).filter(Boolean)).size;
-  const contactCounts={};allRows.forEach(r=>{if(r.cnt)contactCounts[r.cnt]=(contactCounts[r.cnt]||0)+1});
+  // Single-pass aggregation (cached; rebuilds when allRows grows after background load)
+  const{contactCounts,towerCounts,svcCounts,totalEvents,totalSessions,totalBursts}=_getDashAgg();
+  // Server stats for accurate totals; sample for top-N approximations
+  const uniqueContactsCount=(state._cdrStats&&state._cdrStats.unique_b_party)||Object.keys(contactCounts).length;
+  const uniqueSubjectsCount=(state._cdrStats&&state._cdrStats.unique_a_party)||state.subjects.length;
   const topContact=Object.entries(contactCounts).sort((a,b)=>b[1]-a[1])[0];
-  const towerCounts={};allRows.forEach(r=>{if(r.tow)towerCounts[r.tow]=(towerCounts[r.tow]||0)+1});
   const topTower=Object.entries(towerCounts).sort((a,b)=>b[1]-a[1])[0];
-  const svcCounts={};allRows.forEach(r=>{const s=r.svc||'Unknown';svcCounts[s]=(svcCounts[s]||0)+1});
   const topSvc=Object.entries(svcCounts).sort((a,b)=>b[1]-a[1])[0];
 
   // Hero: case name + live one-line summary
@@ -1435,18 +1466,7 @@ function renderDashboard(){
       });
       return {l:'Geo-fenced Records',v:n(inside),d:'Within drawn geofence',cat:'warn'};
     })():null,
-    (()=>{
-      // Burst detection for dashboard
-      const subDays=new Map();
-      allRows.forEach(r=>{if(!r.ts||!r.sub)return;const d=new Date(r.ts).toLocaleDateString();if(!subDays.has(r.sub))subDays.set(r.sub,new Map());subDays.get(r.sub).set(d,(subDays.get(r.sub).get(d)||0)+1)});
-      let totalBursts=0;
-      subDays.forEach((days,sub)=>{
-        const counts=[...days.values()];if(counts.length<3)return;
-        const avg=counts.reduce((a,c)=>a+c,0)/counts.length;const thr=Math.max(avg*3,20);
-        days.forEach((c,d)=>{if(c>=thr)totalBursts++});
-      });
-      return totalBursts?{l:'Activity Spikes',v:n(totalBursts),d:'Days with anomalous volume',cat:'alert'}:null;
-    })(),
+    totalBursts?{l:'Activity Spikes',v:n(totalBursts),d:'Days with anomalous volume',cat:'alert'}:null,
   ].filter(Boolean).map(c=>`<div class="dash-card ${c.cat||''}"><div class="dash-label">${c.l}</div><div class="dash-value">${c.v}</div><div class="dash-detail">${c.d}</div></div>`).join('');
 
   renderCaseSummary();
@@ -1815,7 +1835,7 @@ let mapInstance=null,mapLayers=[],mapMarkers=[],mapPolyline=null,mapCircles=[],m
 async function initMap(){
   if(!state.geoRecords)await loadGeoData();
   if(!mapInstance){
-    mapInstance=L.map(D.mapStage,{zoomControl:true}).setView([20.5937,78.9629],5);
+    mapInstance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
     setTimeout(()=>mapInstance.invalidateSize(),100);
     initGeofenceListeners();
@@ -1840,7 +1860,7 @@ async function showTower(towerId){
   document.querySelectorAll('.tab-content').forEach(s=>s.classList.toggle('active',s.id==='tab-map'));
   if(!state.geoRecords)await loadGeoData();
   if(!mapInstance){
-    mapInstance=L.map(D.mapStage,{zoomControl:true}).setView([20.5937,78.9629],5);
+    mapInstance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
     initGeofenceListeners();
   }
@@ -2566,7 +2586,10 @@ async function showMapAnchors(sub){
   const mv=((rep.cdr&&rep.cdr.movement)||{})[sub];
   if(!mv||!mv.anchors){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">No anchors for this subject.</p>';return;}
   const bounds=[];
-  geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null).forEach(r=>{const mk=L.circleMarker([r.latitude,r.longitude],{radius:3,color:'#888',weight:1,fillColor:'#888',fillOpacity:0.35}).addTo(mapInstance);mapMarkers.push(mk);bounds.push([r.latitude,r.longitude]);});
+  const MAP_PT_CAP=2000;
+  const pts=geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null);
+  const capped=pts.length>MAP_PT_CAP;
+  pts.slice(0,MAP_PT_CAP).forEach(r=>{const mk=L.circleMarker([r.latitude,r.longitude],{radius:3,color:'#888',weight:1,fillColor:'#888',fillOpacity:0.35}).addTo(mapInstance);mapMarkers.push(mk);bounds.push([r.latitude,r.longitude]);});
   const place=(anchor,label,color)=>{
     if(!anchor||anchor.latitude==null)return;
     const mk=L.circleMarker([anchor.latitude,anchor.longitude],{radius:12,color:'#fff',weight:3,fillColor:color,fillOpacity:0.92}).addTo(mapInstance);
@@ -2576,7 +2599,7 @@ async function showMapAnchors(sub){
   place(mv.anchors.home,'Home','#2c6f79');
   place(mv.anchors.work,'Work','#2d7d46');
   if(bounds.length)mapInstance.fitBounds(bounds,{padding:[50,50]});
-  let h='<h4 style="margin:0 0 6px">Anchors — '+esc(sub)+'</h4>';
+  let h='<h4 style="margin:0 0 6px">Anchors — '+esc(sub)+'</h4>'+(capped?`<p style="color:var(--warn);font-size:0.72rem;margin:0 0 6px">Showing first ${n(MAP_PT_CAP)} of ${n(pts.length)} positions (canvas renderer active)</p>`:'');
   h+='<div class="stat-row"><span class="label">Home tower</span><span class="value">'+(mv.anchors.home?twr(mv.anchors.home.tower_id):'?')+'</span></div>';
   h+='<div class="stat-row"><span class="label">Work tower</span><span class="value">'+(mv.anchors.work?twr(mv.anchors.work.tower_id):'?')+'</span></div>';
   h+='<div class="stat-row"><span class="label">Distinct towers</span><span class="value">'+mv.distinct_towers+'</span></div>';
@@ -2992,6 +3015,11 @@ function playMapTimeFn(){if(!mapTimePlaying||!mapTimeData.length)return;D.mapTim
 // ====== 4. ENTITY TIMELINE ======
 const SVC_COLORS={WhatsApp:'#25D366',Telegram:'#0088cc',Signal:'#3A76F0',Instagram:'#E4405F','Facebook/Messenger':'#1877F2',Threads:'#000000',Discord:'#5865F2',YouTube:'#FF0000',Zoom:'#2D8CFF','MS Teams':'#6264A7',Skype:'#00AFF0',Outlook:'#0078D4',OneDrive:'#0078D4','Xbox Live':'#107C10',LinkedIn:'#0A66C2',Webex:'#00BFFF',Slack:'#4A154B',Snapchat:'#FFFC00','X (Twitter)':'#1DA1F2',Reddit:'#FF4500',Netflix:'#E50914',Spotify:'#1DB954',Steam:'#171A21','Riot Games':'#EB0029','Epic Games':'#313131','Battle.net':'#148EFF','PlayStation Network':'#003087',GitHub:'#181717',GitLab:'#FCA121','Docker Hub':'#2496ED',ChatGPT:'#10A37F','OpenAI API':'#10A37F',Claude:'#D97757',Perplexity:'#1F8EF1',ProtonVPN:'#8B5CF6','Proton Mail':'#8B5CF6',NordVPN:'#4687FF',ExpressVPN:'#DA2020',Mullvad:'#1E1E1E',Surfshark:'#00AC4E','Quad9 DNS':'#F8C630',OpenDNS:'#FF6B00','Yahoo Mail':'#6001D1',Dropbox:'#0061FF',Mega:'#D90007',PayPal:'#00457C',PhonePe:'#5F259F',Paytm:'#00BAF2',Flipkart:'#2874F0',Myntra:'#E50046','Disney+':'#113CCF',Tor:'#7B4F9C','Google Search':'#4285F4',Gmail:'#4285F4','Google Meet':'#4285F4','Google Drive':'#4285F4','Google DNS':'#4285F4','Google Pay':'#4285F4',Gemini:'#4285F4',iMessage:'#34C759',FaceTime:'#34C759',iCloud:'#A2AAAD','Apple Push':'#A2AAAD','Amazon AWS':'#FF9900','Amazon.com':'#FF9900','Prime Video':'#FF9900','Amazon Pay':'#FF9900','Cloudflare CDN':'#F38040','Akamai CDN':'#0099CC','Fastly CDN':'#FF282D','Oracle Cloud':'#F80000',DigitalOcean:'#0080FF',OVH:'#1230F0',CDR:'#2c6f79',IPDR:'#b94a48'};
 function svcColor(s){return SVC_COLORS[s]||'#8a7a6a'}
+// Entity store for lazy timeline body rendering \u2014 keyed by index in the current render pass
+window._tlEntityStore={};
+const _tlOpenEntities=new Set();  // persist open state across re-renders
+const TL_PAGE=80;                  // entities rendered per page
+
 function renderTimeline(){
   if(!allRows.length)return;
   // Populate compare dropdown
@@ -3003,11 +3031,11 @@ function renderTimeline(){
   let rows=allRows;
   if(type)rows=rows.filter(r=>r.type===type);
   const entityMap={};
-  rows.forEach(r=>{
+  for(const r of rows){
     const entities=[];
     if(r.sub)entities.push(r.sub);
     if(r.cnt&&r.cnt!==r.sub)entities.push(r.cnt);
-    entities.forEach(e=>{
+    for(const e of entities){
       if(!entityMap[e])entityMap[e]={entity:e,events:[],types:new Set(),contacts:new Set(),first:r.ts,last:r.ts,count:0};
       entityMap[e].events.push(r);
       entityMap[e].types.add(r.type);
@@ -3015,109 +3043,167 @@ function renderTimeline(){
       if(r.sub&&r.sub!==e)entityMap[e].contacts.add(r.sub);
       if(r.ts){if(!entityMap[e].first||r.ts<entityMap[e].first)entityMap[e].first=r.ts;if(!entityMap[e].last||r.ts>entityMap[e].last)entityMap[e].last=r.ts}
       entityMap[e].count++;
-    });
-  });
+    }
+  }
   let entities=Object.values(entityMap).sort((a,b)=>b.count-a.count);
   if(q)entities=entities.filter(e=>e.entity.toLowerCase().includes(q));
-  const acts=['Chat','Call','Video','Data','Voice','Conf','Stream','Msg'];
   D.tlCount.textContent=`${entities.length} entities`;
+
   if(compare&&compare!==entities[0]?.entity){
+    // Compare mode: render full bodies for exactly 2 entities (already fast)
     const e1=entities.find(e=>e.entity===compare);
     const e2=entities.find(e=>e.entity!==compare);
     D.tlContainer.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
       [e1,e2].filter(Boolean).map(ent=>'<div><h4 style="font-size:0.85rem;margin:0 0 8px;color:var(--muted)">'+esc(ent.entity)+'</h4>'+
         renderEntityTimeline(ent)+'</div>'
       ).join('')+'</div>';
-  }else{
-    D.tlContainer.innerHTML=entities.map(e=>renderEntityTimeline(e)).join('');
+    return;
   }
-  // Attach toggle + restore open entities after render
-  D.tlContainer.querySelectorAll('.tl-entity').forEach(el=>{
-      const nm=el.querySelector('.tl-entity-name');
+
+  // Lazy-body mode: render headers only; bodies generated on first expand
+  window._tlEntityStore={};
+  const page=entities.slice(0,TL_PAGE);
+  const more=entities.length-TL_PAGE;
+  page.forEach((e,i)=>{window._tlEntityStore[i]=e;});
+  D.tlContainer.innerHTML=
+    page.map((e,i)=>_tlEntityHeader(e,i)).join('')+
+    (more>0?`<button class="tl-more-btn" onclick="_tlLoadMore(this,${TL_PAGE})">${more} more entities \u2014 click to load</button>`:'');
+  // Restore previously-open entities
+  D.tlContainer.querySelectorAll('.tl-entity[data-eidx]').forEach(el=>{
+    const e=window._tlEntityStore[+el.dataset.eidx];
+    if(e&&_tlOpenEntities.has(e.entity)){
       const body=el.querySelector('.tl-entity-body');
-      const arrow=el.querySelector('.tl-entity-arrow');
-      if(nm){
-        nm.style.cursor='pointer';
-        nm.onclick=()=>{
-          const isOpen=el.classList.toggle('open');
-          if(body)body.style.display=isOpen?'block':'none';
-          if(arrow)arrow.textContent=isOpen?'\u25BC':'\u25B6';
-          if(isOpen)tlOpenEntities.add(nm.textContent);
-          else tlOpenEntities.delete(nm.textContent);
-};
-const tlOpenEntities=new Set();
-        if(tlOpenEntities.has(nm.textContent)){
-          if(body)body.style.display='block';
-          el.classList.add('open');
-          if(arrow)arrow.textContent='\u25BC';
-        }
-      }
-    });
+      if(body&&!body.dataset.rendered){body.innerHTML=renderEntityBody(e);body.dataset.rendered='1';}
+      body.style.display='block';el.classList.add('open');
+      const arrow=el.querySelector('.tl-entity-arrow');if(arrow)arrow.textContent='\u25BC';
+    }
+  });
 }
-function renderEntityTimeline(e){
-  const sessions=reconstructSessions(e.entity);
-  const sCnt=sessions.length;
-    // Build a compact activity density strip from events
-    const evSorted=e.events.sort((a,b)=>new Date(a.ts)-new Date(b.ts));
-    const firstT=evSorted.length?new Date(evSorted[0].ts).getTime():0;
-    const lastT=evSorted.length?new Date(evSorted[evSorted.length-1].ts).getTime():0;
-    const span=Math.max(lastT-firstT,1);
-    // Sample 50 buckets for density
-    const density=Array(50).fill(0);
-    evSorted.forEach(r=>{if(r.ts){const idx=Math.min(49,Math.floor((new Date(r.ts).getTime()-firstT)/span*49));density[idx]++}});
-    const maxD=Math.max(...density,1);
-    return `
-    <div class="tl-entity">
-      <div class="tl-entity-head" onclick="toggleEntity(this)">
-        <span class="tl-entity-name">${esc(e.entity)}</span>
-        <span class="tl-entity-meta">${e.count} events${sCnt?` &middot; ${sCnt} sessions`:''} &middot; ${e.contacts.size} contacts</span>
-        <div class="tl-density">${density.map(d=>`<i style="height:${Math.max(2,(d/maxD)*14)}px"></i>`).join('')}</div>
-        <span class="tl-entity-arrow">&#9654;</span>
-      </div>
-      <div class="tl-entity-body" style="display:none">
-        ${sCnt?`<div class="tl-gantt">${sessions.map(s=>{
-          const svcName=s.primary?s.primary.service:(s.service||'');
-          const c=svcColor(svcName);
-          const st=s.start?new Date(s.start).getTime():firstT;
-          const et=s.end?new Date(s.end).getTime():lastT;
-          const left=Math.max(0,((st-firstT)/span)*100);
-          const w=Math.max(2,((et-st)/span)*100);
-          const evText=Array.isArray(s.evidence)?s.evidence.join(', '):(s.evidence||'');
-          const disLabel=s.activityLabel||s.activity||'';
-          const attr=esc(disLabel)+(s.serviceConfidence?` (${Math.round(s.serviceConfidence)}%)`:'');
-          const badgeLabel=s.serviceLabel||s.service||svcName;
-          const alts=s.candidates&&s.candidates.length?JSON.stringify(s.candidates.slice(0,4)):'';
-          const sid='sess_'+s.start+'_'+Math.random().toString(36).slice(2,6);
-          window.evSessions=window.evSessions||{};window.evSessions[sid]=s;
-          return `<div class="tl-gantt-bar" style="margin-left:${left}%;width:${w}%;background:${c}18;border-left:2px solid ${c}"
-            data-svc="${esc(svcName)}" data-attr="${attr}" data-start="${s.start||''}" data-end="${s.end||''}" data-dur="${s.duration}" data-conf="${s.serviceConfidence?Math.round(s.serviceConfidence):''}" data-ev="${esc(evText)}" data-alts="${esc(alts)}" data-sid="${sid}" data-recs="${s.records||0}"
-            onmouseover="showGanttTip(this,event)" onmouseout="scheduleHideGanttTip()">
-            <span style="background:${c}">${esc(badgeLabel)}</span> ${esc(disLabel)} <em>${s.duration>=60?Math.floor(s.duration/60)+'m':s.duration+'s'}</em>
-          </div>`;
-        }).join('')}</div>`:''}
-        <div class="tl-events">${evSorted.slice(-50).reverse().map(r=>`
-          <div class="tl-ev" onclick="event.stopPropagation();showProfile('${esc(r.sub||r.cnt||'')}')">
-            <span class="tl-ev-time">${fmts(r.ts)}</span>
-            <span class="tl-ev-dot" style="background:${r.type==='IPDR'?'#b94a48':'var(--accent)'}"></span>
-            <span class="tl-ev-type${r.type==='IPDR'?' ipdr':''}">${r.type}</span>
-            <span class="tl-ev-peer">${esc(r.cnt||r.sub||'')}</span>
-            <span class="tl-ev-meta">${r.dur?r.dur+'s':''} ${esc(r.cll||r.prot||'')}</span>
-            <span class="tl-ev-svc">${r.type==='IPDR'?esc(recordSvcAttr(r)||r.svc||''):esc(r.svc||'')}</span>
-          </div>
-        `).join('')}</div>
-      </div>
-    </div>`;
+
+function _tlEntityHeader(e,i){
+  const evSorted=e.events.slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const firstT=evSorted.length?new Date(evSorted[0].ts).getTime():0;
+  const lastT=evSorted.length?new Date(evSorted[evSorted.length-1].ts).getTime():0;
+  const span=Math.max(lastT-firstT,1);
+  const density=Array(50).fill(0);
+  evSorted.forEach(r=>{if(r.ts){const idx=Math.min(49,Math.floor((new Date(r.ts).getTime()-firstT)/span*49));density[idx]++;}});
+  const maxD=Math.max(...density,1);
+  return `<div class="tl-entity" data-eidx="${i}">
+    <div class="tl-entity-head" onclick="tlToggleEntity(this)">
+      <span class="tl-entity-name">${esc(e.entity)}</span>
+      <span class="tl-entity-meta">${e.count} events &middot; ${e.contacts.size} contacts</span>
+      <div class="tl-density">${density.map(d=>`<i style="height:${Math.max(2,(d/maxD)*14)}px"></i>`).join('')}</div>
+      <span class="tl-entity-arrow">&#9654;</span>
+    </div>
+    <div class="tl-entity-body" style="display:none"></div>
+  </div>`;
 }
-function toggleEntity(el){
-  const card=el.closest('.tl-entity');
+
+function _tlLoadMore(btn,offset){
+  const entities=Object.values(window._tlEntityStore||{});
+  // _tlEntityStore only holds the first page; need the full list from the DOM context
+  // Re-render remaining entities by rebuilding from allRows filtered to current query
+  const type=D.tlType.value,q=D.tlSearch.value.trim().toLowerCase();
+  let rows=allRows;if(type)rows=rows.filter(r=>r.type===type);
+  const entityMap={};
+  for(const r of rows){
+    const ents=[];if(r.sub)ents.push(r.sub);if(r.cnt&&r.cnt!==r.sub)ents.push(r.cnt);
+    for(const e of ents){
+      if(!entityMap[e])entityMap[e]={entity:e,events:[],types:new Set(),contacts:new Set(),first:r.ts,last:r.ts,count:0};
+      entityMap[e].events.push(r);entityMap[e].types.add(r.type);
+      if(r.cnt&&r.cnt!==e)entityMap[e].contacts.add(r.cnt);if(r.sub&&r.sub!==e)entityMap[e].contacts.add(r.sub);
+      entityMap[e].count++;
+    }
+  }
+  let all=Object.values(entityMap).sort((a,b)=>b.count-a.count);
+  if(q)all=all.filter(e=>e.entity.toLowerCase().includes(q));
+  const next=all.slice(offset,offset+TL_PAGE);
+  const remaining=all.length-offset-TL_PAGE;
+  next.forEach((e,j)=>{window._tlEntityStore[offset+j]=e;});
+  const frag=document.createDocumentFragment();
+  next.forEach((e,j)=>{ const div=document.createElement('div');div.innerHTML=_tlEntityHeader(e,offset+j);frag.appendChild(div.firstElementChild); });
+  const newBtn=remaining>0?Object.assign(document.createElement('button'),{className:'tl-more-btn',textContent:remaining+' more entities \u2014 click to load',onclick:()=>_tlLoadMore(newBtn,offset+TL_PAGE)}):null;
+  btn.replaceWith(frag,...(newBtn?[newBtn]:[]));
+}
+
+function tlToggleEntity(head){
+  const card=head.closest('.tl-entity');
+  if(!card)return;
   const body=card.querySelector('.tl-entity-body');
   const arrow=card.querySelector('.tl-entity-arrow');
-  const open=body.style.display!=='none';
-  body.style.display=open?'none':'block';
-  card.classList.toggle('open',!open);
-  arrow.textContent=open?'\u25B6':'\u25BC';
+  const isOpen=!card.classList.contains('open');
+  card.classList.toggle('open',isOpen);
+  body.style.display=isOpen?'block':'none';
+  if(arrow)arrow.textContent=isOpen?'\u25BC':'\u25B6';
+  const e=window._tlEntityStore&&window._tlEntityStore[+card.dataset.eidx];
+  if(e){
+    if(isOpen)_tlOpenEntities.add(e.entity); else _tlOpenEntities.delete(e.entity);
+    if(isOpen&&!body.dataset.rendered){body.innerHTML=renderEntityBody(e);body.dataset.rendered='1';}
+  }
 }
-D.tlSearch.addEventListener('input',renderTimeline);
+// Body-only renderer \u2014 called lazily when user first expands an entity card.
+// Uses cached reconstructSessions so the per-entity cost is paid once.
+function renderEntityBody(e){
+  const sessions=reconstructSessions(e.entity);  // cached
+  const evSorted=e.events.slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const firstT=evSorted.length?new Date(evSorted[0].ts).getTime():0;
+  const lastT=evSorted.length?new Date(evSorted[evSorted.length-1].ts).getTime():0;
+  const span=Math.max(lastT-firstT,1);
+  const gantt=sessions.length?`<div class="tl-gantt">${sessions.map(s=>{
+    const svcName=s.primary?s.primary.service:(s.service||'');
+    const c=svcColor(svcName);
+    const st=s.start?new Date(s.start).getTime():firstT;
+    const et=s.end?new Date(s.end).getTime():lastT;
+    const left=Math.max(0,((st-firstT)/span)*100);
+    const w=Math.max(2,((et-st)/span)*100);
+    const evText=Array.isArray(s.evidence)?s.evidence.join(', '):(s.evidence||'');
+    const disLabel=s.activityLabel||s.activity||'';
+    const attr=esc(disLabel)+(s.serviceConfidence?` (${Math.round(s.serviceConfidence)}%)`:'');
+    const badgeLabel=s.serviceLabel||s.service||svcName;
+    const alts=s.candidates&&s.candidates.length?JSON.stringify(s.candidates.slice(0,4)):'';
+    const sid='sess_'+s.start+'_'+Math.random().toString(36).slice(2,6);
+    window.evSessions=window.evSessions||{};window.evSessions[sid]=s;
+    return `<div class="tl-gantt-bar" style="margin-left:${left}%;width:${w}%;background:${c}18;border-left:2px solid ${c}"
+      data-svc="${esc(svcName)}" data-attr="${attr}" data-start="${s.start||''}" data-end="${s.end||''}" data-dur="${s.duration}" data-conf="${s.serviceConfidence?Math.round(s.serviceConfidence):''}" data-ev="${esc(evText)}" data-alts="${esc(alts)}" data-sid="${sid}" data-recs="${s.records||0}"
+      onmouseover="showGanttTip(this,event)" onmouseout="scheduleHideGanttTip()">
+      <span style="background:${c}">${esc(badgeLabel)}</span> ${esc(disLabel)} <em>${s.duration>=60?Math.floor(s.duration/60)+'m':s.duration+'s'}</em>
+    </div>`;
+  }).join('')}</div>`:'';
+  const eventRows=evSorted.slice(-50).reverse().map(r=>`
+    <div class="tl-ev" onclick="event.stopPropagation();showProfile('${esc(r.sub||r.cnt||'')}')">
+      <span class="tl-ev-time">${fmts(r.ts)}</span>
+      <span class="tl-ev-dot" style="background:${r.type==='IPDR'?'#b94a48':'var(--accent)'}"></span>
+      <span class="tl-ev-type${r.type==='IPDR'?' ipdr':''}">${r.type}</span>
+      <span class="tl-ev-peer">${esc(r.cnt||r.sub||'')}</span>
+      <span class="tl-ev-meta">${r.dur?r.dur+'s':''} ${esc(r.cll||r.prot||'')}</span>
+      <span class="tl-ev-svc">${r.type==='IPDR'?esc(recordSvcAttr(r)||r.svc||''):esc(r.svc||'')}</span>
+    </div>`).join('');
+  return gantt+'<div class="tl-events">'+eventRows+'</div>';
+}
+
+// Full-card renderer used only for compare mode (exactly 2 entities \u2014 no perf concern)
+function renderEntityTimeline(e){
+  const evSorted=e.events.slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const firstT=evSorted.length?new Date(evSorted[0].ts).getTime():0;
+  const lastT=evSorted.length?new Date(evSorted[evSorted.length-1].ts).getTime():0;
+  const span=Math.max(lastT-firstT,1);
+  const density=Array(50).fill(0);
+  evSorted.forEach(r=>{if(r.ts){const idx=Math.min(49,Math.floor((new Date(r.ts).getTime()-firstT)/span*49));density[idx]++;}});
+  const maxD=Math.max(...density,1);
+  const sessions=reconstructSessions(e.entity);
+  return `<div class="tl-entity open">
+    <div class="tl-entity-head" onclick="tlToggleEntity(this)">
+      <span class="tl-entity-name">${esc(e.entity)}</span>
+      <span class="tl-entity-meta">${e.count} events${sessions.length?` &middot; ${sessions.length} sessions`:''} &middot; ${e.contacts.size} contacts</span>
+      <div class="tl-density">${density.map(d=>`<i style="height:${Math.max(2,(d/maxD)*14)}px"></i>`).join('')}</div>
+      <span class="tl-entity-arrow">&#9660;</span>
+    </div>
+    <div class="tl-entity-body" style="display:block" data-rendered="1">${renderEntityBody(e)}</div>
+  </div>`;
+}
+// Legacy alias used inside old code paths
+function toggleEntity(el){tlToggleEntity(el);}
+D.tlSearch.addEventListener('input',debounce(renderTimeline));
 D.tlType.addEventListener('change',renderTimeline);
 D.tlCompare.addEventListener('change',renderTimeline);
 
