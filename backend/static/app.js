@@ -63,7 +63,8 @@ async function _bgLoadAll(total,caseId,gen){
     if(gen!==_bgLoadGen)return;  // case changed while we were loading
     const more=(page.rows||[]).map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r));
     // Merge into allRows (keep sorted by ts desc)
-    allRows=[...allRows,...more].sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+    allRows=[...allRows,...more].sort((a,b)=>b.tsMs-a.tsMs);
+    _rebuildRowIdx();
     // Expand subjects list
     more.forEach(r=>{if(r.sub)state.subjects.push(r.sub);if(r.cnt)state.subjects.push(r.cnt);});
     state.subjects=[...new Set(state.subjects)].sort();
@@ -304,6 +305,20 @@ function renderMd(t){
 
 // ====== DATA LOADING ======
 let allRows=[];
+// Subject row index: rebuilt whenever allRows changes. Makes rowsFor/ownedRowsFor O(1)
+// instead of O(n) allRows.filter() scans. For 50k rows and 10 subjects this eliminates
+// ~500k iterations per AI render pass.
+let _rowIdx=new Map(),_ownedRowIdx=new Map();
+function _rebuildRowIdx(){
+  _rowIdx=new Map();_ownedRowIdx=new Map();
+  for(const r of allRows){
+    if(r.sub){if(!_rowIdx.has(r.sub))_rowIdx.set(r.sub,[]);_rowIdx.get(r.sub).push(r);}
+    if(r.cnt&&r.cnt!==r.sub){if(!_rowIdx.has(r.cnt))_rowIdx.set(r.cnt,[]);_rowIdx.get(r.cnt).push(r);}
+    if(r.msisdn&&r.msisdn!==r.sub&&r.msisdn!==r.cnt){if(!_rowIdx.has(r.msisdn))_rowIdx.set(r.msisdn,[]);_rowIdx.get(r.msisdn).push(r);}
+    const ok=r.msisdn||r.sub;
+    if(ok){if(!_ownedRowIdx.has(ok))_ownedRowIdx.set(ok,[]);_ownedRowIdx.get(ok).push(r);}
+  }
+}
 let activeCaseId=null;
 // Persist the chosen case across page refreshes (activeCaseId is otherwise in-memory only,
 // so a refresh would reset to whichever case the API returns first).
@@ -339,7 +354,8 @@ async function loadCaseData(){
     const cdrRows=rows.filter(r=>r.rtype==='CDR');
     const ipdrRows=rows.filter(r=>r.rtype==='IPDR');
     state.cdr=cdrRows;state.ipdr=ipdrRows;
-    allRows=rows.map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r)).sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+    allRows=rows.map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r)).sort((a,b)=>b.tsMs-a.tsMs);
+    _rebuildRowIdx();
     // state.subjects = all parties from sample (for timeline, graph, comparison dropdowns)
     const subs=new Set();
     allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
@@ -365,14 +381,14 @@ async function loadCaseData(){
 }
 function nCdr(r){
   const s=r.a_party_number||'',c=r.b_party_number||'';
-  return{type:'CDR',id:'c'+r.id,ts:r.start_time,sub:s,cnt:c,tow:r.tower_id||'',dur:r.duration_seconds,svc:s?'Voice':'Unknown',raw:r,
+  return{type:'CDR',id:'c'+r.id,ts:r.start_time,tsMs:r.start_time?Date.parse(r.start_time):0,sub:s,cnt:c,tow:r.tower_id||'',dur:r.duration_seconds,svc:s?'Voice':'Unknown',raw:r,
     msisdn:r.msisdn,imsi:r.imsi,imei:r.imei,lat:r.latitude,lng:r.longitude,
     cll:r.call_type,dir:r.direction,cell:r.cell_id,tec:r.technology,end:r.end_time,
     case_id:r.case_id,lac:r.lac};
 }
 function nIpdr(r){
   const s=r.source_ip||'',c=r.destination_ip||'';
-  return{type:'IPDR',id:'i'+r.id,ts:r.start_time,sub:s,cnt:c,tow:r.tower_id||'',dur:r.duration_seconds,svc:r.protocol||'Unknown',raw:r,
+  return{type:'IPDR',id:'i'+r.id,ts:r.start_time,tsMs:r.start_time?Date.parse(r.start_time):0,sub:s,cnt:c,tow:r.tower_id||'',dur:r.duration_seconds,svc:r.protocol||'Unknown',raw:r,
     msisdn:r.msisdn,imsi:r.imsi,imei:r.imei,lat:r.latitude,lng:r.longitude,
     bytesUp:r.bytes_uploaded,bytesDn:r.bytes_downloaded,sport:r.source_port,dport:r.destination_port,prot:r.protocol,apn:r.apn,rat:r.rat,end:r.end_time,
     case_id:r.case_id,lac:r.lac,cell:r.cell_id};
@@ -482,11 +498,11 @@ function buildIdentityProfile(sub){
   // Only records the subject OWNS (their own device/SIM) describe their identity. A
   // record where the subject is merely the counterpart (callee) carries the *other*
   // party's imei/imsi/msisdn — including those produced bogus "SIM swaps".
-  const rows=rowsFor(sub).filter(r=>(r.msisdn===sub||r.sub===sub)&&r.ts&&(r.imei||r.imsi||r.msisdn)).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const rows=ownedRowsFor(sub).filter(r=>(r.msisdn===sub||r.sub===sub)&&r.tsMs&&(r.imei||r.imsi||r.msisdn)).sort((a,b)=>a.tsMs-b.tsMs);
   const timeline=[]; // chronological (imei,imsi) state sequence (no dedup)
   const imeiHistory=[],imsiHistory=[];
   rows.forEach(r=>{
-    const imei=r.imei||null,imsi=r.imsi||null,t=new Date(r.ts);
+    const imei=r.imei||null,imsi=r.imsi||null,t=new Date(r.tsMs);
     if(!imei&&!imsi)return;
     const last=timeline.length?timeline[timeline.length-1]:null;
     if(!last||last.imei!==imei||last.imsi!==imsi)
@@ -1115,7 +1131,7 @@ function reconstructSessions(entity){
   // data sessions of its own. Match the entity only as a source/destination IP; do NOT join
   // via msisdn (that pulled a subscriber's IPDR data into their CDR-phone timeline and showed
   // IPDR services where only voice should appear, and double-counted sessions).
-  const ipdrs=allRows.filter(r=>r.type==='IPDR'&&(r.sub===entity||r.cnt===entity)).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const ipdrs=((_rowIdx.get(entity)||[])).filter(r=>r.type==='IPDR').sort((a,b)=>a.tsMs-b.tsMs);
   if(!ipdrs.length)return[];
   const open={};const sessions=[];
   const flush=k=>{const o=open[k];if(o&&o.recs.length){const cls=classifySession(o.recs);if(cls)sessions.push(cls)}delete open[k]};
@@ -1125,7 +1141,7 @@ function reconstructSessions(entity){
     const peer=(r.cnt===entity)?(r.sub||'?'):(r.cnt||'?');
     const fam=recPortFamily(r);
     const key=peer+'|'+fam;
-    const ts=new Date(r.ts).getTime();
+    const ts=r.tsMs;
     const o=open[key];
     if(o&&ts-o.lastTs>(FAMILY_GAP[fam]||300)*1000){flush(key);open[key]={recs:[r],lastTs:ts}}
     else if(o){o.recs.push(r);o.lastTs=ts}
@@ -1140,7 +1156,7 @@ function reconstructSessions(entity){
 function buildNarrative(subject){
   if(!subject)return[];
   const narrative=[];
-  const rows=rowsFor(subject).filter(r=>r.ts).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const rows=rowsFor(subject).filter(r=>r.tsMs).sort((a,b)=>a.tsMs-b.tsMs);
   const sessions=reconstructSessions(subject);
   const meetings=detectMeetings({subject,maxResults:20});
   // Track last tower for movement detection
@@ -1181,11 +1197,8 @@ function buildNarrative(subject){
   narrative.sort((a,b)=>a.time-b.time);
   return narrative.slice(0,50);
 }
-function rowsFor(sub){if(!sub)return allRows;return allRows.filter(r=>r.sub===sub||r.cnt===sub||r.msisdn===sub)}
-// Records the subject OWNS (their own device / a-party). A CDR geolocates only the
-// caller, so tower/location and identity stats must use these, not records where the
-// subject is merely the called counterpart (whose tower belongs to the other party).
-function ownedRowsFor(sub){if(!sub)return allRows;return allRows.filter(r=>r.msisdn===sub||r.sub===sub)}
+function rowsFor(sub){if(!sub)return allRows;return _rowIdx.get(sub)||[];}
+function ownedRowsFor(sub){if(!sub)return allRows;return _ownedRowIdx.get(sub)||[];}
 
 // ====== TAB SWITCHING ======
 function switchTab(tab){
@@ -1443,7 +1456,7 @@ function renderDashboard(){
     const dr=state._cdrStats&&state._cdrStats.date_range;
     let span='';
     if(dr&&dr.min&&dr.max){span=new Date(dr.min).toLocaleDateString()+' – '+new Date(dr.max).toLocaleDateString();}
-    else{const ts=allRows.filter(r=>r.ts).map(r=>new Date(r.ts)).sort((a,b)=>a-b);if(ts.length)span=ts[0].toLocaleDateString()+' – '+ts[ts.length-1].toLocaleDateString();}
+    else{let _mn=Infinity,_mx=-Infinity;allRows.forEach(r=>{if(r.tsMs){if(r.tsMs<_mn)_mn=r.tsMs;if(r.tsMs>_mx)_mx=r.tsMs;}});if(_mx>-Infinity)span=new Date(_mn).toLocaleDateString()+' – '+new Date(_mx).toLocaleDateString();}
     _hs.textContent=n(total)+' records · '+n(uniqueSubjectsCount)+' subjects · '+n(uniqueContactsCount)+' contacts'+(span?' · '+span:'');}
 
   D.dashCards.innerHTML=[
@@ -1531,7 +1544,7 @@ function renderDashHeatmap(){
   if(typeof Chart==='undefined')return;
   const hours=Array(24).fill(0);const days=Array(7).fill(0);
   const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  allRows.forEach(r=>{if(r.ts){const d=new Date(r.ts);hours[d.getHours()]++;days[d.getDay()]++}});
+  allRows.forEach(r=>{if(r.tsMs){const d=new Date(r.tsMs);hours[d.getHours()]++;days[d.getDay()]++}});
   if(window.dashHeatChart){try{window.dashHeatChart.destroy()}catch(e){}window.dashHeatChart=null}
   if(!D.dashHeat)return;
   window.dashHeatChart=new Chart(D.dashHeat,{type:'bar',data:{labels:dayNames,datasets:[{label:'Activity',data:days,backgroundColor:days.map(d=>d>Math.max(...days)*0.7?'#b94a48':d>Math.max(...days)*0.4?'#d4a017':'#3a7d5a'),borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
@@ -1583,7 +1596,7 @@ function getAiCache(){
   c.subCount=state.subjects.length;
   c.totalRows=allRows.length;
   c.pairCounts={};allRows.forEach(r=>{if(r.sub&&r.cnt){const k=[r.sub,r.cnt].sort().join('|');c.pairCounts[k]=(c.pairCounts[k]||0)+1}});
-  c.subDays=new Map();allRows.forEach(r=>{if(!r.ts||!r.sub)return;const d=new Date(r.ts).toLocaleDateString();if(!c.subDays.has(r.sub))c.subDays.set(r.sub,new Map());c.subDays.get(r.sub).set(d,(c.subDays.get(r.sub).get(d)||0)+1)});
+  c.subDays=new Map();allRows.forEach(r=>{if(!r.tsMs||!r.sub)return;const d=new Date(r.tsMs).toLocaleDateString();if(!c.subDays.has(r.sub))c.subDays.set(r.sub,new Map());c.subDays.get(r.sub).set(d,(c.subDays.get(r.sub).get(d)||0)+1)});
   c.svcCounts={};allRows.forEach(r=>{const s=r.svc||'Unknown';c.svcCounts[s]=(c.svcCounts[s]||0)+1});
   c.allMeetings=detectMeetings({allPairs:true});
   c.changeCache={};
@@ -1652,15 +1665,15 @@ function renderCaseSummary(){
   // Contacts
   const allCnts=new Set(allRows.map(r=>r.cnt).filter(Boolean));
   // Time span
-  const times=allRows.filter(r=>r.ts).map(r=>new Date(r.ts));
-  const span=times.length?Math.round((Math.max(...times)-Math.min(...times))/86400000)+' days':'n/a';
+  let _spanMin=Infinity,_spanMax=-Infinity;allRows.forEach(r=>{if(r.tsMs){if(r.tsMs<_spanMin)_spanMin=r.tsMs;if(r.tsMs>_spanMax)_spanMax=r.tsMs;}});
+  const span=_spanMax>-Infinity?Math.round((_spanMax-_spanMin)/86400000)+' days':'n/a';
   // Meetings: counted server-side (exact, full-coverage) and filled in async below — the old
   // client scan only sampled the top-30 subjects, undercounting on real cases.
   // Communication direction
   const dirCounts={mo:0,mt:0};allRows.forEach(r=>{if(r.dir==='MO'||r.dir==='mo')dirCounts.mo++;else if(r.dir==='MT'||r.dir==='mt')dirCounts.mt++});
   // Burst count
   const subDays=new Map();
-  allRows.forEach(r=>{if(!r.ts||!r.sub)return;const d=new Date(r.ts).toLocaleDateString();if(!subDays.has(r.sub))subDays.set(r.sub,new Map());subDays.get(r.sub).set(d,(subDays.get(r.sub).get(d)||0)+1)});
+  allRows.forEach(r=>{if(!r.tsMs||!r.sub)return;const d=new Date(r.tsMs).toLocaleDateString();if(!subDays.has(r.sub))subDays.set(r.sub,new Map());subDays.get(r.sub).set(d,(subDays.get(r.sub).get(d)||0)+1)});
   let bursts=0;
   subDays.forEach((days,sub)=>{const counts=[...days.values()];if(counts.length<3)return;const avg=counts.reduce((a,c)=>a+c,0)/counts.length;days.forEach((c,d)=>{if(c>=Math.max(avg*3,10))bursts++})});
 
@@ -1697,8 +1710,8 @@ function runComparePeriods(){
   if(!sA||!eA||!sB||!eB){D.cpStatus.textContent='Select both date ranges.';return}
   const tMinA=new Date(sA).getTime(),tMaxA=new Date(eA).getTime()+86400000;
   const tMinB=new Date(sB).getTime(),tMaxB=new Date(eB).getTime()+86400000;
-  const rowsA=allRows.filter(r=>r.ts&&new Date(r.ts).getTime()>=tMinA&&new Date(r.ts).getTime()<tMaxA);
-  const rowsB=allRows.filter(r=>r.ts&&new Date(r.ts).getTime()>=tMinB&&new Date(r.ts).getTime()<tMaxB);
+  const rowsA=allRows.filter(r=>r.tsMs&&r.tsMs>=tMinA&&r.tsMs<tMaxA);
+  const rowsB=allRows.filter(r=>r.tsMs&&r.tsMs>=tMinB&&r.tsMs<tMaxB);
   if(!rowsA.length&&!rowsB.length){D.cpResults.innerHTML='<div style="color:var(--muted)">No records in either selected range.</div>';D.cpResults.style.display='block';return}
   // Contacts per period
   const cntsA=new Set(rowsA.map(r=>r.cnt).filter(Boolean));
@@ -6585,8 +6598,33 @@ async function renderAnalysisReports(){
   try{
     const data=await API.get('/analysis/cdr-reports?'+qp.toString());
     if(!data.total_records){
-      body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR records found for <b>'+esc(sub)+'</b>.<br>Analysis Reports are CDR-based. This subject appears in IPDR data only.</span></div>';
-      if(meta)meta.textContent='0 CDR records';
+      // Try IPDR-native reports for this subject before declaring "no data"
+      const iqp=new URLSearchParams({sub});
+      if(activeCaseId)iqp.set('case_id',activeCaseId);
+      let idata;
+      try{idata=await API.get('/analysis/ipdr-reports?'+iqp.toString());}catch(_){idata=null;}
+      if(idata&&idata.total_records){
+        const ir=idata.reports||{};
+        Object.entries(ir).forEach(([id,r])=>{_arReports[id]={headers:r.headers||[],rows:r.rows||[]};});
+        body.innerHTML='<div class="ar-empty" style="margin-bottom:10px;border-color:var(--accent)"><span class="ar-empty-ico">📡</span><span class="ar-empty-txt">IPDR subject — showing data-session analytics (no CDR records for this subject).</span></div>'+[
+          _repCard('ar-exp','daily_volume','Daily session volume',ir.daily_volume?.headers||[],ir.daily_volume?.rows||[]),
+          _repCard('ar-exp','protocol_breakdown','Protocol breakdown',ir.protocol_breakdown?.headers||[],ir.protocol_breakdown?.rows||[]),
+          _repCard('ar-exp','top_destinations','Top destination IPs (top 30)',ir.top_destinations?.headers||[],ir.top_destinations?.rows||[]),
+          _repCard('ar-exp','hourly_pattern','Hourly activity pattern',ir.hourly_pattern?.headers||[],ir.hourly_pattern?.rows||[]),
+          _repCard('ar-exp','data_throughput','Data throughput by day',ir.data_throughput?.headers||[],ir.data_throughput?.rows||[]),
+          _repCard('ar-exp','off_periods','OFF / unused periods (gap ≥ 3 days)',ir.off_periods?.headers||[],ir.off_periods?.rows||[]),
+          _repCard('ar-exp','port_usage','Port usage (top 30)',ir.port_usage?.headers||[],ir.port_usage?.rows||[]),
+          _repCard('ar-exp','tower_footprint','Tower footprint',ir.tower_footprint?.headers||[],ir.tower_footprint?.rows||[]),
+          _repCard('ar-exp','apn_breakdown','APN breakdown',ir.apn_breakdown?.headers||[],ir.apn_breakdown?.rows||[]),
+          _repCard('ar-exp','rat_breakdown','RAT / network technology',ir.rat_breakdown?.headers||[],ir.rat_breakdown?.rows||[]),
+        ].join('');
+        if(meta)meta.textContent=idata.total_records+' IPDR records for this subject';
+        _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
+        _tabMarkRendered('analysisreports');
+        return;
+      }
+      body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR or IPDR records found for <b>'+esc(sub)+'</b>.</span></div>';
+      if(meta)meta.textContent='0 records';
       _tabMarkRendered('analysisreports');
       return;
     }

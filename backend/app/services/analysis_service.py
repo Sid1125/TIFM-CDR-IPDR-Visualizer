@@ -529,6 +529,164 @@ def get_cdr_reports(db: Session, case_id: str | None, sub: str) -> dict:
     }
 
 
+# ── IPDR reports ──────────────────────────────────────────────────────────────
+
+def get_ipdr_reports(db: Session, case_id: str | None, sub: str) -> dict:
+    """IPDR-native analysis report for one IP/MSISDN subject.
+
+    Strictly separate from CDR reports — never mixes the two sources. Covers daily
+    session volume, data throughput, protocol breakdown, top destinations, off-periods,
+    port usage, and tower footprint. Mirrors the CDR report structure so the UI can
+    render it with the same _repCard helper."""
+    def _iq(*cols):
+        q = db.query(*cols).filter(
+            or_(IPDRRecord.source_ip == sub, IPDRRecord.msisdn == sub)
+        )
+        return q.filter(IPDRRecord.case_id == case_id) if case_id else q
+
+    total = _iq(func.count(IPDRRecord.id)).scalar() or 0
+    if not total:
+        empty: dict = {"headers": [], "rows": []}
+        return {
+            "total_records": 0, "subject": sub,
+            "reports": {k: dict(empty) for k in [
+                "daily_volume", "protocol_breakdown", "top_destinations",
+                "hourly_pattern", "data_throughput", "off_periods",
+                "port_usage", "tower_footprint", "apn_breakdown", "rat_breakdown",
+            ]},
+        }
+
+    # daily_volume: sessions + bytes per day
+    dv_rows = []
+    for row in (
+        _iq(
+            func.date(IPDRRecord.start_time).label("d"),
+            func.count(IPDRRecord.id).label("n"),
+            func.sum(IPDRRecord.bytes_uploaded).label("up"),
+            func.sum(IPDRRecord.bytes_downloaded).label("dn"),
+        )
+        .filter(IPDRRecord.start_time.isnot(None))
+        .group_by(func.date(IPDRRecord.start_time))
+        .order_by(func.date(IPDRRecord.start_time))
+        .all()
+    ):
+        up = int(row.up or 0)
+        dn = int(row.dn or 0)
+        dv_rows.append([_d(row.d), row.n, f"{up/1024/1024:.2f} MB", f"{dn/1024/1024:.2f} MB", f"{(up+dn)/1024/1024:.2f} MB"])
+
+    # protocol_breakdown
+    proto_rows = [
+        [str(r[0]), r[1], f"{r[1]/total*100:.1f}%"]
+        for r in _iq(IPDRRecord.protocol, func.count(IPDRRecord.id))
+        .filter(IPDRRecord.protocol.isnot(None))
+        .group_by(IPDRRecord.protocol)
+        .order_by(func.count(IPDRRecord.id).desc())
+        .all()
+    ]
+
+    # top_destinations: destination IPs (source sessions only — avoids polluting with transit)
+    dest_q = db.query(IPDRRecord.destination_ip, func.count(IPDRRecord.id).label("n"))
+    if case_id:
+        dest_q = dest_q.filter(IPDRRecord.case_id == case_id)
+    dest_q = dest_q.filter(IPDRRecord.source_ip == sub, IPDRRecord.destination_ip.isnot(None))
+    top_dest = [
+        [str(r[0]), r[1]]
+        for r in dest_q.group_by(IPDRRecord.destination_ip).order_by(func.count(IPDRRecord.id).desc()).limit(30).all()
+    ]
+
+    # hourly_pattern
+    hourly = [0] * 24
+    for row in (
+        _iq(extract("hour", IPDRRecord.start_time).label("h"), func.count(IPDRRecord.id).label("n"))
+        .filter(IPDRRecord.start_time.isnot(None))
+        .group_by(extract("hour", IPDRRecord.start_time))
+        .all()
+    ):
+        h = int(row.h or 0)
+        if 0 <= h < 24:
+            hourly[h] = row.n
+    hourly_rows = [[f"{h:02d}:00", hourly[h]] for h in range(24) if hourly[h]]
+
+    # data_throughput: by day
+    tput_rows = [[r[0], f"{int(r[1] or 0)/1024/1024:.2f} MB up", f"{int(r[2] or 0)/1024/1024:.2f} MB dn"]
+        for r in _iq(func.date(IPDRRecord.start_time), func.sum(IPDRRecord.bytes_uploaded), func.sum(IPDRRecord.bytes_downloaded))
+        .filter(IPDRRecord.start_time.isnot(None))
+        .group_by(func.date(IPDRRecord.start_time))
+        .order_by(func.date(IPDRRecord.start_time))
+        .all()
+    ]
+
+    # off_periods: days with no sessions (gaps ≥ 3 days)
+    all_dates = sorted({_d(r[0]) for r in _iq(func.date(IPDRRecord.start_time)).filter(IPDRRecord.start_time.isnot(None)).distinct().all() if r[0]})
+    off_rows = []
+    for i in range(1, len(all_dates)):
+        try:
+            gap = (datetime.strptime(all_dates[i], "%Y-%m-%d") - datetime.strptime(all_dates[i-1], "%Y-%m-%d")).days
+            if gap >= 3:
+                off_rows.append([all_dates[i-1], all_dates[i], gap])
+        except ValueError:
+            pass
+
+    # port_usage
+    port_rows = [
+        [str(r[0]), str(r[1] or ""), r[2]]
+        for r in _iq(IPDRRecord.destination_port, IPDRRecord.protocol, func.count(IPDRRecord.id))
+        .filter(IPDRRecord.destination_port.isnot(None))
+        .group_by(IPDRRecord.destination_port, IPDRRecord.protocol)
+        .order_by(func.count(IPDRRecord.id).desc())
+        .limit(30)
+        .all()
+    ]
+
+    # tower_footprint
+    tower_rows = [
+        [str(r[0]), r[1]]
+        for r in _iq(IPDRRecord.tower_id, func.count(IPDRRecord.id))
+        .filter(IPDRRecord.tower_id.isnot(None))
+        .group_by(IPDRRecord.tower_id)
+        .order_by(func.count(IPDRRecord.id).desc())
+        .limit(20)
+        .all()
+    ]
+
+    # apn_breakdown
+    apn_rows = [
+        [str(r[0]), r[1], f"{r[1]/total*100:.1f}%"]
+        for r in _iq(IPDRRecord.apn, func.count(IPDRRecord.id))
+        .filter(IPDRRecord.apn.isnot(None))
+        .group_by(IPDRRecord.apn)
+        .order_by(func.count(IPDRRecord.id).desc())
+        .all()
+    ]
+
+    # rat_breakdown (Radio Access Technology: 4G, 5G, WiFi…)
+    rat_rows = [
+        [str(r[0]), r[1], f"{r[1]/total*100:.1f}%"]
+        for r in _iq(IPDRRecord.rat, func.count(IPDRRecord.id))
+        .filter(IPDRRecord.rat.isnot(None))
+        .group_by(IPDRRecord.rat)
+        .order_by(func.count(IPDRRecord.id).desc())
+        .all()
+    ]
+
+    return {
+        "total_records": total,
+        "subject": sub,
+        "reports": {
+            "daily_volume": {"headers": ["Date", "Sessions", "Upload", "Download", "Total"], "rows": dv_rows},
+            "protocol_breakdown": {"headers": ["Protocol", "Sessions", "% of total"], "rows": proto_rows},
+            "top_destinations": {"headers": ["Destination IP", "Sessions"], "rows": top_dest},
+            "hourly_pattern": {"headers": ["Hour", "Sessions"], "rows": hourly_rows},
+            "data_throughput": {"headers": ["Date", "Upload", "Download"], "rows": tput_rows},
+            "off_periods": {"headers": ["Last active", "Resumed", "Gap (days)"], "rows": off_rows},
+            "port_usage": {"headers": ["Dest port", "Protocol", "Sessions"], "rows": port_rows},
+            "tower_footprint": {"headers": ["Tower", "Sessions"], "rows": tower_rows},
+            "apn_breakdown": {"headers": ["APN", "Sessions", "% of total"], "rows": apn_rows},
+            "rat_breakdown": {"headers": ["RAT", "Sessions", "% of total"], "rows": rat_rows},
+        },
+    }
+
+
 # ── group compare ─────────────────────────────────────────────────────────────
 
 def get_group_compare(db: Session, case_id: str | None, subjects: list[str]) -> dict:
@@ -600,6 +758,24 @@ def get_group_compare(db: Session, case_id: str | None, subjects: list[str]) -> 
         mm = ((ref.get("make") or "") + " " + (ref.get("model") or "")).strip() or "—"
         imei_rows.append([imei, mm])
 
+    # ── IPDR sections — kept strictly separate (IP subjects, never folded into CDR) ──
+    ipdr_towers: dict[str, set] = {}
+    ipdr_protocols: dict[str, set] = {}
+    ipdr_dest_ips: dict[str, set] = {}
+    for sub in subjects:
+        def _iq(*cols):
+            q = db.query(*cols).filter(
+                or_(IPDRRecord.source_ip == sub, IPDRRecord.msisdn == sub)
+            )
+            return q.filter(IPDRRecord.case_id == case_id) if case_id else q
+
+        ipdr_towers[sub] = {str(r[0]) for r in _iq(IPDRRecord.tower_id).filter(IPDRRecord.tower_id.isnot(None)).distinct().all()}
+        ipdr_protocols[sub] = {str(r[0]) for r in _iq(IPDRRecord.protocol).filter(IPDRRecord.protocol.isnot(None)).distinct().all()}
+        ipdr_dest_ips[sub] = {str(r[0]) for r in db.query(IPDRRecord.destination_ip)
+            .filter(IPDRRecord.source_ip == sub, IPDRRecord.destination_ip.isnot(None))
+            .filter(*([] if not case_id else [IPDRRecord.case_id == case_id]))
+            .distinct().limit(500).all()}
+
     return {
         "contacts": {"headers": ["Common contact", "Operator", "Circle"], "rows": contacts_rows},
         "towers": {"headers": ["Common tower"], "rows": [[t] for t in _inter(towers)]},
@@ -607,4 +783,7 @@ def get_group_compare(db: Session, case_id: str | None, subjects: list[str]) -> 
         "latlng": {"headers": ["Common location (lat,lng ~110m)"], "rows": [[l] for l in _inter(latlng)]},
         "imeis": {"headers": ["Common IMEI", "Make / Model"], "rows": imei_rows},
         "matrix": {"headers": ["Caller", "Called", "Direct calls"], "rows": matrix},
+        "ipdr_towers": {"headers": ["Common IPDR tower"], "rows": [[t] for t in _inter(ipdr_towers)]},
+        "ipdr_protocols": {"headers": ["Common protocol"], "rows": [[p] for p in _inter(ipdr_protocols)]},
+        "ipdr_dest_ips": {"headers": ["Common destination IP"], "rows": [[ip] for ip in sorted(_inter(ipdr_dest_ips))[:200]]},
     }

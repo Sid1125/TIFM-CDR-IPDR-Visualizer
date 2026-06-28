@@ -6,6 +6,7 @@ from app.services.analysis_service import (
     get_subjects,
     get_chart_data,
     get_cdr_reports,
+    get_ipdr_reports,
     get_group_compare,
 )
 
@@ -34,6 +35,18 @@ def cdr_reports(
     if not sub:
         return {"error": "sub parameter required"}
     return get_cdr_reports(db, case_id=case_id or None, sub=sub)
+
+
+@router.get("/ipdr-reports")
+def ipdr_reports(
+    db: Session = Depends(get_db),
+    case_id: str = Query(default=""),
+    sub: str = Query(default=""),
+):
+    """10-section IPDR analysis report for one IP/MSISDN subject. Strictly separate from CDR."""
+    if not sub:
+        return {"error": "sub parameter required"}
+    return get_ipdr_reports(db, case_id=case_id or None, sub=sub)
 
 
 @router.get("/group-compare")

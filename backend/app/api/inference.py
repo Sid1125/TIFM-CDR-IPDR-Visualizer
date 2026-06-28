@@ -43,7 +43,7 @@ def _case_name(db, case_id):
 
 
 @router.get("/report")
-def inference_report(db: Session = Depends(get_db), limit: int = Query(default=5000, ge=1, le=50000),
+def inference_report(db: Session = Depends(get_db), limit: int = Query(default=50000, ge=1, le=200000),
                      case_id: str = Query(default="")):
     """Full spatiotemporal inference report: movement, impossible-travel, co-presence,
     network structure, temporal/behavioral shifts, IPDR volume/beaconing, geospatial roles,
@@ -56,7 +56,7 @@ def inference_report(db: Session = Depends(get_db), limit: int = Query(default=5
 
 
 @router.get("/report.md")
-def inference_report_md(request: Request, db: Session = Depends(get_db), limit: int = Query(default=5000, ge=1, le=50000),
+def inference_report_md(request: Request, db: Session = Depends(get_db), limit: int = Query(default=50000, ge=1, le=200000),
                         case_id: str = Query(default=""),
                         source: str = Query(default="analysis"),
                         user=Depends(get_current_user)):
@@ -121,7 +121,7 @@ def list_exports(db: Session = Depends(get_db), case_id: str = Query(default="")
 
 @router.get("/subject/{subject}")
 def subject_timeline(subject: str, db: Session = Depends(get_db),
-                     limit: int = Query(default=5000, ge=1, le=50000),
+                     limit: int = Query(default=50000, ge=1, le=200000),
                      case_id: str = Query(default="")):
     """Movement-annotated unified timeline (calls + SMS + data sessions) for one
     subject, keyed by msisdn (or imsi), with anchors and any impossible-travel legs."""
