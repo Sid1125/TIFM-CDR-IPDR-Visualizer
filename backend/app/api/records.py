@@ -28,7 +28,7 @@ def get_records_page(
     type: str = Query(default="all"),
     search: str | None = Query(default=None),
     service: str | None = Query(default=None),
-    limit: int = Query(default=60, ge=1, le=500),
+    limit: int = Query(default=60, ge=1, le=200000),
     offset: int = Query(default=0, ge=0),
 ):
     """Server-side, time-ordered, paginated records page across CDR + IPDR for one case.

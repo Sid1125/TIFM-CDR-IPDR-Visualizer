@@ -177,7 +177,7 @@ def page_records(db, case_id=None, rtype="all", search=None, service=None, limit
     rtype = (rtype or "all").upper()
     want_cdr = rtype in ("ALL", "CDR")
     want_ipdr = rtype in ("ALL", "IPDR")
-    limit = max(1, min(int(limit or 60), 500))
+    limit = max(1, int(limit or 60))
     offset = max(0, int(offset or 0))
 
     # total

@@ -6,12 +6,46 @@ const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towe
 // _totalCdr/_totalIpdr: true record counts (not bounded by the 500-row allRows sample)
 
 let _renderGen=0;            // increments on every loadCaseData; used to detect stale tabs
-const _tabGen={};            // {tabKey: _renderGen} — skip re-render if data hasn't changed
-function _tabDirty(tab){if(_tabGen[tab]===_renderGen)return false;_tabGen[tab]=_renderGen;return true;}
+const _tabRendered={};       // {tabKey: _renderGen} — set only on SUCCESSFUL render
+// Returns true if this tab needs a (re)render for the current case load.
+// Unlike the old _tabDirty, this does NOT pre-mark: callers set _tabRendered[tab]=_renderGen on success.
+function _tabNeedsRender(tab){return _tabRendered[tab]!==_renderGen;}
+function _tabMarkRendered(tab){_tabRendered[tab]=_renderGen;}
 function debounce(fn,ms=220){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
 // Helper: true CDR/IPDR totals (server stats when available, fallback to sample length)
 function _totalCdrFn(){return(state._cdrStats&&state._cdrStats.total_records)||state.cdr.length||0;}
 function _totalIpdrFn(){return(state._ipdrStats&&state._ipdrStats.total_records)||state.ipdr.length||0;}
+
+// Background loader: fetches ALL remaining records after the initial 500-row paint.
+// Once done, allRows has the full dataset and features like timeline/map/story/graph work accurately.
+let _bgLoadGen=0;
+async function _bgLoadAll(total,caseId,gen){
+  if(total<=500)return;
+  const remaining=total-500;
+  const banner=$('bgLoadBanner');
+  if(banner){banner.textContent='Loading '+n(total)+' records…';banner.style.display='block';}
+  try{
+    const qp=new URLSearchParams({limit:remaining,offset:500});
+    if(caseId)qp.set('case_id',caseId);
+    const page=await API.get('/records/page?'+qp.toString());
+    if(gen!==_bgLoadGen)return;  // case changed while we were loading
+    const more=(page.rows||[]).map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r));
+    // Merge into allRows (keep sorted by ts desc)
+    allRows=[...allRows,...more].sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+    // Expand subjects list
+    more.forEach(r=>{if(r.sub)state.subjects.push(r.sub);if(r.cnt)state.subjects.push(r.cnt);});
+    state.subjects=[...new Set(state.subjects)].sort();
+    if(banner)banner.style.display='none';
+    // Re-render live features that depend on allRows
+    try{renderTimeline&&renderTimeline();}catch(e){}
+    try{renderDashboard();}catch(e){}
+    try{if(state.tab==='graph')initGraphSubjects();}catch(e){}
+    try{if(state.tab==='map'||state.tab==='geo')window.refreshGeoMap&&refreshGeoMap();}catch(e){}
+  }catch(e){
+    console.error('bgLoad:',e);
+    if(banner){banner.textContent='Warning: only '+n(allRows.length)+' of '+n(total)+' records loaded.';setTimeout(()=>{if(banner)banner.style.display='none';},5000);}
+  }
+}
 const API={async req(p,o){const r=await fetch(p,{credentials:'same-origin',...o,headers:{...((o&&o.headers)||{})}});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||r.status);return r.status===204?null:r.json()},get(p){return this.req(p)},post(p,b){return this.req(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},put(p,b){return this.req(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},del(p){return this.req(p,{method:'DELETE'})},async upload(p,f){const fd=new FormData();fd.append('file',f);const r=await fetch(p,{credentials:'same-origin',method:'POST',body:fd});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||'Upload failed');return r.json()}};
 
 // ====== DOM REFS ======
@@ -247,7 +281,7 @@ function setActiveCase(id){
 }
 async function loadCaseData(){
   // Bump render generation: tabs will know their cached render is stale.
-  _renderGen++;Object.keys(_tabGen).forEach(k=>delete _tabGen[k]);
+  _renderGen++;Object.keys(_tabRendered).forEach(k=>delete _tabRendered[k]);
   state._cd=null;  // chart data needs re-fetch
   invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
   try{
@@ -286,7 +320,11 @@ async function loadCaseData(){
     await ensureMeetingsLoaded(true);
     renderDashboard();
     renderRecords();
-    renderCharts();    // fires in background; dirty-flag prevents double-render on tab switch
+    // Kick off background full-load BEFORE rendering charts so all features get complete data
+    const curGen=_renderGen;
+    _bgLoadGen=curGen;
+    if(page1.total>allRows.length)_bgLoadAll(page1.total,activeCaseId||'',curGen);
+    renderCharts();    // async, server-side; will retry on tab switch if it fails
     initGraphSubjects();
     if(state.tab&&!['dashboard','charts','records'].includes(state.tab))switchTab(state.tab);
     if(activeCaseId){const cn=(state.cases||[]).find(c=>String(c.id)===String(activeCaseId));auditView('view_case',{case_id:activeCaseId,case_name:cn?cn.name:null});}
@@ -3085,10 +3123,10 @@ D.tlCompare.addEventListener('change',renderTimeline);
 
 // ====== 5. CHARTS ======
 async function renderCharts(){
-  if(!_tabDirty('charts'))return;
+  if(!_tabNeedsRender('charts'))return;
   const qp=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
   try{state._cd=await API.get('/analysis/chart-data'+qp);}
-  catch(e){console.error('chart-data fetch:',e);return;}
+  catch(e){console.error('chart-data fetch:',e);return;} // don't mark rendered — tab switch will retry
   renderChartServicePie();
   renderChartHourly();
   renderChartTopContacts();
@@ -3110,6 +3148,7 @@ async function renderCharts(){
   try{renderChartGeoState()}catch(e){console.error('geoState',e)}
   try{renderChartTowerDiversity()}catch(e){console.error('towerDiversity',e)}
   try{installChartCaptureButtons()}catch(e){}
+  _tabMarkRendered('charts');  // only reached on success — failed renders stay retryable
 }
 
 // ===== Behavioural & investigative charts (server-side data from state._cd) =====
@@ -3447,7 +3486,7 @@ function recRowHtml(r){
 async function renderRecTable(){
   const qp=new URLSearchParams({limit:_recPage.limit,offset:_recPage.offset});
   if(activeCaseId)qp.set('case_id',activeCaseId);
-  if(D.recType.value!=='all')qp.set('rtype',D.recType.value);
+  if(D.recType.value!=='all')qp.set('type',D.recType.value);
   if(D.recService.value!=='all')qp.set('service',D.recService.value);
   const q=D.recSearch.value.trim();
   if(q)qp.set('search',q);
@@ -6402,12 +6441,12 @@ const _durStr=s=>{s=+s||0;return s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s'};
 // ====== PHASE B — CDR ANALYSIS REPORTS (server-side) ======
 let _arReports={};
 async function renderAnalysisReports(){
-  if(!_tabDirty('analysisreports'))return;
+  if(!_tabNeedsRender('analysisreports'))return;
   const sel=document.getElementById('arSubject'),body=document.getElementById('arBody'),meta=document.getElementById('arMeta');
   if(!sel||!body)return;
   const subs=state._ownedSubjects.length?state._ownedSubjects:(state.subjects.filter(Boolean));
   if(!subs.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Load a case to run analysis reports.</span></div>';sel.innerHTML='';if(meta)meta.textContent='';return;}
-  if(!sel._wired){sel._wired=true;sel.addEventListener('change',()=>{_tabGen['analysisreports']=null;renderAnalysisReports();});}
+  if(!sel._wired){sel._wired=true;sel.addEventListener('change',()=>{delete _tabRendered['analysisreports'];renderAnalysisReports();});}
   const cur=sel.value;
   sel.innerHTML=subs.map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+'</option>').join('');
   if(cur&&subs.includes(cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
@@ -6437,6 +6476,7 @@ async function renderAnalysisReports(){
     ].join('');
     if(meta)meta.textContent=(data.total_records||0)+' records for this subject';
     _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
+    _tabMarkRendered('analysisreports');  // only on success; subject change clears this
   }catch(e){
     console.error('renderAnalysisReports:',e);
     body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">✖</span><span class="ar-empty-txt">Failed to load analysis reports.</span></div>';
