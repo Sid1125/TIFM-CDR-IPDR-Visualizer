@@ -1759,6 +1759,10 @@ async function renderGraph(){
   // Fetch the bounded subgraph server-side (top-N heaviest edges) so the browser never builds
   // a graph from the whole case. Node weights returned are the node's TRUE total over all
   // edges, so the view is trimmed but the weights/degrees stay full-coverage.
+  if(limit===0){
+    const ok=confirm('Rendering all links may freeze the browser for large cases. Continue?');
+    if(!ok){if(D.graphLimit)D.graphLimit.value='300';return;}
+  }
   let payload;
   try{
     const p=new URLSearchParams();
@@ -1788,8 +1792,14 @@ async function renderGraph(){
   const sim=d3.forceSimulation(nodes).force('link',d3.forceLink(links).id(d=>d.id).distance(80)).force('charge',d3.forceManyBody().strength(-150)).force('center',d3.forceCenter(w/2,h/2)).force('collision',d3.forceCollide(12));
   curGraphNodes=nodes;curGraphLinks=links;curGraphSim=sim;
 
+  // Per-group distinct colors so investigators can distinguish named groups at a glance.
+  const _grpPalette=['#e03131','#2f9e44','#1971c2','#e67700','#9c36b5','#c2255c','#0c8599','#5c7cfa'];
+  const _grpColor={};let _grpIdx=0;
+  (_wl||[]).forEach(e=>{const g2=e.group_name||'Default';if(!_grpColor[g2])_grpColor[g2]=_grpPalette[_grpIdx++%_grpPalette.length];});
+  function _nodeStroke(d){const e=(_wl||[]).find(x=>x.value===d.id);if(!e)return '#fff';return _grpColor[e.group_name||'Default']||'#e03131';}
+
   const link=g.append('g').selectAll('line').data(links).join('line').attr('stroke','#dccfc0').attr('stroke-width',d=>Math.max(0.5,Math.min(6,d.weight*0.5))).attr('stroke-opacity',0.6);
-  const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))).style('fill',d=>d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'var(--accent)')).attr('stroke',d=>isSuspect(d.id)?'#e03131':'#fff').attr('stroke-width',d=>isSuspect(d.id)?3.5:1.5).style('cursor','pointer')
+  const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))).style('fill',d=>d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'var(--accent)')).attr('stroke',d=>_nodeStroke(d)).attr('stroke-width',d=>isSuspect(d.id)?3.5:1.5).style('cursor','pointer')
     .on('mouseover',(e,d)=>{
       const deg=curCentrality?curCentrality.degree.find(x=>x[0]===d.id):null;
       D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>
@@ -1817,6 +1827,14 @@ async function renderGraph(){
     link.attr('opacity',d=>!q||(d.source.id||d.source).toLowerCase().includes(q)||(d.target.id||d.target).toLowerCase().includes(q)?0.4:0.05);
   };
   D.graphSearch.addEventListener('input',D.graphSearch._handler);
+
+  // Group color legend
+  const legendEntries=Object.entries(_grpColor);
+  if(legendEntries.length){
+    const legEl=document.getElementById('graphGroupLegend');
+    if(legEl)legEl.innerHTML='<div style="font-size:0.7rem;font-weight:600;color:var(--muted);margin-bottom:4px">Groups</div>'
+      +legendEntries.map(([name,color])=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px"><span style="width:10px;height:10px;border-radius:50%;border:2.5px solid ${color};display:inline-block;flex-shrink:0"></span><span style="font-size:0.72rem">${esc(name)}</span></div>`).join('');
+  }
 }
 if(D.graphLimit)D.graphLimit.addEventListener('change',renderGraph);
 D.graphReset.addEventListener('click',()=>location.reload());
@@ -3598,8 +3616,18 @@ function _renderRecPagination(){
     <button class="btn-sm" onclick="_recNext()" ${cur>=total?'disabled':''}>Next &#8594;</button>`;
 }
 function _recExport(){
+  // Export all matching records (from allRows, not just the current page).
+  // Apply the same search/type/service filters the table is currently showing.
+  const q=(D.recSearch.value||'').trim().toLowerCase();
+  const t=D.recType.value;
+  const svc=D.recService.value;
+  let src=allRows;
+  if(activeCaseId)src=src.filter(r=>!r.case_id||r.case_id===activeCaseId);
+  if(t)src=src.filter(r=>r.type===t);
+  if(svc)src=src.filter(r=>(r.svc||'')===svc);
+  if(q)src=src.filter(r=>(r.sub||'').toLowerCase().includes(q)||(r.cnt||'').toLowerCase().includes(q));
   const headers=['Time','Type','Subject','Counterpart','Dur(s)','Cell/Detail','Dir/APN','Service','SrcPort','DstPort','Tower','CellID','LAC','IMSI','IMEI','MSISDN','Lat','Lng','Case'];
-  const data=(_recRows||[]).map(r=>{const cdr=r.type==='CDR';return [fmt(r.ts),r.type,subjLabelTxt(r.sub||''),subjLabelTxt(r.cnt||''),r.dur!=null?r.dur:'',cdr?(r.cll||''):(r.prot||''),cdr?(r.dir||''):(r.apn||''),r.svc||'',cdr?'':(r.sport!=null?r.sport:''),cdr?'':(r.dport!=null?r.dport:''),r.tow||'',r.cell||'',r.lac||'',r.imsi||'',r.imei||'',r.msisdn||'',r.lat||'',r.lng||'',r.case_id||''];});
+  const data=src.map(r=>{const cdr=r.type==='CDR';return [fmt(r.ts),r.type,subjLabelTxt(r.sub||''),subjLabelTxt(r.cnt||''),r.dur!=null?r.dur:'',cdr?(r.cll||''):(r.prot||''),cdr?(r.dir||''):(r.apn||''),r.svc||'',cdr?'':(r.sport!=null?r.sport:''),cdr?'':(r.dport!=null?r.dport:''),r.tow||'',r.cell||'',r.lac||'',r.imsi||'',r.imei||'',r.msisdn||'',r.lat||'',r.lng||'',r.case_id||''];});
   return {headers,rows:data};
 }
 D.recSearch.addEventListener('input',debounce(()=>{_recPage.offset=0;renderRecTable();}));
@@ -3663,7 +3691,7 @@ function showProfile(sub){
       <span class="prof-tag-label" title="Outside intel about this subject — shown in brackets wherever this number/IP appears, in every case">&#127991; Intel tag</span>
       <input id="profileTagInput" class="prof-tag-input" maxlength="200" value="${esc(subjTag(sub))}" placeholder="e.g. financier, uses 3 SIMs, prime suspect…">
       <button class="btn" onclick="saveProfileTag('${esc(sub).replace(/'/g,"\\'")}')">Save</button>
-      <button class="btn" title="Add this subject to a suspect group" onclick="addToSuspectGroup('${esc(sub).replace(/'/g,"\\'")}')">${isSuspect(sub)?'&#9678; In group':'&#43; Suspect group'}</button>
+      ${isSuspect(sub)?`<button class="btn" style="color:var(--danger);border-color:var(--danger)" title="Remove from all suspect groups" onclick="removeFromSuspectGroup('${esc(sub).replace(/'/g,"\\'")}')">&#9678; In group &times;</button>`:`<button class="btn" title="Add this subject to a suspect group" onclick="addToSuspectGroup('${esc(sub).replace(/'/g,"\\'")}')">&#43; Suspect group</button>`}
     </div>
     <div class="prof-grid">
       <div class="prof-card"><div class="prof-label">Records</div><div class="prof-value">${rows.length}</div></div>
@@ -3878,8 +3906,10 @@ function renderAiInsights(){
     document.getElementById('aiBody')&&(document.getElementById('aiBody').innerHTML='<p style="color:var(--muted);text-align:center;padding:20px">No data loaded. Upload CDR/IPDR files first.</p>');
     return;
   }
+  if(!_tabNeedsRender('ai'))return;
   state.scenario=document.getElementById('scenarioTag')?.value||'adhoc';
-  invalidateAiCache(); // fresh cache on each render
+  // Do NOT call invalidateAiCache() here — cache is populated lazily and only cleared on
+  // case load (_renderGen change). Clearing on every tab switch re-scans 50k rows each time.
   buildCaseSummary(); // SECTION A: Why This Case Matters
   buildCaseOverview();
   buildAIFindings();
@@ -3890,6 +3920,7 @@ function renderAiInsights(){
   initContextChips();
   switchAiTab('overview');
   initAiTabs();
+  _tabMarkRendered('ai');
 }
 function switchAiTab(tab){
   document.querySelectorAll('.ai-tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.aiPanel===tab));
@@ -3923,7 +3954,7 @@ function buildCaseOverview(){
   const total=_totalCdrFn()+_totalIpdrFn(),totalCdr=_totalCdrFn(),totalIpdr=_totalIpdrFn();
   const subs=new Set();allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
   const ts=allRows.filter(r=>r.ts).map(r=>+new Date(r.ts));
-  const span=ts.length?Math.round((Math.max(...ts)-Math.min(...ts))/86400000):0;
+  const span=ts.length?Math.round((ts.reduce((a,b)=>a>b?a:b,-Infinity)-ts.reduce((a,b)=>a<b?a:b,Infinity))/86400000):0;
   let meetings=0;try{meetings=meetingTotals().total}catch(e){}
   const sessions=state.subjects.reduce((sum,s)=>sum+reconstructSessions(s).length,0);
   let simSwaps=0,deviceChanges=0;
@@ -4098,6 +4129,15 @@ function _watchlistBarHtml(rep){
 }
 window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;const g=($('wlGroup')&&$('wlGroup').value||'Default').trim()||'Default';state._lastGroup=g;try{await API.post('/watchlist',{value:v,group_name:g,case_id:activeCaseId||null});await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+window.removeFromSuspectGroup=async function(value){
+  const entries=(_wl||[]).filter(e=>e.value===value);
+  if(!entries.length)return;
+  for(const e of entries){try{await API.del('/watchlist/'+e.id);}catch(_){}}
+  await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;
+  if(state.tab==='graph')renderGraph();
+  if(state.tab==='inferences')renderInferences(true);
+  showProfile(value); // refresh profile modal to flip button back to "+ Suspect group"
+};
 function _caseSafe(){const cn=(D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex]?.text)||'case';return cn.replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')||'case';}
 window.wlExport=async function(){
   const btn=$('wlExportBtn');const prev=btn?btn.innerHTML:'';if(btn){btn.innerHTML='Exporting…';btn.disabled=true;}
@@ -6544,6 +6584,12 @@ async function renderAnalysisReports(){
   if(activeCaseId)qp.set('case_id',activeCaseId);
   try{
     const data=await API.get('/analysis/cdr-reports?'+qp.toString());
+    if(!data.total_records){
+      body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR records found for <b>'+esc(sub)+'</b>.<br>Analysis Reports are CDR-based. This subject appears in IPDR data only.</span></div>';
+      if(meta)meta.textContent='0 CDR records';
+      _tabMarkRendered('analysisreports');
+      return;
+    }
     const reps=data.reports||{};
     Object.entries(reps).forEach(([id,r])=>{_arReports[id]={headers:r.headers||[],rows:r.rows||[]};});
     const ostate=reps.other_state||{};
@@ -6593,6 +6639,12 @@ async function _gcRun(){
   try{
     const data=await API.get('/analysis/group-compare?'+qp.toString());
     if(data.error){body.innerHTML='<div class="ar-empty">'+esc(data.error)+'</div>';return;}
+    // Detect IPDR-only: all CDR sections empty
+    const hasCdrData=!!(data.contacts?.rows?.length||data.towers?.rows?.length||data.matrix?.rows?.length);
+    if(!hasCdrData){
+      body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR records found for the selected subjects.<br>Group Compare is CDR-based (common contacts, towers, call matrix).<br>These subjects appear in IPDR data only.</span></div>';
+      return;
+    }
     _gcReports={};
     Object.entries(data).forEach(([id,r])=>{_gcReports[id]={headers:r.headers||[],rows:r.rows||[]};});
     body.innerHTML='<div class="gc-sel">Comparing <b>'+sel.length+'</b> subjects: '+sel.map(s=>esc(subjLabelTxt(s))).join(', ')+'</div>'+[

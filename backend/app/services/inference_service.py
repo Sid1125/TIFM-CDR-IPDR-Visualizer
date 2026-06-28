@@ -26,6 +26,7 @@ import networkx as nx
 
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
+from app.models.tower import Tower
 from app.services.geo import IMPOSSIBLE_KMH, classify_speed, haversine_km
 from app.services.service_attribution_service import _match_ip
 
@@ -107,8 +108,14 @@ def _subject(record) -> str | None:
 # behaviour to a person via the operator's MSISDN linking column). CDR-based inferences
 # use these streams; IPDR-based inferences (see vpn_proxy_use) work on IPDR alone.
 
-def build_subject_streams(cdr_records):
-    """Per-MSISDN chronological stream of a subscriber's calls/SMS (CDR only)."""
+def build_subject_streams(cdr_records, tower_coords: dict | None = None):
+    """Per-MSISDN chronological stream of a subscriber's calls/SMS (CDR only).
+
+    tower_coords: optional {tower_id: (lat, lon)} lookup; used to enrich events whose
+    CDR row has a tower_id but no direct lat/lon columns populated (which is the common
+    case — most operators only store the serving cell-id, not resolved coordinates).
+    Without this enrichment, haversine_km returns None and impossible-travel / anchor
+    detection silently produces no results."""
     streams: dict[str, list] = defaultdict(list)
 
     for r in cdr_records:
@@ -116,15 +123,20 @@ def build_subject_streams(cdr_records):
         if not subj:
             continue
         kind = "sms" if str(getattr(r, "call_type", "") or "").upper() == "SMS" else "call"
+        lat = getattr(r, "latitude", None)
+        lon = getattr(r, "longitude", None)
+        tid = getattr(r, "tower_id", None)
+        if (lat is None or lon is None) and tid and tower_coords:
+            lat, lon = tower_coords.get(tid, (None, None))
         streams[subj].append({
             "time": r.start_time,
             "end": getattr(r, "end_time", None) or r.start_time,
             "kind": kind,
             "peer": getattr(r, "b_party_number", None),
             "direction": getattr(r, "direction", None),
-            "tower_id": getattr(r, "tower_id", None),
-            "lat": getattr(r, "latitude", None),
-            "lon": getattr(r, "longitude", None),
+            "tower_id": tid,
+            "lat": lat,
+            "lon": lon,
             "imsi": getattr(r, "imsi", None),
             "imei": getattr(r, "imei", None),
             "duration": getattr(r, "duration_seconds", None),
@@ -1184,12 +1196,12 @@ def _call_pairs(cdr_records):
     return pairs
 
 
-def run_all(cdr_records, ipdr_records):
+def run_all(cdr_records, ipdr_records, tower_coords: dict | None = None):
     """Compute all inferences, kept strictly separated into a CDR (phone-subject) block
     and an IPDR (network) block — the two data sources are never cross-attributed."""
     cdr_records = list(cdr_records)
     ipdr_records = list(ipdr_records)
-    streams = build_subject_streams(cdr_records)
+    streams = build_subject_streams(cdr_records, tower_coords=tower_coords)
     call_pairs = _call_pairs(cdr_records)
 
     movement = {s: subject_movement(ev) for s, ev in streams.items()}
@@ -1253,17 +1265,24 @@ def _load(db, limit, case_id=None):
         iq = iq.filter(IPDRRecord.case_id == case_id)
     cdr = cq.order_by(CDRRecord.start_time).limit(limit).all()
     ipdr = iq.order_by(IPDRRecord.start_time).limit(limit).all()
-    return cdr, ipdr
+    tower_coords = {
+        t.tower_id: (t.latitude, t.longitude)
+        for t in db.query(Tower).filter(
+            Tower.latitude.isnot(None), Tower.longitude.isnot(None)
+        ).all()
+    }
+    return cdr, ipdr, tower_coords
 
 
 def run_all_db(db, limit: int = 5000, case_id=None):
-    return run_all(*_load(db, limit, case_id))
+    cdr, ipdr, tower_coords = _load(db, limit, case_id)
+    return run_all(cdr, ipdr, tower_coords=tower_coords)
 
 
 def subject_timeline_db(db, subject: str, limit: int = 5000, case_id=None):
     """Movement-annotated CDR timeline for one phone subject (kept separate from IPDR)."""
-    cdr, _ipdr = _load(db, limit, case_id)
-    streams = build_subject_streams(cdr)
+    cdr, _ipdr, tower_coords = _load(db, limit, case_id)
+    streams = build_subject_streams(cdr, tower_coords=tower_coords)
     events = streams.get(subject, [])
     return {"subject": subject, "event_count": len(events),
             "movement": subject_movement(events) if events else None,
