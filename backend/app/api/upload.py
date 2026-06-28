@@ -188,8 +188,9 @@ async def upload_cdr(
                 )
             )
 
+        _harvest_towers(db, df)  # ensure Tower rows exist before IPDR/CDR FK refs
+        db.flush()
         db.add_all(records)
-        _harvest_towers(db, df)  # grow the permanent tower repository from this case's rows
         db.commit()
 
         log_action(db, user, request, "upload", case_id=case_id or None,
@@ -275,8 +276,9 @@ async def upload_ipdr(
                 )
             )
 
+        _harvest_towers(db, df)  # ensure Tower rows exist before IPDR FK refs
+        db.flush()
         db.add_all(records)
-        _harvest_towers(db, df)  # grow the permanent tower repository from this case's rows
         db.commit()
 
         log_action(db, user, request, "upload", case_id=case_id or None,
@@ -397,8 +399,9 @@ async def upload_tower_dump(
                 latitude=_to_float(row.get("latitude")),
                 longitude=_to_float(row.get("longitude")),
             ))
+        _harvest_towers(db, df)  # ensure Tower rows exist before any FK refs
+        db.flush()
         db.add_all(records)
-        _harvest_towers(db, df)  # a dump still teaches the tower repo its cells/coordinates
         db.commit()
 
         log_action(db, user, request, "upload", case_id=case_id or None, target=label,
