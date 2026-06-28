@@ -36,18 +36,18 @@ spatiotemporal inference engine that surfaces investigative leads — all organi
 
 ## Features
 
-- **Dashboard** — case hero summary, key metrics, network/service/activity panels.
-- **Network Graph** — D3 force-directed contact graph with centrality & community detection.
-- **Tower Map** — Leaflet map: movement path (with per-leg distance / time / speed / travel-mode hover), heatmap, operational zones, co-location, meetings, **inference overlays** (impossible travel, convoys, home/work anchors) and an interactive **geofence**.
+- **Dashboard** — case hero summary, key metrics (10+ KPI cards), network/service/activity panels.
+- **Network Graph** — D3 force-directed contact graph with centrality & community detection, behavioural traffic classification, IP range analysis, 40+ provider DB.
+- **Tower Map** — Leaflet map: movement path (with per-leg distance / time / speed / travel-mode hover), **tower-frequency heatmap** (L.circleMarker), operational zones, co-location, meetings, **inference overlays** (impossible travel, convoys, home/work anchors) and an interactive **geofence**.
 - **Timeline** — session-reconstructed, entity-grouped timeline.
-- **Charts / Services / Correlation / Records** — service distribution, behavioural charts, cross-subject correlation, and a full searchable record table.
+- **Charts / Services / Correlation / Records** — 12+ chart types, service distribution with evidence scorecards, port-level attribution, cross-subject correlation, and a full searchable record table.
 - **Inferences** — automated **spatiotemporal + network analytics**, all on one tab, CDR and IPDR kept strictly separate:
   - **Composite risk scoring** — every CDR phone subject and IPDR IP subject ranked **0–100** with banding (low → critical) and a transparent, hover-able **factor breakdown**; two independent leaderboards that never share a subject.
   - **CDR (phone subjects):** impossible-travel / SIM-clone, SIM-swap & burner handsets, **multi-SIM identity resolution**, convoys & "met but never called" hidden links, **call-graph structure** (brokers, cut-points, one-way ties, relay chains, predicted hidden links), **behavioural shifts** (escalation, dormancy → reactivation, newest first-contacts), scheduled-contact cadence, odd-hours, **movement** (home/work anchors, mobility class, longest dwell) and **shared travel routes**.
   - **IPDR (IP subjects):** VPN / proxy, **data volume & exfiltration**, **beaconing** (automated check-ins), and **rare destinations** — with the destination server and provider.
   - **Watchlist** (flag numbers/IPs → forced to Critical) and one-click **Markdown case-report export**.
-- **Service / app attribution** — two-layer engine (provider IP-range match + port classification) with longest-prefix matching, an indexed lookup that scales to ~100k rows, and pluggable live provider-range feeds.
-- **AI Insights** — optional local LLM (Ollama) report generation and Q&A.
+- **Service / app attribution** — two-layer engine (provider IP-range match + port classification) with ~240-port PORT_MAP, port-range matching (Teams, Steam, FaceTime, Discord ranges), longest-prefix matching, indexed lookup scaling to ~100k rows, pluggable live provider-range feeds, and GENERIC_SVC frontend fallback for mail/DNS/infrastructure ports.
+- **AI Insights** — optional fine-tuned Qwen2.5-3B-Instruct (LoRA) or local Ollama for report generation, Q&A, and single-pass fine-tuned inference.
 - **Cases & Auth** — multi-case workspaces; PBKDF2-authenticated sessions with sliding expiry.
 
 ## Tech stack
@@ -57,9 +57,9 @@ spatiotemporal inference engine that surfaces investigative leads — all organi
 | Backend | Python 3.10+, FastAPI, SQLAlchemy, Pandas, NetworkX |
 | Database | PostgreSQL (primary) — automatic SQLite fallback only if unreachable |
 | Frontend | Vanilla-JS SPA served by FastAPI (no build step) |
-| Visualisation | D3.js v7, Chart.js 4, Leaflet 1.9 (+ draw, heat), Turf.js |
+| Visualisation | D3.js v7, Chart.js 4, Leaflet 1.9 (+ draw), Turf.js |
 | Auth | Session cookies, PBKDF2-SHA256 (210k iterations) |
-| AI (optional) | Local Ollama API |
+| AI (optional) | Fine-tuned Qwen2.5-3B-Instruct (QLoRA 4-bit) + local Ollama |
 
 ---
 
@@ -207,10 +207,14 @@ uvicorn app.main:app --reload          # add --port 8000 to be explicit
    automatically the first time. Your selected case is remembered across refreshes.
 3. **Upload data** on the Dashboard — drop **CDR**, **IPDR** and (optionally) **Tower** CSVs.
    - Records are attached to the **currently selected case**. Re-uploading the same type
-     **replaces** that type for the case (it is not appended).
+   **replaces** that type for the case (it is not appended).
 4. **Explore the tabs:** Dashboard → Network Graph → Tower Map → Timeline → Charts →
    Services → Correlation → **Inferences** → Records → AI Insights.
-5. **Inferences** is the analyst's starting point: it ranks Persons of Interest and groups
+5. **Services tab** shows per-subject service attribution with evidence scorecards, port-level
+   breakdowns, alt-service rankings, and inline session lists — all computed by a ~240-port
+   PORT_MAP with port-range matching for Teams, Steam, FaceTime, and Discord.
+6. **Correlation tab** enables cross-subject comparison of service usage patterns.
+7. **Inferences** is the analyst's starting point: it ranks Persons of Interest and groups
    leads (identity fraud, covert coordination, evasion) for CDR, and VPN/proxy activity for
    IPDR. Click a subject to open its profile; use the **Tower Map** inference overlays and
    geofence to see leads on the map.
@@ -227,7 +231,7 @@ The **AI Insights** tab has two backends:
 - **Ollama (default, optional)** — point it at a local [Ollama](https://ollama.com) server.
   No Python extras needed.
 - **Fine-tuned TIFM model** — a Qwen2.5-3B-Instruct model with a project-specific **LoRA
-  adapter** that ships in this repo (`backend/tifm_lora_output/`, via Git LFS). To enable it:
+  adapter** that ships in this repo (`backend/tifm_lora_output/`). To enable it:
 
   ```bash
   cd backend
@@ -246,6 +250,55 @@ The **AI Insights** tab has two backends:
   machines use the Ollama mode instead. `requirements-ai.txt` pins the exact versions and the
   PyTorch CUDA index; if your CUDA differs, install the matching `torch` from
   [pytorch.org](https://pytorch.org/get-started/locally/) first.
+
+### Training data
+
+The model is fine-tuned on **3,218 examples** spanning **15 question types** (up from 7):
+
+| # | Type | Description |
+|---|------|-------------|
+| 1 | Subject role analysis | Network centrality → inferred role |
+| 2 | Identity / SIM swap analysis | Burner scores, SIM swaps, device changes |
+| 3 | Meeting analysis | Tower co-location evidence |
+| 4 | Movement patterns | Mobility index, tower coverage |
+| 5 | Full investigation report | Multi-section synthesised report |
+| 6 | Anomaly analysis | Flags suspicious patterns |
+| 7 | Context chips | Subject profile + tower movement |
+| 8 | Meeting evidence | Structured evidence report |
+| 9 | Schema boundary | Per-subject breakdown not available in attribution |
+| 10 | Missing sections | Graceful "no data available" responses |
+| 11 | Physical meeting vs app session | Distinguishes co-location from digital comms |
+| 12 | Confidence caveats | Explains low/moderate/high confidence levels |
+| 13 | Burner score explanation | Score interpretation (threshold > 30) |
+| 14 | Multi-section cross-reference | Assembles complete subject profile |
+| 15 | Data completeness | Warns about missing CDR/IPDR types |
+
+Training data covers both **CDR (phone number)** and **IPDR (IP address)** identifier formats.
+The `attribution` section is aggregate (no per-subject breakdown) — the model is trained to
+say "not available" rather than hallucinate.
+
+### Training pipeline
+
+Training artefacts under `backend/`:
+
+| File | Purpose |
+|------|---------|
+| `app/ai/training_data.py` | Generates the 15-type, 3,218-example dataset |
+| `app/ai/tifm_train.jsonl` | Pre-generated training dataset |
+| `train_qwen_tifm.py` | Local training script (max_steps=1500, seq_len=1024, bf16) |
+| `pipeline_tifm_finetune.py` | Unified pipeline: `--generate-only`, `--train-only`, `--train` |
+| `tifm_kaggle_train.ipynb` | Kaggle notebook for 7B training on T4/P100 (16 GB VRAM) |
+| `tifm_colab_train.ipynb` | Colab variant (legacy) |
+| `app/ai/inference.py` | Single-pass fine-tuned inference (no hybrid fallback) |
+| `app/api/ai.py` | `POST /ai/chat` endpoint feeds analytics → fine-tuned model |
+| `tifm_lora_output/` | Trained LoRA adapter (~60 MB) |
+
+### Inference
+
+Single-pass: the model receives trimmed analytics (≤2000 chars) + question, generates directly
+(max_new_tokens=256, temperature=0.3). No hybrid two-model fallback. The `POST /ai/chat`
+endpoint runs multi-agent analytics first, then feeds the structured result to the fine-tuned
+model.
 
 ---
 
@@ -276,6 +329,10 @@ Run from `backend/` with the venv active:
 | `scripts/migrate_sqlite_to_postgres.py` | Migrate an existing SQLite DB into PostgreSQL. |
 | `scripts/fetch_provider_ranges.py` | Refresh provider IP ranges from official feeds (AWS/Google/Cloudflare/Fastly/GitHub) into `data/asn_ranges.csv`. |
 | `scripts/gen_attribution_js.py` | Regenerate the frontend attribution data from `app/data/attribution_data.json`. |
+| `scripts/seed_triangulation.py` | Seed tower triangulation reference data. |
+| `scripts/extract_attribution_data.js` | Extract attribution data for frontend (Node.js helper). |
+| `train_qwen_tifm.py` | Local QLoRA training of Qwen2.5-3B on the TIFM dataset. |
+| `pipeline_tifm_finetune.py` | Unified pipeline: generate training data and/or train the model. |
 
 ---
 
@@ -284,10 +341,13 @@ Run from `backend/` with the venv active:
 ```bash
 cd backend
 python -m unittest tests.test_inference tests.test_attribution tests.test_provider_ranges tests.test_ai
+python -m unittest tests.test_ingest tests.test_meetings tests.test_watchlist
+python -m unittest tests.test_graph_scale tests.test_records_pagination tests.test_case_isolation
 ```
 
-The suites cover the inference engine, the service-attribution metrics harness, the
-provider-range fetcher, and the AI dataset utilities.
+The suites cover the inference engine, service-attribution metrics, provider-range fetcher,
+AI dataset utilities, CSV ingest pipeline, meeting detection, watchlist enforcement,
+graph scalability, pagination, case isolation, and more (25 test files in `tests/`).
 
 ---
 
@@ -300,50 +360,63 @@ provider-range fetcher, and the AI dataset utilities.
 | **App won't start — settings error** | `.env` is missing or `DATABASE_URL` isn't set. Copy `.env.example` → `.env`. |
 | **Port 8000 already in use** | `uvicorn app.main:app --reload --port 8001`. |
 | **Changed `.env` but nothing changed** | `.env` is read at startup — restart `uvicorn`. |
-| **AI Insights does nothing** | Ollama isn't running/configured — optional; everything else works without it. |
+| **AI Insights does nothing** | Ollama isn't running/configured or no fine-tuned model loaded — optional; everything else works without it. Select "Ollama" or "FINE-TUNED TIFM" in the AI tab dropdown. |
+| **Fine-tuned model not loading** | Ensure `requirements-ai.txt` is installed and an NVIDIA GPU with CUDA is available. The base model (~6 GB) downloads from Hugging Face Hub on first load. |
 | **Uploaded a CSV but the case is empty** | Make sure a case is selected before uploading; records attach to the active case. |
 
 ---
 
 ## Project structure
 
-Key paths only. The optional AI fine-tuning tooling under `backend/`
-(`pipeline_tifm_finetune.py`, `train_qwen_tifm.py`, `*.ipynb`) is omitted here for brevity;
-its generated model weights/outputs (`llm_models/`, `tifm_lora_output/`, `tifm_merged/`) are
-git-ignored.
-
 ```
 backend/
 ├── app/
-│   ├── main.py                 # FastAPI entry point + static serving
-│   ├── api/                    # REST routers: auth, upload, records, geo, graph,
+│   ├── main.py                 # FastAPI entry point + static serving + startup hooks
+│   ├── api/                    # 25 REST routers: auth, upload, records, geo, graph,
 │   │                           #   timeline, stats, investigation, inference, cases,
-│   │                           #   annotations, towers, ai
+│   │                           #   annotations, towers, ai, analysis, analytics,
+│   │                           #   cross-case, audit, reference, tower-dump,
+│   │                           #   subscribers, export, watchlist, subject-tags
 │   ├── core/
 │   │   ├── config.py           # Pydantic settings (.env)
 │   │   └── database.py         # SQLAlchemy engine + automatic SQLite fallback
-│   ├── models/                 # SQLAlchemy models: cdr, ipdr, tower, case, annotation, auth
-│   ├── schemas/                # Pydantic schemas: cdr, ipdr, tower, case, annotation, query, upload, auth
-│   ├── services/
-│   │   ├── service_attribution_service.py  # IP-range + port attribution engine
+│   ├── models/                 # 15 SQLAlchemy models: cdr, ipdr, tower, case,
+│   │                           #   annotation, auth, analytics, audit_log, etc.
+│   ├── schemas/                # Pydantic schemas: cdr, ipdr, tower, case, auth, etc.
+│   ├── services/               # 23 services:
+│   │   ├── service_attribution_service.py  # IP-range + port attribution (~240 ports)
 │   │   ├── inference_service.py            # spatiotemporal inference (CDR vs IPDR)
 │   │   ├── geo.py                          # haversine + travel-mode helpers
 │   │   ├── investigation_service.py        # unified-timeline builder
-│   │   ├── records_service.py  graph_service.py  stats_service.py
-│   │   ├── tower_service.py    timeline_service.py  csv_parser.py
-│   │   └── auth_service.py     # password hashing + session management
+│   │   ├── analysis_service.py             # case analysis orchestration
+│   │   ├── analytics_materialize_service.py # pre-computed analytics caching
+│   │   ├── auth_service.py                 # password hashing + session management
+│   │   └── (records, graph, stats, tower, timeline, csv_parser, export, etc.)
 │   ├── utils/validators.py     # CSV column / datetime validation
 │   ├── data/attribution_data.json          # shared attribution knowledge base
-│   └── ai/                     # optional LLM investigator / dataset tooling
+│   └── ai/                     # LLM fine-tuning + inference pipeline
+│       ├── training_data.py    # 15-type, 3,218-example dataset generator
+│       ├── inference.py        # single-pass fine-tuned inference
+│       ├── orchestrator.py     # multi-agent analytics orchestration
+│       ├── investigator.py     # PoliceInvestigator model
+│       ├── knowledge_base.json # structured app knowledge base
+│       └── tifm_train.jsonl    # pre-generated training examples
 ├── static/
 │   ├── index.html  app.js  styles.css      # frontend SPA (no build step)
-│   └── attribution_data.js                 # generated from app/data/attribution_data.json
+│   ├── attribution_data.js                 # generated port/service mapping
+│   └── vendor/  workers/                   # vendor libs + web workers
 ├── scripts/
 │   ├── init_db.py  generate_sample_data.py  migrate_sqlite_to_postgres.py
 │   ├── fetch_provider_ranges.py  gen_attribution_js.py
-│   └── extract_attribution_data.js  seed_triangulation.py   # one-off helpers
-├── tests/                      # test_inference, test_attribution, test_provider_ranges, test_ai
+│   └── extract_attribution_data.js  seed_triangulation.py
+├── tests/                      # 25 test files (inference, attribution, ingest, etc.)
+├── train_qwen_tifm.py          # local QLoRA training script
+├── pipeline_tifm_finetune.py   # unified generate+train pipeline
+├── tifm_kaggle_train.ipynb     # Kaggle notebook (7B training on T4/P100)
+├── tifm_lora_output/           # trained LoRA adapter (~60 MB)
+├── llm_models/                 # base model cache (git-ignored)
 ├── requirements.txt
+├── requirements-ai.txt
 ├── .env.example
 ├── setup.ps1  setup.sh         # fresh-setup scripts
 └── cdrdb.sqlite3               # SQLite DB (only if used; git-ignored)
@@ -356,6 +429,8 @@ backend/
 - [docs/architecture.md](docs/architecture.md) — system design & data flow
 - [docs/api.md](docs/api.md) — endpoint reference (also live at `/docs`)
 - [docs/frontend.md](docs/frontend.md) — tab walkthrough & state
-- [docs/features.md](docs/features.md) — detailed feature catalogue
+- [docs/features.md](docs/features.md) — detailed feature catalogue (21 sections, 829 lines)
 - [docs/deployment.md](docs/deployment.md) — production / reverse-proxy
 - [docs/development.md](docs/development.md) — contributing & code style
+- [docs/PRESENTATION.md](docs/PRESENTATION.md) — project slide deck
+- [docs/ATTRIBUTION_EXPANSION.md](docs/ATTRIBUTION_EXPANSION.md) — service attribution design notes
