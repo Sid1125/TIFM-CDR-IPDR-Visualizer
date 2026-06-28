@@ -95,7 +95,7 @@ Closing the bread-and-butter gaps vs the commercial i9 CDR Analyzer, in 8 phases
 - **Group Compare:** pick N subjects → common contacts/towers/cell-IDs/locations/IMEIs + who-called-whom matrix. (`renderGroupCompare()`/`_gcRun()`)
 - **Tower-Dump analysis:** new `TowerDumpRecord` table (separate from CDR/IPDR), `/upload/tower-dump` importer, and `/tower-dump` analytics — common numbers across ≥k dumps ("present at every scene"), un-common (elimination), under-tower lists, SIM/IMEI multiplicity. New **Tower Dump** tab. (`services/tower_dump_service.py`, `api/tower_dump.py`)
 - **SDR / subscriber (CAF):** `Subscriber` table (global by MSISDN, latest-wins), `/upload/sdr` importer (read-as-string so blanks don't floatify IDs), `/subscribers` lookup/search; identity card on the profile + prefetched into dossier POIs. (`models/subscriber.py`, `api/subscribers.py`)
-- **Suspect groups:** watchlist extended into named groups (`group_name`, idempotent `_ensure_columns` ALTER) with `phone|ip|imei|cell` kinds, `/watchlist/groups` + `/values`; grouped chips + group input in the Inferences bar, global `addToSuspectGroup()`, profile add button, and auto-highlight of suspects in the records table (dot) and graph nodes (red ring). (`api/watchlist.py`)
+- **Suspect groups:** watchlist extended into named groups (`group_name`, idempotent `_ensure_columns` ALTER) with `phone|ip|imei|cell` kinds, `/watchlist/groups` + `/values`; grouped chips + group input in the Inferences bar, global `addToSuspectGroup()`, profile add button, and auto-highlight of suspects in the records table (dot) and graph nodes (red ring). **Removal is global**: `DELETE /watchlist/by-value?value=...` deletes all entries for a value across every case and group (avoiding a scope mismatch where case-scoped `_wl` couldn't find cross-case suspects); `removeFromSuspectGroup()` uses this endpoint so the "In Group" button on a subject profile always succeeds. (`api/watchlist.py`)
 - **Export everywhere:** client `downloadCsv()` (BOM, RFC-4180 quoting) on every report table + the Records toolbar, and a generic backend `POST /export/xlsx` (`{sheet_name,headers,rows}` → `.xlsx` via openpyxl) so any table can download Excel without a JS xlsx lib. (`services/export_service.py`, `api/export.py`)
 - *Deliberately out of scope (need proprietary offline DBs): PIN-code/vehicle/train/police-diary/toll-plaza lookups, in-app auto-update, fancy/family-number relations.*
 
@@ -255,6 +255,10 @@ Closing the bread-and-butter gaps vs the commercial i9 CDR Analyzer, in 8 phases
 ### Leaflet Map with OpenStreetMap Tiles
 - **Description:** Full-screen interactive map centered on India (20.59, 78.96) with zoom controls and OSM tile layer.
 - **Tech:** Leaflet 1.9.4, `L.tileLayer('https://{s}.tile.openstreetmap.org/...')`, `L.map()`
+
+### Tower Coordinate Resolution from Tower Master Table
+- **Description:** CDR/IPDR records commonly store only a `tower_id` with no direct lat/lon. The `/geo/records` endpoint now resolves coordinates for these records by joining against the Tower master table (`_located_filter()` OR pattern: `latitude IS NOT NULL OR tower_id IN (towers_with_coords)`). The filled coordinates flow into every map mode — including impossible-travel leg detection. The frontend `towerCoords()` function also seeds its `{tower_id → {lat,lng}}` map from `state.towers` (loaded at bootstrap) before reading from `geoRecords`, so tower-referenced CDR records appear on the map even before the geo endpoint is called. The `GEO_ROW_CAP` (10,000 records per type) bounds the response.
+- **Tech:** `_load_tower_map(db)` + `_located_filter()` in `backend/app/api/geo.py`; `towerCoords()` seeded from `state.towers` in `app.js`
 
 ### 6 Map Modes
 
@@ -453,6 +457,10 @@ Closing the bread-and-butter gaps vs the commercial i9 CDR Analyzer, in 8 phases
 ### Full Render (no pagination)
 - **Description:** Every record of the case is loaded once into memory on case open (`allRows`), and the table renders the **entire filtered set in one pass** — there is no "Load more" button; you just scroll. Filters/search re-render instantly from memory. (A server-side paginated `/records/page` + `/records/services` pair exists and is tested as an opt-in fetch-on-demand mode for cases too large to hold comfortably in memory, but the default UI renders all at once.)
 - **Tech:** `renderRecTable()` builds the full `rows.map(recRowHtml).join('')`; `recRowHtml(r)` per-row builder; Load-more button hidden
+
+### Server-Side Records Export (CSV / XLSX)
+- **Description:** The CSV and XLSX export buttons on the Records toolbar call `GET /export/records` directly on the server, mirroring the active type/service/search filters. This decouples export from the `allRows` 500-record bootstrap sample — export always returns every matching record across all paginated pages, up to 200,000 rows. Filters use `!== 'all'` guards so the sentinel default "all" is never sent as a literal filter value to the backend. XLSX is generated server-side via openpyxl (`POST /export/xlsx` generic helper); no JS xlsx library is needed in the browser. The response carries a `Content-Disposition: attachment; filename="ARGUS_records_<case>.csv|xlsx"` header.
+- **Tech:** `GET /export/records` in `backend/app/api/export.py` (`page_records(limit=200_000)`); `_recServerExport(fmt)` in `app.js` with `!== 'all'` filter guards; `downloadXlsx()` calls `POST /export/xlsx`
 
 ### Row Click → Subject Profile
 - **Description:** Clicking any row in the table opens the subject profile modal for the record's subject.
@@ -896,6 +904,7 @@ Closing the bread-and-butter gaps vs the commercial i9 CDR Analyzer, in 8 phases
 - `POST /inference/dossier` — Registers a court-ready dossier generation: assigns an official reference id, writes ExportLog + AuditLog rows, returns `{ref, case_name}` for the dossier cover page
 - `GET /inference/subject/{subject}` — One subject's movement-annotated timeline + anchors + baseline/escalation/dormancy
 - `GET|POST|DELETE /watchlist` — Investigator watchlist CRUD; matches force the subject to Critical at the top of the leaderboards (phones match CDR, IPs match IPDR)
+- `DELETE /watchlist/by-value?value=` — Remove all watchlist entries for a value across all cases and groups (global removal used by "In Group" button)
 
 ### Timeline (1 endpoint)
 - `GET /timeline/` — Chronologically sorted timeline events
@@ -936,6 +945,10 @@ Closing the bread-and-butter gaps vs the commercial i9 CDR Analyzer, in 8 phases
 - `PUT /auth/admin/users/{id}` — Update a user (admin only)
 - `PUT /auth/admin/users/{id}/password` — Reset user password (admin only)
 - `DELETE /auth/admin/users/{id}` — Delete a user (admin only)
+
+### Export (2 endpoints)
+- `GET /export/records` — Stream all matching records as CSV or XLSX (respects case/type/service/search filters, up to 200,000 rows; decoupled from the `allRows` sample)
+- `POST /export/xlsx` — Generic table-to-xlsx: `{sheet_name, headers, rows, filename?}` → `.xlsx` via openpyxl; used by every in-app report download
 
 ### Infrastructure (2 endpoints)
 - `GET /health` — Server health check
