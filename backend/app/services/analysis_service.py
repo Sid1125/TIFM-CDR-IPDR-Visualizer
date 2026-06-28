@@ -116,10 +116,25 @@ def get_chart_data(db: Session, case_id: str | None) -> dict:
         cdr_counts = [cdr_daily.get(d, 0) for d in buckets]
         ipdr_counts = [ipdr_daily.get(d, 0) for d in buckets]
 
-    # ── hourly + DOW + pattern_heat from one CDR query ────────────────────────
+    # ── hourly + DOW + pattern_heat: CDR + IPDR combined ─────────────────────
     hourly = [0] * 24
     dow = [0] * 7  # JS getDay order: Sun=0, Mon=1, ..., Sat=6
     pattern_heat = [[0] * 24 for _ in range(7)]  # rows: Mon=0 (py weekday)
+
+    def _apply_time_row(d_val, h_val, n):
+        if not d_val or h_val is None:
+            return
+        h = int(h_val)
+        if not (0 <= h < 24):
+            return
+        hourly[h] += n
+        try:
+            py_dow = datetime.strptime(_d(d_val), "%Y-%m-%d").weekday()
+        except ValueError:
+            return
+        dow[(py_dow + 1) % 7] += n
+        pattern_heat[py_dow][h] += n
+
     for d_val, h_val, n in (
         _cq(
             func.date(CDRRecord.start_time),
@@ -130,44 +145,53 @@ def get_chart_data(db: Session, case_id: str | None) -> dict:
         .group_by(func.date(CDRRecord.start_time), cast(extract("hour", CDRRecord.start_time), Integer))
         .all()
     ):
-        if not d_val or h_val is None:
-            continue
-        h = int(h_val)
-        hourly[h] += n
-        try:
-            py_dow = datetime.strptime(_d(d_val), "%Y-%m-%d").weekday()  # Mon=0
-        except ValueError:
-            continue
-        js_dow = (py_dow + 1) % 7  # convert: Mon=1, Sun=0
-        dow[js_dow] += n
-        pattern_heat[py_dow][h] += n
+        _apply_time_row(d_val, h_val, n)
 
-    # ── top contacts (a_party + b_party union) ────────────────────────────────
+    for d_val, h_val, n in (
+        _iq(
+            func.date(IPDRRecord.start_time),
+            cast(extract("hour", IPDRRecord.start_time), Integer),
+            func.count(IPDRRecord.id),
+        )
+        .filter(IPDRRecord.start_time.isnot(None))
+        .group_by(func.date(IPDRRecord.start_time), cast(extract("hour", IPDRRecord.start_time), Integer))
+        .all()
+    ):
+        _apply_time_row(d_val, h_val, n)
+
+    # ── top contacts: CDR parties + IPDR destination IPs ─────────────────────
     contact_cnt: defaultdict = defaultdict(int)
     for row in _cq(CDRRecord.a_party_number, func.count(CDRRecord.id)).filter(CDRRecord.a_party_number.isnot(None)).group_by(CDRRecord.a_party_number).all():
         contact_cnt[str(row[0])] += row[1]
     for row in _cq(CDRRecord.b_party_number, func.count(CDRRecord.id)).filter(CDRRecord.b_party_number.isnot(None)).group_by(CDRRecord.b_party_number).all():
         contact_cnt[str(row[0])] += row[1]
+    # For IPDR-heavy cases add destination IPs as contacts when CDR contacts are sparse
+    if sum(contact_cnt.values()) == 0:
+        for row in _iq(IPDRRecord.destination_ip, func.count(IPDRRecord.id)).filter(IPDRRecord.destination_ip.isnot(None)).group_by(IPDRRecord.destination_ip).all():
+            contact_cnt[str(row[0])] += row[1]
     top_contacts = [{"c": c, "n": n} for c, n in sorted(contact_cnt.items(), key=lambda x: x[1], reverse=True)[:10]]
 
-    # ── active subjects (top 10 a_party by record count) ─────────────────────
-    active_subjects = [{"sub": str(r[0]), "n": r[1]} for r in
-                       _cq(CDRRecord.a_party_number, func.count(CDRRecord.id))
-                       .filter(CDRRecord.a_party_number.isnot(None))
-                       .group_by(CDRRecord.a_party_number)
-                       .order_by(func.count(CDRRecord.id).desc())
-                       .limit(10).all()]
+    # ── active subjects: CDR a_party + IPDR msisdn ────────────────────────────
+    subj_cnt: defaultdict = defaultdict(int)
+    for row in _cq(CDRRecord.a_party_number, func.count(CDRRecord.id)).filter(CDRRecord.a_party_number.isnot(None)).group_by(CDRRecord.a_party_number).all():
+        subj_cnt[str(row[0])] += row[1]
+    for row in _iq(IPDRRecord.msisdn, func.count(IPDRRecord.id)).filter(IPDRRecord.msisdn.isnot(None)).group_by(IPDRRecord.msisdn).all():
+        subj_cnt[str(row[0])] += row[1]
+    active_subjects = [{"sub": k, "n": v} for k, v in sorted(subj_cnt.items(), key=lambda x: x[1], reverse=True)[:10]]
 
-    # ── top towers ────────────────────────────────────────────────────────────
-    top_towers = [{"tower_id": str(r[0]), "n": r[1]} for r in
-                  _cq(CDRRecord.tower_id, func.count(CDRRecord.id))
-                  .filter(CDRRecord.tower_id.isnot(None))
-                  .group_by(CDRRecord.tower_id)
-                  .order_by(func.count(CDRRecord.id).desc())
-                  .limit(10).all()]
+    # ── top towers: CDR + IPDR combined ───────────────────────────────────────
+    tower_cnt: defaultdict = defaultdict(int)
+    for row in _cq(CDRRecord.tower_id, func.count(CDRRecord.id)).filter(CDRRecord.tower_id.isnot(None)).group_by(CDRRecord.tower_id).all():
+        tower_cnt[str(row[0])] += row[1]
+    for row in _iq(IPDRRecord.tower_id, func.count(IPDRRecord.id)).filter(IPDRRecord.tower_id.isnot(None)).group_by(IPDRRecord.tower_id).all():
+        tower_cnt[str(row[0])] += row[1]
+    top_towers = [{"tower_id": k, "n": v} for k, v in sorted(tower_cnt.items(), key=lambda x: x[1], reverse=True)[:10]]
 
-    # ── call types + directions ───────────────────────────────────────────────
+    # ── call types (CDR) + protocol fallback for IPDR-only cases ─────────────
     call_types = {str(r[0]): r[1] for r in _cq(CDRRecord.call_type, func.count(CDRRecord.id)).filter(CDRRecord.call_type.isnot(None)).group_by(CDRRecord.call_type).all()}
+    if not call_types:
+        # IPDR-only case: use protocol distribution as service type
+        call_types = {str(r[0]).upper(): r[1] for r in _iq(IPDRRecord.protocol, func.count(IPDRRecord.id)).filter(IPDRRecord.protocol.isnot(None)).group_by(IPDRRecord.protocol).all()}
     directions = {str(r[0]): r[1] for r in _cq(CDRRecord.direction, func.count(CDRRecord.id)).filter(CDRRecord.direction.isnot(None)).group_by(CDRRecord.direction).all()}
 
     # ── duration distribution (7 bins: <10s, 10-30s, 30-60s, 1-5m, 5-15m, 15-60m, >60m) ──
@@ -204,7 +228,7 @@ def get_chart_data(db: Session, case_id: str | None) -> dict:
                .order_by(vol_col.desc())
                .limit(10).all()]
 
-    # ── geo state: JOIN cdr_records → towers by tower_id ─────────────────────
+    # ── geo state: CDR → towers JOIN, fallback to IPDR → towers ─────────────
     geo_q = (db.query(Tower.state, func.count(CDRRecord.id).label("n"))
              .join(CDRRecord, CDRRecord.tower_id == Tower.tower_id)
              .filter(Tower.state.isnot(None)))
@@ -212,6 +236,14 @@ def get_chart_data(db: Session, case_id: str | None) -> dict:
         geo_q = geo_q.filter(CDRRecord.case_id == case_id)
     geo_state = [{"state": str(r[0]), "n": r[1]} for r in
                  geo_q.group_by(Tower.state).order_by(func.count(CDRRecord.id).desc()).limit(12).all()]
+    if not geo_state:  # IPDR-only case: try IPDR tower records
+        geo_q2 = (db.query(Tower.state, func.count(IPDRRecord.id).label("n"))
+                  .join(IPDRRecord, IPDRRecord.tower_id == Tower.tower_id)
+                  .filter(Tower.state.isnot(None)))
+        if case_id:
+            geo_q2 = geo_q2.filter(IPDRRecord.case_id == case_id)
+        geo_state = [{"state": str(r[0]), "n": r[1]} for r in
+                     geo_q2.group_by(Tower.state).order_by(func.count(IPDRRecord.id).desc()).limit(12).all()]
 
     # ── tower diversity per day (COUNT DISTINCT tower_id per date) ────────────
     td_raw = (_cq(func.date(CDRRecord.start_time), func.count(func.distinct(CDRRecord.tower_id)))
@@ -266,12 +298,17 @@ def get_chart_data(db: Session, case_id: str | None) -> dict:
                        .order_by(func.avg(CDRRecord.duration_seconds).desc())
                        .limit(10).all() if r[0]]
 
-    # ── service timeline: last 14 active days × top 6 call types ─────────────
+    # ── service timeline: last 14 active days × top 6 service types ──────────
     svc_days: defaultdict = defaultdict(lambda: defaultdict(int))
     for d_val, svc, n in (_cq(func.date(CDRRecord.start_time), CDRRecord.call_type, func.count(CDRRecord.id))
                           .filter(CDRRecord.start_time.isnot(None), CDRRecord.call_type.isnot(None))
                           .group_by(func.date(CDRRecord.start_time), CDRRecord.call_type).all()):
         svc_days[_d(d_val)][str(svc)] += n
+    # IPDR protocol as service for mixed/IPDR-only cases
+    for d_val, proto, n in (_iq(func.date(IPDRRecord.start_time), IPDRRecord.protocol, func.count(IPDRRecord.id))
+                            .filter(IPDRRecord.start_time.isnot(None), IPDRRecord.protocol.isnot(None))
+                            .group_by(func.date(IPDRRecord.start_time), IPDRRecord.protocol).all()):
+        svc_days[_d(d_val)][str(proto).upper()] += n
     last14 = sorted(svc_days)[-14:]
     svc_totals: defaultdict = defaultdict(int)
     for d in last14:
