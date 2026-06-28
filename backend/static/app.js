@@ -2688,10 +2688,12 @@ function runMapMode(){
   else if(mode==='triangulation')showMapTriangulation(sub);
   else if(mode==='meetings')showMapMeetings(sub);
 }
-// Tower id -> coordinates, derived from the loaded geo records (inferences reference
-// towers by id; this resolves them to points to draw).
+// Tower id -> coordinates. Primary source: state.towers (the Tower master table, always
+// has coordinates when a tower file was uploaded). Secondary: geoRecords for any CDR/IPDR
+// records with direct lat/lon that aren't in the master yet.
 function towerCoords(){
   const m={};
+  (state.towers||[]).forEach(t=>{if(t.tower_id&&t.latitude!=null&&t.longitude!=null)m[t.tower_id]={lat:t.latitude,lng:t.longitude};});
   geoRecords.forEach(r=>{if(r.tower_id&&r.latitude!=null&&r.longitude!=null&&!m[r.tower_id])m[r.tower_id]={lat:r.latitude,lng:r.longitude};});
   return m;
 }
