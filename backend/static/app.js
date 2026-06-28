@@ -1,5 +1,17 @@
 // ====== STATE ======
-const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{},subjectTags:{}};
+const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{},subjectTags:{},_ownedSubjects:[],_cdrStats:null,_ipdrStats:null,_cd:null,_totalCdr:0,_totalIpdr:0};
+// _ownedSubjects: distinct a_party numbers from server (for analysis+group-compare pickers)
+// _cdrStats/_ipdrStats: server-side aggregated totals (accurate even for large cases)
+// _cd: chart data fetched lazily from /analysis/chart-data
+// _totalCdr/_totalIpdr: true record counts (not bounded by the 500-row allRows sample)
+
+let _renderGen=0;            // increments on every loadCaseData; used to detect stale tabs
+const _tabGen={};            // {tabKey: _renderGen} — skip re-render if data hasn't changed
+function _tabDirty(tab){if(_tabGen[tab]===_renderGen)return false;_tabGen[tab]=_renderGen;return true;}
+function debounce(fn,ms=220){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
+// Helper: true CDR/IPDR totals (server stats when available, fallback to sample length)
+function _totalCdrFn(){return(state._cdrStats&&state._cdrStats.total_records)||state.cdr.length||0;}
+function _totalIpdrFn(){return(state._ipdrStats&&state._ipdrStats.total_records)||state.ipdr.length||0;}
 const API={async req(p,o){const r=await fetch(p,{credentials:'same-origin',...o,headers:{...((o&&o.headers)||{})}});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||r.status);return r.status===204?null:r.json()},get(p){return this.req(p)},post(p,b){return this.req(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},put(p,b){return this.req(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},del(p){return this.req(p,{method:'DELETE'})},async upload(p,f){const fd=new FormData();fd.append('file',f);const r=await fetch(p,{credentials:'same-origin',method:'POST',body:fd});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||'Upload failed');return r.json()}};
 
 // ====== DOM REFS ======
@@ -234,22 +246,48 @@ function setActiveCase(id){
   try{if(activeCaseId)localStorage.setItem('activeCaseId',activeCaseId);else localStorage.removeItem('activeCaseId');}catch(e){}
 }
 async function loadCaseData(){
+  // Bump render generation: tabs will know their cached render is stale.
+  _renderGen++;Object.keys(_tabGen).forEach(k=>delete _tabGen[k]);
+  state._cd=null;  // chart data needs re-fetch
   invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
   try{
-    const caseParam=activeCaseId?'?case_id='+activeCaseId:'';
-    const[cdr,ipdr,towers]=await Promise.all([API.get('/records/cdr'+caseParam),API.get('/records/ipdr'+caseParam),API.get('/towers/')]);
-    state.cdr=cdr;state.ipdr=ipdr;state.towers=towers;
-    allRows=[...cdr.map(nCdr),...ipdr.map(nIpdr)].sort((a,b)=>new Date(b.ts)-new Date(a.ts));
-    const subs=new Set();allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
+    const qp=new URLSearchParams({limit:500});
+    if(activeCaseId)qp.set('case_id',activeCaseId);
+    const caseParam=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+    // Fetch sample records + stats + subjects + towers in parallel
+    const[page1,towers,cdrStats,ipdrStats,ownedSubjects]=await Promise.all([
+      API.get('/records/page?'+qp.toString()),
+      API.get('/towers/'),
+      API.get('/stats/cdr'+caseParam),
+      API.get('/stats/ipdr'+caseParam),
+      API.get('/analysis/subjects'+caseParam),
+    ]);
+    state.towers=towers;
+    state._cdrStats=cdrStats;
+    state._ipdrStats=ipdrStats;
+    state._totalCdr=cdrStats.total_records||0;
+    state._totalIpdr=ipdrStats.total_records||0;
+    state._ownedSubjects=Array.isArray(ownedSubjects)?ownedSubjects:[];
+    // allRows = bounded 500-record sample for timeline, comparison, mini-graph, map, geofence
+    const rows=page1.rows||[];
+    const cdrRows=rows.filter(r=>r.rtype==='CDR');
+    const ipdrRows=rows.filter(r=>r.rtype==='IPDR');
+    state.cdr=cdrRows;state.ipdr=ipdrRows;
+    allRows=rows.map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r)).sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+    // state.subjects = all parties from sample (for timeline, graph, comparison dropdowns)
+    const subs=new Set();
+    allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
     state.subjects=[...subs].sort();
-    await ensureMeetingsLoaded(true);  // server-side meetings ready before any tab renders
+    if(page1.total>500){
+      // Also seed subjects with the owned subjects list so analysis tabs work on large cases
+      state._ownedSubjects.forEach(s=>subs.add(s));
+      state.subjects=[...subs].sort();
+    }
+    await ensureMeetingsLoaded(true);
     renderDashboard();
     renderRecords();
-    renderCharts();
+    renderCharts();    // fires in background; dirty-flag prevents double-render on tab switch
     initGraphSubjects();
-    // Re-render whatever tab the user is currently viewing so switching cases updates the
-    // view instantly, instead of requiring a manual tab switch or a page refresh. Dashboard,
-    // Charts and Records are already re-rendered just above, so only refresh the others.
     if(state.tab&&!['dashboard','charts','records'].includes(state.tab))switchTab(state.tab);
     if(activeCaseId){const cn=(state.cases||[]).find(c=>String(c.id)===String(activeCaseId));auditView('view_case',{case_id:activeCaseId,case_name:cn?cn.name:null});}
     try{updateEvidenceCount();}catch(e){}
@@ -1301,7 +1339,7 @@ D.resetCaseBtn.addEventListener('click',resetCase);
 // ====== 1. DASHBOARD ======
 function renderDashboard(){
   const _ht=$('dashHeroTitle'),_hs=$('dashHeroSub');
-  if(!allRows.length){
+  if(!(_totalCdrFn()+_totalIpdrFn())){
     if(_ht)_ht.textContent='Dashboard';
     if(_hs)_hs.textContent='Upload CDR, IPDR and Tower CSVs to begin building the case.';
     D.dashCards.innerHTML='<div class="dash-card" style="grid-column:1/-1;text-align:center;padding:36px;color:var(--muted)">No data yet — use the upload cards above to add CDR / IPDR records and begin analysis.</div>';
@@ -1312,27 +1350,32 @@ function renderDashboard(){
     try{window.dashBarChart&&(window.dashBarChart.destroy(),window.dashBarChart=null)}catch(e){}
     return;
   }
-  const total=allRows.length;
-  const totalCdr=state.cdr.length,totalIpdr=state.ipdr.length;
+  const total=_totalCdrFn()+_totalIpdrFn();
+  const totalCdr=_totalCdrFn(),totalIpdr=_totalIpdrFn();
   // Compute sessions and events separately
   const sessionCounts=new Map();allRows.forEach(r=>{const k=r.sub;if(k){sessionCounts.set(k,(sessionCounts.get(k)||0)+1)}});
   const totalSessions=state.subjects.reduce((sum,s)=>sum+reconstructSessions(s).length,0);
   const totalEvents=allRows.filter(r=>r.type==='CDR'||(r.type==='IPDR'&&r.svc)).length;
+  // Use server stats for accurate totals; allRows sample for contact/tower/svc approximations
+  const uniqueContactsCount=(state._cdrStats&&state._cdrStats.unique_b_party)||new Set(allRows.map(r=>r.cnt).filter(Boolean)).size;
+  const uniqueSubjectsCount=(state._cdrStats&&state._cdrStats.unique_a_party)||new Set(allRows.map(r=>r.sub).filter(Boolean)).size;
   const contactCounts={};allRows.forEach(r=>{if(r.cnt)contactCounts[r.cnt]=(contactCounts[r.cnt]||0)+1});
   const topContact=Object.entries(contactCounts).sort((a,b)=>b[1]-a[1])[0];
   const towerCounts={};allRows.forEach(r=>{if(r.tow)towerCounts[r.tow]=(towerCounts[r.tow]||0)+1});
   const topTower=Object.entries(towerCounts).sort((a,b)=>b[1]-a[1])[0];
   const svcCounts={};allRows.forEach(r=>{const s=r.svc||'Unknown';svcCounts[s]=(svcCounts[s]||0)+1});
   const topSvc=Object.entries(svcCounts).sort((a,b)=>b[1]-a[1])[0];
-  const uniqueContacts=new Set(allRows.map(r=>r.cnt).filter(Boolean));
-  const uniqueSubjects=new Set(allRows.map(r=>r.sub).filter(Boolean));
 
   // Hero: case name + live one-line summary
   if(_ht){const opt=D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex];
     const cn=opt?opt.text.replace(/\s*\(\d+\)\s*$/,'').trim():'';_ht.textContent=cn||'Investigation overview';}
-  if(_hs){const ts=allRows.filter(r=>r.ts).map(r=>new Date(r.ts)).sort((a,b)=>a-b);
-    const span=ts.length?ts[0].toLocaleDateString()+' – '+ts[ts.length-1].toLocaleDateString():'';
-    _hs.textContent=n(total)+' records · '+n(uniqueSubjects.size)+' subjects · '+n(uniqueContacts.size)+' contacts'+(span?' · '+span:'');}
+  if(_hs){
+    // Use server date range if available; fall back to sample
+    const dr=state._cdrStats&&state._cdrStats.date_range;
+    let span='';
+    if(dr&&dr.min&&dr.max){span=new Date(dr.min).toLocaleDateString()+' – '+new Date(dr.max).toLocaleDateString();}
+    else{const ts=allRows.filter(r=>r.ts).map(r=>new Date(r.ts)).sort((a,b)=>a-b);if(ts.length)span=ts[0].toLocaleDateString()+' – '+ts[ts.length-1].toLocaleDateString();}
+    _hs.textContent=n(total)+' records · '+n(uniqueSubjectsCount)+' subjects · '+n(uniqueContactsCount)+' contacts'+(span?' · '+span:'');}
 
   D.dashCards.innerHTML=[
     {l:'Total Records',v:n(total),d:`${n(totalCdr)} CDR + ${n(totalIpdr)} IPDR`},
@@ -1341,8 +1384,8 @@ function renderDashboard(){
     {l:'Top Contact',v:topContact?esc(topContact[0]):'n/a',d:topContact?topContact[1]+' interactions':'No data'},
     {l:'Top Service',v:topSvc?esc(topSvc[0]):'n/a',d:topSvc?topSvc[1]+' sessions':'No data'},
     {l:'Most Active Tower',v:topTower?esc(topTower[0]):'n/a',d:topTower?topTower[1]+' visits':'No data'},
-    {l:'Unique Contacts',v:n(uniqueContacts.size),d:n(uniqueSubjects.size)+' unique subjects'},
-    {l:'Unique Subjects',v:n(uniqueSubjects.size),d:'Network of '+n(uniqueContacts.size)+' contacts'},
+    {l:'Unique Contacts',v:n(uniqueContactsCount),d:n(uniqueSubjectsCount)+' unique subjects'},
+    {l:'Unique Subjects',v:n(uniqueSubjectsCount),d:'Network of '+n(uniqueContactsCount)+' contacts'},
     geoFenceDrawn&&geoFenceLayer?(()=>{
       const fencePts=geoFenceLayer.getLatLngs();
       const coords=Array.isArray(fencePts[0])?fencePts[0].map(p=>[p.lng,p.lat]):fencePts.map(p=>[p.lng,p.lat]);
@@ -1372,14 +1415,18 @@ function renderDashboard(){
   renderQualityCard();
   renderCrossCaseHits();
   if(D.compareBar)D.compareBar.style.display='flex';
-  // Pre-fill date inputs with data range
+  // Pre-fill date inputs with data range (server date_range preferred over sample)
   if(!D.cpStartA.value||!D.cpStartB.value){
-    const times=allRows.filter(r=>r.ts).map(r=>new Date(r.ts));
-    if(times.length>1){
-      const minT=new Date(Math.min(...times)),maxT=new Date(Math.max(...times));
+    const dr=state._cdrStats&&state._cdrStats.date_range;
+    const minT=dr&&dr.min?new Date(dr.min):null;
+    const maxT=dr&&dr.max?new Date(dr.max):null;
+    if(minT&&maxT&&minT<maxT){
       const mid=new Date((minT.getTime()+maxT.getTime())/2);
       if(!D.cpStartA.value){D.cpStartA.value=minT.toISOString().slice(0,10);D.cpEndA.value=mid.toISOString().slice(0,10)}
       if(!D.cpStartB.value){D.cpStartB.value=mid.toISOString().slice(0,10);D.cpEndB.value=maxT.toISOString().slice(0,10)}
+    }else{
+      const times=allRows.filter(r=>r.ts).map(r=>new Date(r.ts));
+      if(times.length>1){const mn=new Date(Math.min(...times)),mx=new Date(Math.max(...times));const mid=new Date((mn.getTime()+mx.getTime())/2);if(!D.cpStartA.value){D.cpStartA.value=mn.toISOString().slice(0,10);D.cpEndA.value=mid.toISOString().slice(0,10)}if(!D.cpStartB.value){D.cpStartB.value=mid.toISOString().slice(0,10);D.cpEndB.value=mx.toISOString().slice(0,10)}}
     }
   }
 
@@ -1533,7 +1580,7 @@ function renderCaseSummary(){
   if(!allRows.length){D.csGrid.innerHTML='<div style="font-size:0.75rem;color:var(--muted);grid-column:1/-1">Load data to generate case summary.</div>';D.csMeta.textContent='';return}
   // Gather stats
   const totalSubjects=state.subjects.length;
-  const totalCdr=state.cdr.length,totalIpdr=state.ipdr.length;
+  const totalCdr=_totalCdrFn(),totalIpdr=_totalIpdrFn();
   const towerCount=state.towers.length;
   // Most active subject
   const subCounts={};allRows.forEach(r=>{if(r.sub)subCounts[r.sub]=(subCounts[r.sub]||0)+1});
@@ -3037,7 +3084,11 @@ D.tlType.addEventListener('change',renderTimeline);
 D.tlCompare.addEventListener('change',renderTimeline);
 
 // ====== 5. CHARTS ======
-function renderCharts(){
+async function renderCharts(){
+  if(!_tabDirty('charts'))return;
+  const qp=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+  try{state._cd=await API.get('/analysis/chart-data'+qp);}
+  catch(e){console.error('chart-data fetch:',e);return;}
   renderChartServicePie();
   renderChartHourly();
   renderChartTopContacts();
@@ -3050,7 +3101,6 @@ function renderCharts(){
   renderChartTopPorts();
   renderChartDataVolume();
   renderChartTowerActivity();
-  // Behavioural & investigative
   try{renderChartDailyTrend()}catch(e){console.error('dailyTrend',e)}
   try{renderChartPatternHeat()}catch(e){console.error('patternHeat',e)}
   try{renderChartCdrIpdrTime()}catch(e){console.error('cdrIpdrTime',e)}
@@ -3062,42 +3112,34 @@ function renderCharts(){
   try{installChartCaptureButtons()}catch(e){}
 }
 
-// ===== Behavioural & investigative charts (shared helpers) =====
+// ===== Behavioural & investigative charts (server-side data from state._cd) =====
+// _cd.daily: {buckets, unit, cdr[], ipdr[]}  _cd.hourly[]  _cd.dow[]  _cd.pattern_heat[][]
+// _cd.top_contacts  _cd.active_subjects  _cd.top_towers  _cd.call_types  _cd.directions
+// _cd.dur_dist[]  _cd.protocols  _cd.top_ports  _cd.top_vol  _cd.geo_state
+// _cd.tower_diversity  _cd.new_returning  _cd.contact_dir  _cd.contact_avg_dur
+// _cd.service_timeline: {buckets[], services[], series[][]}
 function _dayKey(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-function _sortedDays(){const s=new Set();allRows.forEach(r=>{if(r.ts)s.add(_dayKey(r.ts))});return [...s].sort();}
-// Aggregate the case window into <=~120 buckets (daily; weekly if the span is long) so time-series
-// stay legible on huge cases. Returns {buckets:[key...], label, idxOf(ts)}.
-function _timeBuckets(){
-  const days=_sortedDays();
-  if(!days.length)return{buckets:[],unit:'day',keyOf:()=>null};
-  if(days.length<=120)return{buckets:days,unit:'day',keyOf:ts=>_dayKey(ts)};
-  // weekly buckets keyed by ISO-ish week start
-  const weekKey=ts=>{const d=new Date(ts);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);return _dayKey(d);};
-  const set=new Set();allRows.forEach(r=>{if(r.ts)set.add(weekKey(r.ts))});
-  return{buckets:[...set].sort(),unit:'week',keyOf:weekKey};
-}
+function _cdBuckets(){return state._cd&&state._cd.daily?{buckets:state._cd.daily.buckets,unit:state._cd.daily.unit}:{buckets:[],unit:'day'};}
 function towerMeta(){const m={};(state.towers||[]).forEach(t=>{m[t.tower_id]={city:t.city,state:t.state}});return m;}
 function _destroy(name){if(window[name]){try{window[name].destroy()}catch(e){}window[name]=null}}
 
 function renderChartDailyTrend(){
-  if(typeof Chart==='undefined'||!D.chartDailyTrend)return;
-  const tb=_timeBuckets();
-  const counts=tb.buckets.map(()=>0);const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
-  allRows.forEach(r=>{if(r.ts){const k=tb.keyOf(r.ts);if(k in idx)counts[idx[k]]++}});
-  const total=counts.reduce((s,v)=>s+v,0);const avg=tb.buckets.length?Math.round(total/tb.buckets.length):0;
-  const mx=Math.max(...counts,0);const peak=tb.buckets[counts.indexOf(mx)]||'n/a';
+  if(typeof Chart==='undefined'||!D.chartDailyTrend||!state._cd)return;
+  const {buckets,unit}=_cdBuckets();
+  const counts=(state._cd.daily.cdr||[]).map((c,i)=>c+(state._cd.daily.ipdr[i]||0));
+  const total=counts.reduce((s,v)=>s+v,0);const avg=buckets.length?Math.round(total/buckets.length):0;
+  const mx=Math.max(...counts,0);const peak=buckets[counts.indexOf(mx)]||'n/a';
   _destroy('chartDailyTrendC');
   const ci=document.getElementById('ciDailyTrend');
-  if(ci)ci.innerHTML=tb.buckets.length+' '+tb.unit+'s &middot; '+total+' records &middot; avg '+avg+'/'+tb.unit+' &middot; peak '+peak+' ('+mx+')';
-  window.chartDailyTrendC=new Chart(D.chartDailyTrend,{type:'line',data:{labels:tb.buckets,datasets:[{label:'Records',data:counts,borderColor:'#2c6f79',backgroundColor:'#2c6f7922',fill:true,tension:0.25,pointRadius:tb.buckets.length>60?0:2,pointHoverRadius:5}]},options:{plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:14,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
+  if(ci)ci.innerHTML=buckets.length+' '+unit+'s &middot; '+total+' records &middot; avg '+avg+'/'+unit+' &middot; peak '+peak+' ('+mx+')';
+  window.chartDailyTrendC=new Chart(D.chartDailyTrend,{type:'line',data:{labels:buckets,datasets:[{label:'Records',data:counts,borderColor:'#2c6f79',backgroundColor:'#2c6f7922',fill:true,tension:0.25,pointRadius:buckets.length>60?0:2,pointHoverRadius:5}]},options:{plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:14,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
 }
 
 function renderChartPatternHeat(){
-  const el=D.chartPatternHeat;if(!el)return;
-  const grid=Array.from({length:7},()=>Array(24).fill(0));
-  let max=0;allRows.forEach(r=>{if(r.ts){const d=new Date(r.ts);const dow=(d.getDay()+6)%7;const h=d.getHours();grid[dow][h]++;if(grid[dow][h]>max)max=grid[dow][h]}});
+  const el=D.chartPatternHeat;if(!el||!state._cd)return;
+  const grid=state._cd.pattern_heat||Array.from({length:7},()=>Array(24).fill(0));
+  const flat=grid.flat();const max=Math.max(...flat,1);const total=flat.reduce((s,v)=>s+v,0);
   const dows=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const total=grid.flat().reduce((s,v)=>s+v,0);
   const ci=document.getElementById('ciPatternHeat');
   if(ci)ci.innerHTML=total+' records mapped &middot; darker = busier (peak '+max+' in one cell)';
   const color=v=>{if(!v)return'var(--surface)';const t=v/max;const a=0.12+t*0.85;return'rgba(43,111,121,'+a.toFixed(2)+')';};
@@ -3109,104 +3151,88 @@ function renderChartPatternHeat(){
 }
 
 function renderChartCdrIpdrTime(){
-  if(typeof Chart==='undefined'||!D.chartCdrIpdrTime)return;
-  const tb=_timeBuckets();const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
-  const cdr=tb.buckets.map(()=>0),ipdr=tb.buckets.map(()=>0);
-  allRows.forEach(r=>{if(!r.ts)return;const k=tb.keyOf(r.ts);if(!(k in idx))return;if(r.type==='IPDR')ipdr[idx[k]]++;else cdr[idx[k]]++;});
+  if(typeof Chart==='undefined'||!D.chartCdrIpdrTime||!state._cd)return;
+  const {buckets,unit}=_cdBuckets();
+  const cdr=state._cd.daily.cdr||[];const ipdr=state._cd.daily.ipdr||[];
   const tc=cdr.reduce((s,v)=>s+v,0),ti=ipdr.reduce((s,v)=>s+v,0);
   _destroy('chartCdrIpdrTimeC');
   const ci=document.getElementById('ciCdrIpdrTime');
-  if(ci)ci.innerHTML=n(tc)+' CDR &middot; '+n(ti)+' IPDR across '+tb.buckets.length+' '+tb.unit+'s';
-  window.chartCdrIpdrTimeC=new Chart(D.chartCdrIpdrTime,{type:'bar',data:{labels:tb.buckets,datasets:[{label:'CDR (voice/SMS)',data:cdr,backgroundColor:'#2c6f79'},{label:'IPDR (data)',data:ipdr,backgroundColor:'#d4a017'}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9}}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:14,font:{size:8}}},y:{stacked:true,beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
+  if(ci)ci.innerHTML=n(tc)+' CDR &middot; '+n(ti)+' IPDR across '+buckets.length+' '+unit+'s';
+  window.chartCdrIpdrTimeC=new Chart(D.chartCdrIpdrTime,{type:'bar',data:{labels:buckets,datasets:[{label:'CDR (voice/SMS)',data:cdr,backgroundColor:'#2c6f79'},{label:'IPDR (data)',data:ipdr,backgroundColor:'#d4a017'}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9}}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:14,font:{size:8}}},y:{stacked:true,beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
 }
 
 function renderChartCumulative(){
-  if(typeof Chart==='undefined'||!D.chartCumulative)return;
-  const tb=_timeBuckets();const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
-  const per=tb.buckets.map(()=>0);
-  allRows.forEach(r=>{if(r.ts){const k=tb.keyOf(r.ts);if(k in idx)per[idx[k]]++}});
+  if(typeof Chart==='undefined'||!D.chartCumulative||!state._cd)return;
+  const {buckets}=_cdBuckets();
+  const per=(state._cd.daily.cdr||[]).map((c,i)=>c+(state._cd.daily.ipdr[i]||0));
   let run=0;const cum=per.map(v=>(run+=v));
   _destroy('chartCumulativeC');
   const ci=document.getElementById('ciCumulative');
   if(ci)ci.innerHTML='Total '+n(run)+' records, cumulative';
-  window.chartCumulativeC=new Chart(D.chartCumulative,{type:'line',data:{labels:tb.buckets,datasets:[{label:'Cumulative',data:cum,borderColor:'#8b5cf6',backgroundColor:'#8b5cf622',fill:true,tension:0.2,pointRadius:0}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Cumulative records',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
+  window.chartCumulativeC=new Chart(D.chartCumulative,{type:'line',data:{labels:buckets,datasets:[{label:'Cumulative',data:cum,borderColor:'#8b5cf6',backgroundColor:'#8b5cf622',fill:true,tension:0.2,pointRadius:0}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Cumulative records',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
 }
 
 function renderChartActiveSubjects(){
-  if(typeof Chart==='undefined'||!D.chartActiveSubjects)return;
-  const cnt={};allRows.forEach(r=>{const k=r.sub;if(k)cnt[k]=(cnt[k]||0)+1});
-  const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if(typeof Chart==='undefined'||!D.chartActiveSubjects||!state._cd)return;
+  const sorted=(state._cd.active_subjects||[]).map(x=>[x.sub,x.n]);
   _destroy('chartActiveSubjectsC');
   const ci=document.getElementById('ciActiveSubjects');
-  if(ci)ci.innerHTML=Object.keys(cnt).length+' subjects &middot; top '+sorted.length+' by owned records';
+  if(ci)ci.innerHTML=sorted.length+' subjects &middot; top '+sorted.length+' by owned records';
+  if(!sorted.length)return;
   window.chartActiveSubjectsC=new Chart(D.chartActiveSubjects,{type:'bar',data:{labels:sorted.map(s=>{const t=subjLabelTxt(s[0]);return t.length>16?t.slice(0,16)+'…':t;}),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{onClick:(e,els)=>{if(els.length){const f=sorted[els[0].index];if(f)showProfile(f[0])}},plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>subjLabelTxt(sorted[c[0].dataIndex][0]),label:c=>c.parsed.x+' records (click to open profile)'}}},indexAxis:'y',scales:{x:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 
 function renderChartNewReturning(){
-  if(typeof Chart==='undefined'||!D.chartNewReturning)return;
-  const tb=_timeBuckets();const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
-  const fresh=tb.buckets.map(()=>0),repeat=tb.buckets.map(()=>0);
-  const seen=new Set();
-  allRows.slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts)).forEach(r=>{
-    if(!r.ts||!r.cnt)return;const k=tb.keyOf(r.ts);if(!(k in idx))return;
-    if(seen.has(r.cnt))repeat[idx[k]]++;else{seen.add(r.cnt);fresh[idx[k]]++;}
-  });
+  if(typeof Chart==='undefined'||!D.chartNewReturning||!state._cd)return;
+  const nr=state._cd.new_returning||{buckets:[],fresh:[],repeat:[]};
+  const {unit}=_cdBuckets();
   _destroy('chartNewReturningC');
   const ci=document.getElementById('ciNewReturning');
-  if(ci)ci.innerHTML=seen.size+' distinct contacts &middot; new vs already-seen per '+tb.unit;
-  window.chartNewReturningC=new Chart(D.chartNewReturning,{type:'bar',data:{labels:tb.buckets,datasets:[{label:'New contacts',data:fresh,backgroundColor:'#b94a48'},{label:'Returning',data:repeat,backgroundColor:'#2c6f79'}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9}}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}},y:{stacked:true,beginAtZero:true,title:{display:true,text:'Contacts',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
+  if(ci)ci.innerHTML='New vs returning contacts per '+unit;
+  window.chartNewReturningC=new Chart(D.chartNewReturning,{type:'bar',data:{labels:nr.buckets,datasets:[{label:'New contacts',data:nr.fresh,backgroundColor:'#b94a48'},{label:'Returning',data:nr.repeat,backgroundColor:'#2c6f79'}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9}}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}},y:{stacked:true,beginAtZero:true,title:{display:true,text:'Contacts',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
 }
 
 function renderChartGeoState(){
-  if(typeof Chart==='undefined'||!D.chartGeoState)return;
-  const meta=towerMeta();const byLoc={};let located=0,unloc=0;
-  allRows.forEach(r=>{const m=r.tow&&meta[r.tow];const st=m&&m.state;if(st){byLoc[st]=(byLoc[st]||0)+1;located++}else if(r.tow)unloc++;});
-  const sorted=Object.entries(byLoc).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  if(typeof Chart==='undefined'||!D.chartGeoState||!state._cd)return;
+  const sorted=(state._cd.geo_state||[]).map(x=>[x.state,x.n]);
   _destroy('chartGeoStateC');
   const ci=document.getElementById('ciGeoState');
-  if(ci)ci.innerHTML=sorted.length?(sorted.length+' states/UTs &middot; '+n(located)+' located records'+(unloc?' &middot; '+n(unloc)+' un-named towers':'')):'No tower place names yet — use Tower Repo → “Fill place names”.';
-  if(!sorted.length){_destroy('chartGeoStateC');const ctx=D.chartGeoState.getContext('2d');ctx&&ctx.clearRect(0,0,D.chartGeoState.width,D.chartGeoState.height);return;}
+  if(ci)ci.innerHTML=sorted.length?(sorted.length+' states/UTs ('+sorted.reduce((s,x)=>s+x[1],0)+' located records)'):'No tower location data yet — use Tower Repo → “Fill place names”.';
+  if(!sorted.length)return;
   window.chartGeoStateC=new Chart(D.chartGeoState,{type:'bar',data:{labels:sorted.map(s=>s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:'#3a7d5a',borderRadius:4}]},options:{plugins:{legend:{display:false}},indexAxis:'y',scales:{x:{beginAtZero:true,title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
 }
 
 function renderChartTowerDiversity(){
-  if(typeof Chart==='undefined'||!D.chartTowerDiversity)return;
-  const tb=_timeBuckets();const idx={};tb.buckets.forEach((b,i)=>idx[b]=i);
-  const sets=tb.buckets.map(()=>new Set());
-  allRows.forEach(r=>{if(r.ts&&r.tow){const k=tb.keyOf(r.ts);if(k in idx)sets[idx[k]].add(r.tow)}});
-  const counts=sets.map(s=>s.size);
-  const allTowers=new Set();allRows.forEach(r=>{if(r.tow)allTowers.add(r.tow)});
+  if(typeof Chart==='undefined'||!D.chartTowerDiversity||!state._cd)return;
+  const td=state._cd.tower_diversity||{buckets:[],counts:[]};
+  const {unit}=_cdBuckets();
   _destroy('chartTowerDiversityC');
   const ci=document.getElementById('ciTowerDiversity');
-  if(ci)ci.innerHTML=allTowers.size+' distinct towers overall &middot; distinct towers per '+tb.unit;
-  window.chartTowerDiversityC=new Chart(D.chartTowerDiversity,{type:'line',data:{labels:tb.buckets,datasets:[{label:'Distinct towers',data:counts,borderColor:'#ec4899',backgroundColor:'#ec489922',fill:true,tension:0.25,pointRadius:tb.buckets.length>60?0:2}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Towers',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
+  if(ci)ci.innerHTML='Distinct towers per '+unit;
+  window.chartTowerDiversityC=new Chart(D.chartTowerDiversity,{type:'line',data:{labels:td.buckets,datasets:[{label:'Distinct towers',data:td.counts,borderColor:'#ec4899',backgroundColor:'#ec489922',fill:true,tension:0.25,pointRadius:td.buckets.length>60?0:2}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Towers',font:{size:9}}},x:{grid:{display:false},ticks:{maxTicksLimit:12,font:{size:8}}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartServicePie(){
-  if(typeof Chart==='undefined')return;
-  const svc={};allRows.forEach(r=>{const s=r.svc||'Unknown';svc[s]=(svc[s]||0)+1});
-  const sorted=Object.entries(svc).sort((a,b)=>b[1]-a[1]);
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const ctMap=state._cd.call_types||{};
+  const sorted=Object.entries(ctMap).sort((a,b)=>b[1]-a[1]);
   const total=sorted.reduce((s,v)=>s+v[1],0);
-  const top10=sorted.slice(0,10);
-  const otherCount=sorted.slice(10).reduce((s,v)=>s+v[1],0);
+  const top10=sorted.slice(0,10);const otherCount=sorted.slice(10).reduce((s,v)=>s+v[1],0);
   const colors=['#2c6f79','#b94a48','#d4a017','#3a7d5a','#8b5cf6','#ec4899','#f97316','#6b7280','#14b8a6','#78716c'];
-  const labels=top10.map(s=>s[0]);
-  const data=top10.map(s=>s[1]);
+  const labels=top10.map(s=>s[0]);const data=top10.map(s=>s[1]);
   if(otherCount>0){labels.push('Other ('+(sorted.length-10)+' more)');data.push(otherCount)}
   const fullColors=[...colors];if(otherCount>0)fullColors.push('#d1c8bd');
   if(window.chartSvcPie){try{window.chartSvcPie.destroy()}catch(e){}window.chartSvcPie=null}
   if(!D.chartServPie)return;
   const ci=document.getElementById('ciServicePie');
-  if(ci)ci.innerHTML=sorted.length+' services &middot; '+total+' total records';
+  if(ci)ci.innerHTML=sorted.length+' call types &middot; '+total+' total records';
   window.chartSvcPie=new Chart(D.chartServPie,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:fullColors,borderWidth:0}]},options:{plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:9},padding:8,generateLabels:function(chart){const ds=chart.data.datasets[0];return chart.data.labels.map((l,i)=>({text:l+' ('+Math.round(ds.data[i]/total*100)+'%)',fillStyle:ds.backgroundColor[i],strokeStyle:'transparent',pointStyle:'circle',boxWidth:10,boxHeight:10,fontSize:9}))}}},tooltip:{callbacks:{label:function(ctx){const v=ctx.parsed;const pct=Math.round(v/total*100);return ctx.label+': '+v+' ('+pct+'%)'}}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartHourly(){
-  if(typeof Chart==='undefined')return;
-  const hours=Array(24).fill(0);allRows.forEach(r=>{if(r.ts){const d=new Date(r.ts);hours[d.getHours()]++}});
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const hours=state._cd.hourly||Array(24).fill(0);
   const labels=Array.from({length:24},(_,i)=>`${i.toString().padStart(2,'0')}:00`);
-  const maxH=Math.max(...hours);
-  const peakIdx=hours.indexOf(maxH);
-  const totalH=hours.reduce((s,v)=>s+v,0);
-  const avgH=Math.round(totalH/24);
+  const maxH=Math.max(...hours);const peakIdx=hours.indexOf(maxH);
+  const totalH=hours.reduce((s,v)=>s+v,0);const avgH=Math.round(totalH/24);
   const bg=hours.map(h=>h>=maxH?'#b94a48':h>avgH?'#d4a017':'#2c6f79');
   if(window.chartHourly){try{window.chartHourly.destroy()}catch(e){}window.chartHourly=null}
   if(!D.chartHourly)return;
@@ -3215,37 +3241,32 @@ function renderChartHourly(){
   window.chartHourly=new Chart(D.chartHourly,{type:'bar',data:{labels,datasets:[{data:hours,backgroundColor:bg,borderRadius:2}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){const v=ctx.parsed.y;const pct=Math.round(v/totalH*100);return v+' records ('+pct+'% of day)'}}}},scales:{y:{beginAtZero:true,grid:{},title:{display:true,text:'Records',font:{size:9}}},x:{grid:{display:false},title:{display:true,text:'Hour of Day',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartTopContacts(){
-  if(typeof Chart==='undefined')return;
-  const cnt={};allRows.forEach(r=>{if(r.cnt)cnt[r.cnt]=(cnt[r.cnt]||0)+1});
-  const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const sorted=(state._cd.top_contacts||[]).map(x=>[x.c,x.n]);
   const totalC=sorted.reduce((s,v)=>s+v[1],0);
-  const grandTotal=allRows.filter(r=>r.cnt).length;
   if(window.chartTopC){try{window.chartTopC.destroy()}catch(e){}window.chartTopC=null}
   if(!D.chartTopContacts)return;
   const ci=document.getElementById('ciTopContacts');
-  if(ci)ci.innerHTML=sorted.length+' shown &middot; '+grandTotal+' unique contacts total';
+  if(ci)ci.innerHTML=sorted.length+' top contacts';
+  if(!sorted.length)return;
   window.chartTopC=new Chart(D.chartTopContacts,{type:'bar',data:{labels:sorted.map(s=>{const t=subjLabelTxt(s[0]);return t.length>15?t.slice(0,15)+'...':t;}),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){const v=ctx.parsed.x;const pct=Math.round(v/totalC*100);const full=sorted[ctx.dataIndex]?subjLabelTxt(sorted[ctx.dataIndex][0]):'';return full+': '+v+' ('+pct+'% of top 10)'}}}},indexAxis:'y',scales:{x:{beginAtZero:true,grid:{},title:{display:true,text:'Records',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartServiceTimeline(){
-  if(typeof Chart==='undefined')return;
-  const days={};allRows.forEach(r=>{if(r.ts&&r.svc){const d=fmtd(r.ts);if(!days[d])days[d]={};days[d][r.svc]=(days[d][r.svc]||0)+1}});
-  const sortedDays=Object.keys(days).sort();
-  const svcs=[...new Set(allRows.map(r=>r.svc).filter(Boolean))].slice(0,6);
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const st=state._cd.service_timeline||{buckets:[],services:[],series:[]};
   const colors=['#2c6f79','#b94a48','#d4a017','#3a7d5a','#8b5cf6','#ec4899'];
-  const last14=sortedDays.slice(-14);
-  const totalsByDay=last14.map(d=>Object.values(days[d]||{}).reduce((s,v)=>s+v,0));
+  const totalsByDay=st.buckets.map((_,di)=>st.series.reduce((s,ser)=>s+(ser[di]||0),0));
   const totalPeriod=totalsByDay.reduce((s,v)=>s+v,0);
-  const avgDaily=last14.length?Math.round(totalPeriod/last14.length):0;
+  const avgDaily=st.buckets.length?Math.round(totalPeriod/st.buckets.length):0;
   if(window.chartSvcTime){try{window.chartSvcTime.destroy()}catch(e){}window.chartSvcTime=null}
   if(!D.chartServTimeline)return;
   const ci=document.getElementById('ciServiceTimeline');
-  if(ci)ci.innerHTML=last14.length+' days shown &middot; '+totalPeriod+' records &middot; Avg '+avgDaily+'/day &middot; '+svcs.length+' services plotted';
-  window.chartSvcTime=new Chart(D.chartServTimeline,{type:'line',data:{labels:last14,datasets:svcs.map((s,i)=>({label:s,data:last14.map(d=>days[d]?.[s]||0),borderColor:colors[i%colors.length],backgroundColor:colors[i%colors.length]+'20',fill:true,tension:0.3,pointRadius:2,pointHoverRadius:5}))},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9},padding:8}},tooltip:{mode:'index',intersect:false,callbacks:{title:function(ctx){return ctx[0].label+' (Total: '+totalsByDay[last14.indexOf(ctx[0].label)]+' records)'}}}},scales:{y:{beginAtZero:true,grid:{},title:{display:true,text:'Records',font:{size:9}}},x:{grid:{display:false},title:{display:true,text:'Date',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
+  if(ci)ci.innerHTML=st.buckets.length+' days shown &middot; '+totalPeriod+' records &middot; Avg '+avgDaily+'/day &middot; '+st.services.length+' services plotted';
+  window.chartSvcTime=new Chart(D.chartServTimeline,{type:'line',data:{labels:st.buckets,datasets:st.services.map((s,i)=>({label:s,data:st.series[i]||[],borderColor:colors[i%colors.length],backgroundColor:colors[i%colors.length]+'20',fill:true,tension:0.3,pointRadius:2,pointHoverRadius:5}))},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9},padding:8}},tooltip:{mode:'index',intersect:false,callbacks:{title:function(ctx){return ctx[0].label+' (Total: '+totalsByDay[st.buckets.indexOf(ctx[0].label)]+' records)'}}}},scales:{y:{beginAtZero:true,grid:{},title:{display:true,text:'Records',font:{size:9}}},x:{grid:{display:false},title:{display:true,text:'Date',font:{size:9}}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartContactDirection(){
-  if(typeof Chart==='undefined')return;
-  const dirs={};allRows.forEach(r=>{if(r.cnt&&r.dir){if(!dirs[r.cnt])dirs[r.cnt]={mo:0,mt:0};if(r.dir==='MO')dirs[r.cnt].mo++;else if(r.dir==='MT')dirs[r.cnt].mt++}});
-  const sorted=Object.entries(dirs).sort((a,b)=>(b[1].mo+b[1].mt)-(a[1].mo+a[1].mt)).slice(0,8);
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const sorted=(state._cd.contact_dir||[]).map(x=>[x.c,{mo:x.mo,mt:x.mt}]);
   if(window.chartContactDir){try{window.chartContactDir.destroy()}catch(e){}window.chartContactDir=null}
   if(!D.chartContactDir)return;
   const ci=document.getElementById('ciContactDir');
@@ -3255,9 +3276,9 @@ function renderChartContactDirection(){
   window.chartContactDir=new Chart(D.chartContactDir,{type:'bar',data:{labels:sorted.map(s=>{const t=subjLabelTxt(s[0]);return t.length>12?t.slice(0,12)+'...':t;}),datasets:[{label:'Outgoing (MO)',data:sorted.map(s=>s[1].mo),backgroundColor:'#2c6f79',borderRadius:2},{label:'Incoming (MT)',data:sorted.map(s=>s[1].mt),backgroundColor:'#d4a017',borderRadius:2}]},options:{plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:8},padding:6}},tooltip:{mode:'index',callbacks:{label:function(ctx){return ctx.dataset.label+': '+ctx.parsed.y}}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartDurationDist(){
-  if(typeof Chart==='undefined')return;
-  const bins=[0,10,30,60,300,900,3600,Infinity];const labels=['<10s','10-30s','30-60s','1-5m','5-15m','15-60m','>60m'];
-  const counts=Array(7).fill(0);allRows.filter(r=>r.type==='CDR').forEach(r=>{if(r.dur!=null){for(let i=0;i<bins.length-1;i++){if(r.dur>=bins[i]&&r.dur<bins[i+1]){counts[i]++;break}}}});
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const labels=['<10s','10-30s','30-60s','1-5m','5-15m','15-60m','>60m'];
+  const counts=state._cd.dur_dist||Array(7).fill(0);
   const totalC=counts.reduce((s,v)=>s+v,0);const peakB=counts.indexOf(Math.max(...counts));
   if(window.chartDurDist){try{window.chartDurDist.destroy()}catch(e){}window.chartDurDist=null}
   if(!D.chartDurDist)return;
@@ -3267,9 +3288,9 @@ function renderChartDurationDist(){
   window.chartDurDist=new Chart(D.chartDurDist,{type:'bar',data:{labels,datasets:[{data:counts,backgroundColor:counts.map((v,i)=>i===peakB?'#b94a48':'#2c6f79'),borderRadius:3}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+' calls ('+Math.round(ctx.parsed.y/totalC*100)+'%)'}}}},scales:{y:{beginAtZero:true,grid:{}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartProtocolDist(){
-  if(typeof Chart==='undefined')return;
-  const prots={};allRows.filter(r=>r.type==='IPDR').forEach(r=>{if(r.prot){const p=r.prot.toUpperCase();prots[p]=(prots[p]||0)+1}});
-  const sorted=Object.entries(prots).sort((a,b)=>b[1]-a[1]);const totalP=sorted.reduce((s,v)=>s+v[1],0);
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const protMap=state._cd.protocols||{};
+  const sorted=Object.entries(protMap).sort((a,b)=>b[1]-a[1]);const totalP=sorted.reduce((s,v)=>s+v[1],0);
   if(window.chartProtDist){try{window.chartProtDist.destroy()}catch(e){}window.chartProtDist=null}
   if(!D.chartProtDist)return;
   const ci=document.getElementById('ciProtDist');
@@ -3279,21 +3300,19 @@ function renderChartProtocolDist(){
   window.chartProtDist=new Chart(D.chartProtDist,{type:'doughnut',data:{labels:sorted.slice(0,8).map(s=>s[0]+' ('+Math.round(s[1]/totalP*100)+'%)'),datasets:[{data:sorted.slice(0,8).map(s=>s[1]),backgroundColor:colors,borderWidth:0}]},options:{plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:9},padding:6}},tooltip:{callbacks:{label:function(ctx){return ctx.label+': '+ctx.parsed+' records'}}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartTopPorts(){
-  if(typeof Chart==='undefined')return;
-  const ports={};allRows.filter(r=>r.type==='IPDR').forEach(r=>{const p=r.dport||r.sport;if(p)ports[p]=(ports[p]||0)+1});
-  const sorted=Object.entries(ports).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const sorted=(state._cd.top_ports||[]).map(x=>['Port '+x.port,x.n]);
   const totalP=sorted.reduce((s,v)=>s+v[1],0);
   if(window.chartTopPorts){try{window.chartTopPorts.destroy()}catch(e){}window.chartTopPorts=null}
   if(!D.chartTopPorts)return;
   const ci=document.getElementById('ciTopPorts');
   if(ci)ci.innerHTML=sorted.length+' ports shown &middot; '+totalP+' total hits';
   if(!sorted.length)return;
-  window.chartTopPorts=new Chart(D.chartTopPorts,{type:'bar',data:{labels:sorted.map(s=>'Port '+s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.x+' connections'}}}},indexAxis:'y',scales:{x:{beginAtZero:true,grid:{}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
+  window.chartTopPorts=new Chart(D.chartTopPorts,{type:'bar',data:{labels:sorted.map(s=>s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.x+' connections'}}}},indexAxis:'y',scales:{x:{beginAtZero:true,grid:{}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartDataVolume(){
-  if(typeof Chart==='undefined')return;
-  const vols={};allRows.filter(r=>r.type==='IPDR').forEach(r=>{if(r.cnt&&(r.bytesUp||r.bytesDn)){const b=(r.bytesUp||0)+(r.bytesDn||0);vols[r.cnt]=(vols[r.cnt]||0)+b}});
-  const sorted=Object.entries(vols).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const sorted=(state._cd.top_vol||[]).map(x=>[x.c,x.bytes]);
   const totalV=sorted.reduce((s,v)=>s+v[1],0);
   function fmtB(b){return b>1e9?(b/1e9).toFixed(1)+'GB':b>1e6?(b/1e6).toFixed(1)+'MB':b>1e3?(b/1e3).toFixed(1)+'KB':b+'B'}
   if(window.chartDataVol){try{window.chartDataVol.destroy()}catch(e){}window.chartDataVol=null}
@@ -3304,21 +3323,19 @@ function renderChartDataVolume(){
   window.chartDataVol=new Chart(D.chartDataVol,{type:'bar',data:{labels:sorted.map(s=>s[0].length>12?s[0].slice(0,12)+'...':s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#3a7d5a'),borderRadius:4}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){const v=ctx.parsed.x;const full=sorted[ctx.dataIndex]?sorted[ctx.dataIndex][0]:'';return full+': '+fmtB(v)}}}},indexAxis:'y',scales:{x:{beginAtZero:true,grid:{},title:{display:true,text:'Bytes transferred',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartTowerActivity(){
-  if(typeof Chart==='undefined')return;
-  const tow={};allRows.forEach(r=>{if(r.tow)tow[r.tow]=(tow[r.tow]||0)+1});
-  const sorted=Object.entries(tow).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const totalT=sorted.reduce((s,v)=>s+v[1],0);const allTow=Object.keys(tow).length;
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const sorted=(state._cd.top_towers||[]).map(x=>[x.tower_id,x.n]);
+  const totalT=sorted.reduce((s,v)=>s+v[1],0);
   if(window.chartTowerAct){try{window.chartTowerAct.destroy()}catch(e){}window.chartTowerAct=null}
   if(!D.chartTowerAct)return;
   const ci=document.getElementById('ciTowerAct');
-  if(ci)ci.innerHTML=sorted.length+' shown &middot; '+allTow+' unique towers total';
+  if(ci)ci.innerHTML=sorted.length+' top towers';
   if(!sorted.length)return;
   window.chartTowerAct=new Chart(D.chartTowerAct,{type:'bar',data:{labels:sorted.map(s=>s[0].length>12?s[0].slice(0,12)+'...':s[0]),datasets:[{data:sorted.map(s=>s[1]),backgroundColor:sorted.map((s,i)=>i===0?'#b94a48':i<3?'#d4a017':'#2c6f79'),borderRadius:4}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){const v=ctx.parsed.x;const pct=Math.round(v/totalT*100);return (sorted[ctx.dataIndex]?sorted[ctx.dataIndex][0]:'')+': '+v+' ('+pct+'%)'}}}},indexAxis:'y',scales:{x:{beginAtZero:true,grid:{}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartContactDuration(){
-  if(typeof Chart==='undefined')return;
-  const durs={};allRows.filter(r=>r.type==='CDR').forEach(r=>{if(r.cnt&&r.dur!=null){if(!durs[r.cnt])durs[r.cnt]={sum:0,n:0};durs[r.cnt].sum+=r.dur;durs[r.cnt].n++}});
-  const avg=Object.entries(durs).map(([c,v])=>[c,Math.round(v.sum/v.n)]).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const avg=(state._cd.contact_avg_dur||[]).map(x=>[x.c,x.avg]);
   if(window.chartContactDur){try{window.chartContactDur.destroy()}catch(e){}window.chartContactDur=null}
   if(!D.chartContactDur)return;
   const ci=document.getElementById('ciContactDur');
@@ -3327,15 +3344,14 @@ function renderChartContactDuration(){
   window.chartContactDur=new Chart(D.chartContactDur,{type:'bar',data:{labels:avg.map(s=>s[0].length>14?s[0].slice(0,14)+'...':s[0]),datasets:[{data:avg.map(s=>s[1]),backgroundColor:'#3a7d5a',borderRadius:4}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){const v=ctx.parsed.x;const full=avg[ctx.dataIndex]?avg[ctx.dataIndex][0]:'';return full+': avg '+v+'s'}}}},indexAxis:'y',scales:{x:{beginAtZero:true,grid:{},title:{display:true,text:'Avg Duration (s)',font:{size:9}}},y:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 function renderChartDayOfWeek(){
-  if(typeof Chart==='undefined')return;
-  const dow=Array(7).fill(0);const names=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  allRows.forEach(r=>{if(r.ts)dow[new Date(r.ts).getDay()]++});
-  const totalD=dow.reduce((s,v)=>s+v,0);
-  const peakD=dow.indexOf(Math.max(...dow));
+  if(typeof Chart==='undefined'||!state._cd)return;
+  const names=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dow=state._cd.dow||Array(7).fill(0);  // JS getDay() order: Sun=0
+  const totalD=dow.reduce((s,v)=>s+v,0);const peakD=dow.indexOf(Math.max(...dow));
   if(window.chartDow){try{window.chartDow.destroy()}catch(e){}window.chartDow=null}
   if(!D.chartDayOfWeek)return;
   const ci=document.getElementById('ciDayOfWeek');
-  if(ci)ci.innerHTML=names[peakD]+' busiest &middot; '+names[0]+' slowest';
+  if(ci)ci.innerHTML=names[peakD]+' busiest &middot; '+totalD+' total records';
   window.chartDow=new Chart(D.chartDayOfWeek,{type:'bar',data:{labels:names,datasets:[{data:dow,backgroundColor:dow.map((v,i)=>i===peakD?'#b94a48':v>0?'#2c6f79':'#d1c8bd'),borderRadius:3}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+' records ('+Math.round(ctx.parsed.y/totalD*100)+'%)'}}}},scales:{y:{beginAtZero:true,grid:{}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
 }
 
@@ -3381,13 +3397,19 @@ function toggleAnnot(r){
     }).catch(e=>{console.error('annotation failed',e);});
   }
 }
+// Pagination state for the Records tab
+let _recPage={total:0,limit:60,offset:0};
+let _recRows=[];   // current visible page rows (for export / annotation paint)
+
 function renderRecords(){
-  loadAnnotations();      // loads stars, then triggers the first page via renderRecTable()
-  // Service dropdown from the already-loaded rows (no extra round-trip).
-  const svcs=new Set(allRows.map(r=>r.svc).filter(Boolean));
-  const cur=D.recService.value;
-  D.recService.innerHTML='<option value="all">All services</option>'+[...svcs].sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
-  if([...D.recService.options].some(o=>o.value===cur))D.recService.value=cur;
+  loadAnnotations();      // triggers first renderRecTable() as callback
+  // Service dropdown from server
+  const caseParam=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+  API.get('/records/services'+caseParam).then(svcs=>{
+    const cur=D.recService.value;
+    D.recService.innerHTML='<option value="all">All services</option>'+(svcs||[]).sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    if([...D.recService.options].some(o=>o.value===cur))D.recService.value=cur;
+  }).catch(()=>{});
 }
 function recRowHtml(r){
   const cdr=r.type==='CDR';
@@ -3421,29 +3443,43 @@ function recRowHtml(r){
       <td style="font-size:0.7rem">${esc(r.case_id||'')}</td>
     </tr>`;
 }
-// Client-side records: every record is already loaded into allRows once on case open, so the
-// table renders the whole (filtered) set straight from memory in one pass — no "Load more"
-// button, just scroll. Search/filters re-render instantly off the in-memory rows.
-function renderRecTable(){
-  let rows=[...allRows];
-  if(D.recType.value!=='all')rows=rows.filter(r=>r.type===D.recType.value);
-  if(D.recService.value!=='all')rows=rows.filter(r=>r.svc===D.recService.value);
-  const q=D.recSearch.value.trim().toLowerCase();
-  if(q)rows=rows.filter(r=>`${r.sub} ${r.cnt} ${r.tow} ${r.cll||''} ${r.prot||''} ${r.imsi||''} ${r.imei||''}`.toLowerCase().includes(q));
-  _recRows=rows;
-  D.recCount.textContent=rows.length+' records';
-  D.recBody.innerHTML=rows.map(recRowHtml).join('');
-  if(D.recLoadMore)D.recLoadMore.style.display='none';
+// Server-side paginated records table
+async function renderRecTable(){
+  const qp=new URLSearchParams({limit:_recPage.limit,offset:_recPage.offset});
+  if(activeCaseId)qp.set('case_id',activeCaseId);
+  if(D.recType.value!=='all')qp.set('rtype',D.recType.value);
+  if(D.recService.value!=='all')qp.set('service',D.recService.value);
+  const q=D.recSearch.value.trim();
+  if(q)qp.set('search',q);
+  try{
+    const page=await API.get('/records/page?'+qp.toString());
+    _recPage.total=page.total||0;
+    const rows=(page.rows||[]).map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r));
+    _recRows=rows;
+    D.recCount.textContent=n(_recPage.total)+' records (page '+(Math.floor(_recPage.offset/_recPage.limit)+1)+' of '+Math.max(1,Math.ceil(_recPage.total/_recPage.limit))+')';
+    D.recBody.innerHTML=rows.map(recRowHtml).join('');
+    _renderRecPagination();
+    if(D.recLoadMore)D.recLoadMore.style.display='none';
+  }catch(e){console.error('renderRecTable:',e);}
 }
-let _recRows=[];
+function _recPrev(){if(_recPage.offset>0){_recPage.offset=Math.max(0,_recPage.offset-_recPage.limit);renderRecTable();}}
+function _recNext(){if(_recPage.offset+_recPage.limit<_recPage.total){_recPage.offset+=_recPage.limit;renderRecTable();}}
+function _renderRecPagination(){
+  const el=$('recPagination');if(!el)return;
+  const cur=Math.floor(_recPage.offset/_recPage.limit)+1;
+  const total=Math.max(1,Math.ceil(_recPage.total/_recPage.limit));
+  el.innerHTML=`<button class="btn-sm" onclick="_recPrev()" ${_recPage.offset===0?'disabled':''}>&#8592; Prev</button>
+    <span style="font-size:0.8rem;opacity:0.7">Page ${cur} of ${total} &middot; ${n(_recPage.total)} records</span>
+    <button class="btn-sm" onclick="_recNext()" ${cur>=total?'disabled':''}>Next &#8594;</button>`;
+}
 function _recExport(){
   const headers=['Time','Type','Subject','Counterpart','Dur(s)','Cell/Detail','Dir/APN','Service','SrcPort','DstPort','Tower','CellID','LAC','IMSI','IMEI','MSISDN','Lat','Lng','Case'];
   const data=(_recRows||[]).map(r=>{const cdr=r.type==='CDR';return [fmt(r.ts),r.type,subjLabelTxt(r.sub||''),subjLabelTxt(r.cnt||''),r.dur!=null?r.dur:'',cdr?(r.cll||''):(r.prot||''),cdr?(r.dir||''):(r.apn||''),r.svc||'',cdr?'':(r.sport!=null?r.sport:''),cdr?'':(r.dport!=null?r.dport:''),r.tow||'',r.cell||'',r.lac||'',r.imsi||'',r.imei||'',r.msisdn||'',r.lat||'',r.lng||'',r.case_id||''];});
   return {headers,rows:data};
 }
-D.recSearch.addEventListener('input',renderRecTable);
-D.recType.addEventListener('change',renderRecTable);
-D.recService.addEventListener('change',renderRecTable);
+D.recSearch.addEventListener('input',debounce(()=>{_recPage.offset=0;renderRecTable();}));
+D.recType.addEventListener('change',()=>{_recPage.offset=0;renderRecTable();});
+D.recService.addEventListener('change',()=>{_recPage.offset=0;renderRecTable();});
 {const a=$('recExportCsv'),b=$('recExportXlsx');
  if(a)a.addEventListener('click',()=>{const e=_recExport();downloadCsv('ARGUS_records.csv',e.headers,e.rows);});
  if(b)b.addEventListener('click',()=>{const e=_recExport();downloadXlsx('ARGUS_records.xlsx','Records',e.headers,e.rows);});}
@@ -3662,7 +3698,7 @@ function buildDataPackage(){
   const lines=[];
   const subs=new Set();allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
   const ts=allRows.filter(r=>r.ts).map(r=>+new Date(r.ts));
-  lines.push('Records: '+allRows.length+' ('+state.cdr.length+' CDR, '+state.ipdr.length+' IPDR)');
+  lines.push('Records: '+(_totalCdrFn()+_totalIpdrFn())+' ('+_totalCdrFn()+' CDR, '+_totalIpdrFn()+' IPDR)');
   lines.push('Period: '+(ts.length?new Date(Math.min(...ts)).toISOString().slice(0,10)+' -> '+new Date(Math.max(...ts)).toISOString().slice(0,10):'?'));
   lines.push('Entities: '+subs.size);
   const svcC={};allRows.forEach(r=>{const s=r.svc||'?';svcC[s]=(svcC[s]||0)+1});
@@ -3759,7 +3795,7 @@ function buildCaseSummary(){
 }
 function buildCaseOverview(){
   const g=document.getElementById('aiOverviewGrid');if(!g)return;
-  const total=allRows.length,totalCdr=state.cdr.length,totalIpdr=state.ipdr.length;
+  const total=_totalCdrFn()+_totalIpdrFn(),totalCdr=_totalCdrFn(),totalIpdr=_totalIpdrFn();
   const subs=new Set();allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
   const ts=allRows.filter(r=>r.ts).map(r=>+new Date(r.ts));
   const span=ts.length?Math.round((Math.max(...ts)-Math.min(...ts))/86400000):0;
@@ -5245,7 +5281,7 @@ D.exportBtn.addEventListener('click',async ()=>{
   if(analytics){report+='\n'+analytics+'\n\n---\n\n# Raw evidence & sessions\n';}
   report+='\n## Summary\n';
   report+='Total Records: '+allRows.length+'\n';
-  report+='CDR: '+state.cdr.length+', IPDR: '+state.ipdr.length+'\n';
+  report+='CDR: '+_totalCdrFn()+', IPDR: '+_totalIpdrFn()+'\n';
   report+='Towers: '+state.towers.length+'\n';
   report+='Subjects: '+state.subjects.length+'\n';
 
@@ -5352,24 +5388,24 @@ D.exportBtn.addEventListener('click',async ()=>{
   if(sessionCount>200)report+='\n... and '+(sessionCount-200)+' more sessions\n';
 
   // ===== RAW RECORDS (only non-empty fields per record) =====
-  if(state.cdr.length){
+  if(_totalCdrFn()){
     const cdrKeys=['ts','sub','cnt','dur','dir','tow','cll','svc','tec','car','imei','imsi','roam','lac','lat','lng','cell','msisdn'];
     report+='\n--- CDR Records ---\n';
     state.cdr.slice(0,200).forEach((r,i)=>{
       const vals=cdrKeys.filter(k=>r[k]).map(k=>k+'='+r[k]).join(' ');
       if(vals)report+='  #'+(i+1)+': '+vals+'\n';
     });
-    if(state.cdr.length>200)report+='  ... and '+(state.cdr.length-200)+' more\n';
+    if(_totalCdrFn()>200)report+='  ... and '+(_totalCdrFn()-200)+' more\n';
   }
 
-  if(state.ipdr.length){
+  if(_totalIpdrFn()){
     const ipdrKeys=['ts','sub','cnt','prot','sport','dport','svc','tow','bytesUp','bytesDn','dur','rat','apn','lac','lat','lng'];
     report+='\n--- IPDR Records ---\n';
     state.ipdr.slice(0,200).forEach((r,i)=>{
       const vals=ipdrKeys.filter(k=>r[k]).map(k=>k+'='+r[k]).join(' ');
       if(vals)report+='  #'+(i+1)+': '+vals+'\n';
     });
-    if(state.ipdr.length>200)report+='  ... and '+(state.ipdr.length-200)+' more\n';
+    if(_totalIpdrFn()>200)report+='  ... and '+(_totalIpdrFn()-200)+' more\n';
   }
 
   // ===== TOWERS =====
@@ -5501,7 +5537,7 @@ async function renderDossier(){
       +'<tr><td>Prepared by</td><td>'+esc(officer)+(role?' ('+esc(role)+')':'')+'</td></tr>'
       +'<tr><td>Date / time generated</td><td>'+esc(now.toLocaleString())+'</td></tr>'
       +'<tr><td>Evidence window</td><td>'+esc(dr)+'</td></tr>'
-      +'<tr><td>Records examined</td><td>'+n(allRows.length)+' ('+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR)</td></tr>'
+      +'<tr><td>Records examined</td><td>'+n(_totalCdrFn()+_totalIpdrFn())+' ('+n(_totalCdrFn())+' CDR, '+n(_totalIpdrFn())+' IPDR)</td></tr>'
       +'<tr><td>Subjects / towers</td><td>'+n(state.subjects.length)+' subjects · '+n(caseTowerN)+' towers in this case</td></tr>'
       +'<tr><td>Classification</td><td>'+CLASS+'</td></tr>'
       +'</table>'
@@ -5540,11 +5576,11 @@ async function renderDossier(){
     if(xcount)headline.push(n(xcount)+' subject(s) linked to other cases');
     if(hidden.length)headline.push(n(hidden.length)+' hidden link/convoy pattern(s)');
     h+='<section class="dossier-section"><h2>1. Executive Summary</h2>'
-      +'<p class="d-app">This case comprises <b>'+n(allRows.length)+'</b> telecom records ('+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR) across <b>'+n(state.subjects.length)+'</b> subjects over <b>'+n(spanDays)+'</b> day(s) ('+esc(dr)+'). '
+      +'<p class="d-app">This case comprises <b>'+n(_totalCdrFn()+_totalIpdrFn())+'</b> telecom records ('+n(_totalCdrFn())+' CDR, '+n(_totalIpdrFn())+' IPDR) across <b>'+n(state.subjects.length)+'</b> subjects over <b>'+n(spanDays)+'</b> day(s) ('+esc(dr)+'). '
       +(headline.length?'Automated analysis surfaced: '+headline.join('; ')+'.':'No high-severity anomalies were automatically flagged.')+'</p>'
       +'<table class="d-kv">'
       +'<tr><td>Evidence window</td><td>'+esc(dr)+' ('+n(spanDays)+' day'+(spanDays===1?'':'s')+')</td></tr>'
-      +'<tr><td>Records examined</td><td>'+n(allRows.length)+' — '+n(state.cdr.length)+' CDR, '+n(state.ipdr.length)+' IPDR</td></tr>'
+      +'<tr><td>Records examined</td><td>'+n(_totalCdrFn()+_totalIpdrFn())+' — '+n(_totalCdrFn())+' CDR, '+n(_totalIpdrFn())+' IPDR</td></tr>'
       +'<tr><td>Distinct subjects / case towers</td><td>'+n(state.subjects.length)+' subjects · '+n(caseTowers.length)+' towers touched</td></tr>'
       +'<tr><td>Persons of interest (High/Critical)</td><td>'+n(poi)+'</td></tr>'
       +'<tr><td>Co-location meetings</td><td>'+n(mt.total||0)+'</td></tr>'
@@ -6363,126 +6399,89 @@ function _repCard(expClass,id,title,headers,rows,note){
 const _hm=v=>{try{return new Date(v).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}catch(e){return ''}};
 const _durStr=s=>{s=+s||0;return s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s'};
 
-// ====== PHASE B — CDR ANALYSIS REPORTS ======
+// ====== PHASE B — CDR ANALYSIS REPORTS (server-side) ======
 let _arReports={};
-function renderAnalysisReports(){
+async function renderAnalysisReports(){
+  if(!_tabDirty('analysisreports'))return;
   const sel=document.getElementById('arSubject'),body=document.getElementById('arBody'),meta=document.getElementById('arMeta');
   if(!sel||!body)return;
-  if(!allRows.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Load a case to run analysis reports.</span></div>';sel.innerHTML='';if(meta)meta.textContent='';return;}
-  const cnt={};allRows.forEach(r=>{if(r.type==='CDR'&&r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
-  const subs=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
-  if(!sel._wired){sel._wired=true;sel.addEventListener('change',renderAnalysisReports);}
+  const subs=state._ownedSubjects.length?state._ownedSubjects:(state.subjects.filter(Boolean));
+  if(!subs.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Load a case to run analysis reports.</span></div>';sel.innerHTML='';if(meta)meta.textContent='';return;}
+  if(!sel._wired){sel._wired=true;sel.addEventListener('change',()=>{_tabGen['analysisreports']=null;renderAnalysisReports();});}
   const cur=sel.value;
-  sel.innerHTML=subs.map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+' ('+cnt[s]+')</option>').join('');
+  sel.innerHTML=subs.map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+'</option>').join('');
   if(cur&&subs.includes(cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
   const sub=sel.value;
   if(!sub){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR subjects in this case.</span></div>';return;}
+  body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⋯</span><span class="ar-empty-txt">Loading analysis reports…</span></div>';
   _arReports={};
-  const inv=rowsFor(sub).filter(r=>r.type==='CDR'&&r.ts).slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
-  const owned=ownedRowsFor(sub).filter(r=>r.type==='CDR'&&r.ts);
-  const other=r=>r.sub===sub?r.cnt:r.sub;
-  const isSms=r=>/sms|text/i.test(r.cll||'');
-  // group by day
-  const byDay={};inv.forEach(r=>{const k=new Date(r.ts).toLocaleDateString();(byDay[k]=byDay[k]||[]).push(r);});
-  const days=Object.keys(byDay).sort((a,b)=>new Date(a)-new Date(b));
-  const dayfl=days.map(d=>{const rs=byDay[d];const f=rs[0],l=rs[rs.length-1];return [d,_hm(f.ts)+' → '+(other(f)||'?'),_hm(l.ts)+' → '+(other(l)||'?'),rs.length];});
-  const single=days.filter(d=>byDay[d].length===1).map(d=>{const r=byDay[d][0];return [d,_hm(r.ts),other(r)||'?',isSms(r)?'SMS':'Call'];});
-  const dow=[0,0,0,0,0,0,0];inv.forEach(r=>dow[new Date(r.ts).getDay()]++);
-  const dnames=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const wk=dnames.map((nm,i)=>[nm,dow[i]]);
-  wk.push(['— Weekday total',dow[1]+dow[2]+dow[3]+dow[4]+dow[5]]);wk.push(['— Weekend total',dow[0]+dow[6]]);
-  const longest=inv.filter(r=>!isSms(r)&&r.dur!=null&&r.dur!=='').slice().sort((a,b)=>(b.dur||0)-(a.dur||0)).slice(0,30).map(r=>[fmt(r.ts),other(r)||'?',_durStr(r.dur),r.tow||'']);
-  let dCnt=0,nCnt=0;const dTow={},nTow={};
-  inv.forEach(r=>{const h=new Date(r.ts).getHours();(h>=6&&h<18)?dCnt++:nCnt++;});
-  owned.forEach(r=>{if(!r.tow)return;const h=new Date(r.ts).getHours();const o=(h>=6&&h<18)?dTow:nTow;o[r.tow]=(o[r.tow]||0)+1;});
-  const topT=o=>{const e=Object.entries(o).sort((a,b)=>b[1]-a[1])[0];return e?e[0]+' ('+e[1]+')':'—';};
-  const dn=[['Day (06:00–18:00)',dCnt,topT(dTow)],['Night (18:00–06:00)',nCnt,topT(nTow)]];
-  const isd=inv.filter(r=>isIsdNum(other(r))).map(r=>[fmt(r.ts),other(r),refCountry(other(r)),isSms(r)?'SMS':'Call']);
-  const subCircle=refCircle(sub);
-  const ostate=subCircle?inv.filter(r=>{const c=refCircle(other(r));return c&&c!==subCircle;}).map(r=>[fmt(r.ts),other(r),refCircle(other(r))]):[];
-  const off=[];for(let i=1;i<inv.length;i++){const g=(new Date(inv[i].ts)-new Date(inv[i-1].ts))/86400000;if(g>=3)off.push([fmt(inv[i-1].ts),fmt(inv[i].ts),g.toFixed(1)+' days']);}
-  const imeiMap={};owned.forEach(r=>{const k=r.imei;if(!k)return;const m=imeiMap[k]=imeiMap[k]||{first:r.ts,last:r.ts,c:0};m.c++;if(new Date(r.ts)<new Date(m.first))m.first=r.ts;if(new Date(r.ts)>new Date(m.last))m.last=r.ts;});
-  const imei=Object.keys(imeiMap).map(k=>{const m=imeiMap[k];return [k,refImei(k)||'—',fmtd(m.first),fmtd(m.last),m.c];});
-  const imsiMap={};owned.forEach(r=>{if(r.imsi)imsiMap[r.imsi]=(imsiMap[r.imsi]||0)+1;});
-  const imsi=Object.keys(imsiMap).map(k=>[k,imsiMap[k]]);
-  const bank=inv.filter(r=>isSms(r)&&/[A-Za-z]/.test(other(r)||'')).map(r=>[fmt(r.ts),other(r),'SMS']);
-  const reg=(id,headers,rows)=>{_arReports[id]={headers,rows};};
-  reg('day_first_last',['Date','First call','Last call','Records'],dayfl);
-  reg('single_call_days',['Date','Time','Contact','Type'],single);
-  reg('weekday_weekend',['Day','Records'],wk);
-  reg('longest_calls',['Time','Contact','Duration','Tower'],longest);
-  reg('day_night',['Bucket','Records','Dominant tower'],dn);
-  reg('isd_calls',['Time','Number','Country','Type'],isd);
-  reg('other_state',['Time','Number','Circle'],ostate);
-  reg('off_periods',['Last seen','Reappeared','Gap'],off);
-  reg('imei_summary',['IMEI','Make / Model','First','Last','Records'],imei);
-  reg('imsi_summary',['IMSI','Records'],imsi);
-  reg('bank_sms',['Time','Sender','Type'],bank);
-  body.innerHTML=[
-    _repCard('ar-exp','day_first_last','Day — first & last call',['Date','First call','Last call','Records'],dayfl),
-    _repCard('ar-exp','single_call_days','Single-call days',['Date','Time','Contact','Type'],single),
-    _repCard('ar-exp','weekday_weekend','Weekday vs weekend',['Day','Records'],wk),
-    _repCard('ar-exp','longest_calls','Longest-duration calls (top 30)',['Time','Contact','Duration','Tower'],longest),
-    _repCard('ar-exp','day_night','Day vs night summary',['Bucket','Records','Dominant tower'],dn),
-    _repCard('ar-exp','isd_calls','ISD / international calls',['Time','Number','Country','Type'],isd),
-    _repCard('ar-exp','other_state','Other-state calls',['Time','Number','Circle'],ostate,subCircle?('Subject circle: '+subCircle):'Subject circle unknown — extend app/data/mobile_series.json for circle coverage.'),
-    _repCard('ar-exp','off_periods','OFF / unused periods (gap ≥ 3 days)',['Last seen','Reappeared','Gap'],off),
-    _repCard('ar-exp','imei_summary','IMEI summary',['IMEI','Make / Model','First','Last','Records'],imei),
-    _repCard('ar-exp','imsi_summary','SIM / IMSI summary',['IMSI','Records'],imsi),
-    _repCard('ar-exp','bank_sms','Bank / OTP-sender SMS',['Time','Sender','Type'],bank,'Alphanumeric sender IDs (e.g. VM-HDFCBK). Requires call-type data in the dump.'),
-  ].join('');
-  if(meta)meta.textContent=inv.length+' records for this subject';
-  _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
+  const qp=new URLSearchParams({sub});
+  if(activeCaseId)qp.set('case_id',activeCaseId);
+  try{
+    const data=await API.get('/analysis/cdr-reports?'+qp.toString());
+    const reps=data.reports||{};
+    Object.entries(reps).forEach(([id,r])=>{_arReports[id]={headers:r.headers||[],rows:r.rows||[]};});
+    const ostate=reps.other_state||{};
+    body.innerHTML=[
+      _repCard('ar-exp','day_first_last','Day — first & last call',reps.day_first_last?.headers||[],reps.day_first_last?.rows||[]),
+      _repCard('ar-exp','single_call_days','Single-call days',reps.single_call_days?.headers||[],reps.single_call_days?.rows||[]),
+      _repCard('ar-exp','weekday_weekend','Weekday vs weekend',reps.weekday_weekend?.headers||[],reps.weekday_weekend?.rows||[]),
+      _repCard('ar-exp','longest_calls','Longest-duration calls (top 30)',reps.longest_calls?.headers||[],reps.longest_calls?.rows||[]),
+      _repCard('ar-exp','day_night','Day vs night summary',reps.day_night?.headers||[],reps.day_night?.rows||[]),
+      _repCard('ar-exp','isd_calls','ISD / international calls',reps.isd_calls?.headers||[],reps.isd_calls?.rows||[]),
+      _repCard('ar-exp','other_state','Other-state calls',reps.other_state?.headers||[],reps.other_state?.rows||[],ostate.note||''),
+      _repCard('ar-exp','off_periods','OFF / unused periods (gap ≥ 3 days)',reps.off_periods?.headers||[],reps.off_periods?.rows||[]),
+      _repCard('ar-exp','imei_summary','IMEI summary',reps.imei_summary?.headers||[],reps.imei_summary?.rows||[]),
+      _repCard('ar-exp','imsi_summary','SIM / IMSI summary',reps.imsi_summary?.headers||[],reps.imsi_summary?.rows||[]),
+      _repCard('ar-exp','bank_sms','Bank / OTP-sender SMS',reps.bank_sms?.headers||[],reps.bank_sms?.rows||[],'Alphanumeric sender IDs (e.g. VM-HDFCBK).'),
+    ].join('');
+    if(meta)meta.textContent=(data.total_records||0)+' records for this subject';
+    _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
+  }catch(e){
+    console.error('renderAnalysisReports:',e);
+    body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">✖</span><span class="ar-empty-txt">Failed to load analysis reports.</span></div>';
+  }
 }
 
-// ====== PHASE C — GROUP COMPARE (common numbers across N subjects) ======
+// ====== PHASE C — GROUP COMPARE (server-side) ======
 let _gcReports={};
 function renderGroupCompare(){
   const picker=document.getElementById('gcPicker'),body=document.getElementById('gcBody'),meta=document.getElementById('gcMeta');
   if(!picker||!body)return;
-  if(!allRows.length){picker.innerHTML='';body.innerHTML='<div class="ar-empty">Load a case to compare subjects.</div>';if(meta)meta.textContent='';return;}
-  const cnt={};allRows.forEach(r=>{if(r.type==='CDR'&&r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
-  const subs=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
+  const subs=state._ownedSubjects.length?state._ownedSubjects:state.subjects.filter(Boolean);
+  if(!subs.length){picker.innerHTML='';body.innerHTML='<div class="ar-empty">Load a case to compare subjects.</div>';if(meta)meta.textContent='';return;}
   if(!picker._wired){picker._wired=true;
     const rb=document.getElementById('gcRunBtn');if(rb)rb.onclick=_gcRun;
     const cb=document.getElementById('gcClearBtn');if(cb)cb.onclick=()=>{picker.querySelectorAll('input').forEach(c=>c.checked=false);body.innerHTML='';};
   }
-  picker.innerHTML='<div class="gc-picker-h">Select 2+ subjects</div>'+subs.slice(0,300).map(s=>'<label class="gc-chk"><input type="checkbox" value="'+esc(s)+'"> '+esc(subjLabelTxt(s))+' <span class="gc-cn">'+cnt[s]+'</span></label>').join('');
+  picker.innerHTML='<div class="gc-picker-h">Select 2+ subjects</div>'+subs.slice(0,300).map(s=>'<label class="gc-chk"><input type="checkbox" value="'+esc(s)+'"> '+esc(subjLabelTxt(s))+'</label>').join('');
   if(meta)meta.textContent=subs.length+' subjects';
 }
-function _gcRun(){
+async function _gcRun(){
   const picker=document.getElementById('gcPicker'),body=document.getElementById('gcBody');
   const sel=[...picker.querySelectorAll('input:checked')].map(c=>c.value);
   if(sel.length<2){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 2 subjects, then click Compare.</span></div>';return;}
-  const contacts={},towers={},cells={},latlng={},imeis={};
-  sel.forEach(s=>{
-    const inv=rowsFor(s).filter(r=>r.type==='CDR');const owned=ownedRowsFor(s).filter(r=>r.type==='CDR');
-    contacts[s]=new Set(inv.map(r=>r.sub===s?r.cnt:r.sub).filter(Boolean));
-    towers[s]=new Set(owned.map(r=>r.tow).filter(Boolean));
-    cells[s]=new Set(owned.map(r=>r.cell).filter(Boolean));
-    latlng[s]=new Set(owned.filter(r=>r.lat&&r.lng).map(r=>(+r.lat).toFixed(3)+','+(+r.lng).toFixed(3)));
-    imeis[s]=new Set(owned.map(r=>r.imei).filter(Boolean));
-  });
-  const inter=map=>{let acc=null;sel.forEach(s=>{const set=map[s];acc=acc===null?new Set(set):new Set([...acc].filter(x=>set.has(x)));});return [...(acc||[])];};
-  const commonContacts=inter(contacts).filter(c=>!sel.includes(c));
-  const matrix=[];sel.forEach(a=>sel.forEach(b=>{if(a===b)return;const k=rowsFor(a).filter(r=>r.type==='CDR'&&r.sub===a&&r.cnt===b).length;if(k)matrix.push([a,b,k]);}));
-  _gcReports={
-    contacts:{headers:['Common contact','Operator','Circle'],rows:commonContacts.map(c=>[c,refOperator(c),refCircle(c)])},
-    towers:{headers:['Common tower'],rows:inter(towers).map(t=>[t])},
-    cells:{headers:['Common cell ID'],rows:inter(cells).map(t=>[t])},
-    latlng:{headers:['Common location (lat,lng ~110m)'],rows:inter(latlng).map(t=>[t])},
-    imeis:{headers:['Common IMEI','Make / Model'],rows:inter(imeis).map(t=>[t,refImei(t)||'—'])},
-    matrix:{headers:['Caller','Called','Direct calls'],rows:matrix},
-  };
-  body.innerHTML='<div class="gc-sel">Comparing <b>'+sel.length+'</b> subjects: '+sel.map(s=>esc(subjLabelTxt(s))).join(', ')+'</div>'+[
-    _repCard('gc-exp','contacts','Common contacts (contacted by all '+sel.length+')',_gcReports.contacts.headers,_gcReports.contacts.rows),
-    _repCard('gc-exp','towers','Common towers',_gcReports.towers.headers,_gcReports.towers.rows),
-    _repCard('gc-exp','cells','Common cell IDs',_gcReports.cells.headers,_gcReports.cells.rows),
-    _repCard('gc-exp','latlng','Common locations',_gcReports.latlng.headers,_gcReports.latlng.rows),
-    _repCard('gc-exp','imeis','Common IMEIs',_gcReports.imeis.headers,_gcReports.imeis.rows),
-    _repCard('gc-exp','matrix','Who called whom (direct calls within the group)',_gcReports.matrix.headers,_gcReports.matrix.rows),
-  ].join('');
-  _wireExports(body,_gcReports,'gc-exp','ARGUS_group');
+  body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⋯</span><span class="ar-empty-txt">Running comparison…</span></div>';
+  const qp=new URLSearchParams({subjects:sel.join(',')});
+  if(activeCaseId)qp.set('case_id',activeCaseId);
+  try{
+    const data=await API.get('/analysis/group-compare?'+qp.toString());
+    if(data.error){body.innerHTML='<div class="ar-empty">'+esc(data.error)+'</div>';return;}
+    _gcReports={};
+    Object.entries(data).forEach(([id,r])=>{_gcReports[id]={headers:r.headers||[],rows:r.rows||[]};});
+    body.innerHTML='<div class="gc-sel">Comparing <b>'+sel.length+'</b> subjects: '+sel.map(s=>esc(subjLabelTxt(s))).join(', ')+'</div>'+[
+      _repCard('gc-exp','contacts','Common contacts (contacted by all '+sel.length+')',data.contacts?.headers||[],data.contacts?.rows||[]),
+      _repCard('gc-exp','towers','Common towers',data.towers?.headers||[],data.towers?.rows||[]),
+      _repCard('gc-exp','cells','Common cell IDs',data.cells?.headers||[],data.cells?.rows||[]),
+      _repCard('gc-exp','latlng','Common locations',data.latlng?.headers||[],data.latlng?.rows||[]),
+      _repCard('gc-exp','imeis','Common IMEIs',data.imeis?.headers||[],data.imeis?.rows||[]),
+      _repCard('gc-exp','matrix','Who called whom (direct calls within the group)',data.matrix?.headers||[],data.matrix?.rows||[]),
+    ].join('');
+    _wireExports(body,_gcReports,'gc-exp','ARGUS_group');
+  }catch(e){
+    console.error('_gcRun:',e);
+    body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">✖</span><span class="ar-empty-txt">Comparison failed.</span></div>';
+  }
 }
 
 // ====== PHASE D — TOWER DUMP ANALYSIS ======

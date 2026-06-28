@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -19,17 +20,19 @@ router = APIRouter()
 @router.get("/", response_model=list[CaseRead])
 def list_cases(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     cases = db.query(Case).order_by(Case.updated_at.desc()).all()
+    # Two GROUP BY queries instead of 2N per-case COUNT queries
+    cdr_counts = dict(db.query(CDRRecord.case_id, func.count(CDRRecord.id)).group_by(CDRRecord.case_id).all())
+    ipdr_counts = dict(db.query(IPDRRecord.case_id, func.count(IPDRRecord.id)).group_by(IPDRRecord.case_id).all())
     result = []
     for c in cases:
-        cdr_count = db.query(CDRRecord).filter(CDRRecord.case_id == str(c.id)).count()
-        ipdr_count = db.query(IPDRRecord).filter(IPDRRecord.case_id == str(c.id)).count()
+        cid = str(c.id)
         result.append(CaseRead(
             id=c.id,
             name=c.name,
             description=c.description,
             created_at=c.created_at,
             updated_at=c.updated_at,
-            record_count=cdr_count + ipdr_count,
+            record_count=cdr_counts.get(cid, 0) + ipdr_counts.get(cid, 0),
         ))
     return result
 
@@ -56,8 +59,8 @@ def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)
     c.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(c)
-    cdr_count = db.query(CDRRecord).filter(CDRRecord.case_id == str(c.id)).count()
-    ipdr_count = db.query(IPDRRecord).filter(IPDRRecord.case_id == str(c.id)).count()
+    cdr_count = db.query(func.count(CDRRecord.id)).filter(CDRRecord.case_id == str(c.id)).scalar() or 0
+    ipdr_count = db.query(func.count(IPDRRecord.id)).filter(IPDRRecord.case_id == str(c.id)).scalar() or 0
     return CaseRead(id=c.id, name=c.name, description=c.description, created_at=c.created_at, updated_at=c.updated_at, record_count=cdr_count + ipdr_count)
 
 

@@ -11,32 +11,30 @@ from app.models.tower_dump import TowerDumpRecord
 
 
 def list_dumps(db: Session, case_id: str | None) -> list[dict]:
-    """Per-dump summary for the case: row count, distinct numbers, time span."""
-    q = db.query(TowerDumpRecord)
+    """Per-dump summary via SQL GROUP BY — no full table scan."""
+    from sqlalchemy import func as _func
+    q = db.query(
+        TowerDumpRecord.dump_label,
+        _func.count(TowerDumpRecord.id).label("rows"),
+        _func.count(_func.distinct(TowerDumpRecord.msisdn)).label("distinct_numbers"),
+        _func.min(TowerDumpRecord.start_time).label("first"),
+        _func.max(TowerDumpRecord.start_time).label("last"),
+    ).group_by(TowerDumpRecord.dump_label)
     if case_id:
         q = q.filter(TowerDumpRecord.case_id == str(case_id))
-    agg: dict[str, dict] = {}
-    for r in q.all():
-        a = agg.setdefault(r.dump_label, {"dump_label": r.dump_label, "rows": 0,
-                                          "numbers": set(), "first": None, "last": None})
-        a["rows"] += 1
-        if r.msisdn:
-            a["numbers"].add(r.msisdn)
-        if r.start_time:
-            if a["first"] is None or r.start_time < a["first"]:
-                a["first"] = r.start_time
-            if a["last"] is None or r.start_time > a["last"]:
-                a["last"] = r.start_time
-    out = []
-    for a in agg.values():
-        out.append({
-            "dump_label": a["dump_label"],
-            "rows": a["rows"],
-            "distinct_numbers": len(a["numbers"]),
-            "first": a["first"].isoformat() if a["first"] else None,
-            "last": a["last"].isoformat() if a["last"] else None,
-        })
-    return sorted(out, key=lambda x: x["dump_label"])
+    return sorted(
+        [
+            {
+                "dump_label": r.dump_label,
+                "rows": r.rows,
+                "distinct_numbers": r.distinct_numbers,
+                "first": r.first.isoformat() if r.first else None,
+                "last": r.last.isoformat() if r.last else None,
+            }
+            for r in q.all()
+        ],
+        key=lambda x: x["dump_label"],
+    )
 
 
 def _rows(db: Session, case_id, labels):

@@ -2,98 +2,129 @@ from __future__ import annotations
 
 from collections import Counter
 
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 
 
-def get_top_contacts(db, limit: int = 10, case_id=None):
-    counts = Counter()
-    q = db.query(CDRRecord.a_party_number, CDRRecord.b_party_number)
-    if case_id:
-        q = q.filter(CDRRecord.case_id == case_id)
-    for a_party, b_party in q.all():
-        if a_party:
-            counts[str(a_party)] += 1
-        if b_party:
-            counts[str(b_party)] += 1
+def get_top_contacts(db: Session, limit: int = 10, case_id: str | None = None) -> list[dict]:
+    """Top contacts by total CDR involvement (union of a_party + b_party appearances)."""
+    cnt: Counter = Counter()
 
-    return [
-        {"contact": contact, "count": count}
-        for contact, count in counts.most_common(limit)
-    ]
+    def _cq(*cols):
+        q = db.query(*cols)
+        return q.filter(CDRRecord.case_id == case_id) if case_id else q
+
+    for row in _cq(CDRRecord.a_party_number, func.count(CDRRecord.id)).filter(CDRRecord.a_party_number.isnot(None)).group_by(CDRRecord.a_party_number).all():
+        cnt[str(row[0])] += row[1]
+    for row in _cq(CDRRecord.b_party_number, func.count(CDRRecord.id)).filter(CDRRecord.b_party_number.isnot(None)).group_by(CDRRecord.b_party_number).all():
+        cnt[str(row[0])] += row[1]
+
+    return [{"contact": c, "count": n} for c, n in cnt.most_common(limit)]
 
 
-def get_cdr_stats(db, case_id=None):
+def get_cdr_stats(db: Session, case_id: str | None = None) -> dict:
     def cq(*cols):
         q = db.query(*cols)
         return q.filter(CDRRecord.case_id == case_id) if case_id else q
 
-    total_records = cq(CDRRecord).count()
-    unique_a_party = cq(CDRRecord.a_party_number).distinct().count()
-    unique_b_party = cq(CDRRecord.b_party_number).distinct().count()
-    total_duration = cq(CDRRecord.duration_seconds).filter(CDRRecord.duration_seconds.isnot(None)).all()
-    total_duration_sum = sum(d[0] for d in total_duration if d[0])
-    avg_duration = total_duration_sum / len(total_duration) if total_duration else 0
+    row = cq(
+        func.count(CDRRecord.id).label("total"),
+        func.sum(CDRRecord.duration_seconds).label("dur_sum"),
+        func.count(func.distinct(CDRRecord.a_party_number)).label("uniq_a"),
+        func.count(func.distinct(CDRRecord.b_party_number)).label("uniq_b"),
+        func.min(CDRRecord.start_time).label("min_ts"),
+        func.max(CDRRecord.start_time).label("max_ts"),
+    ).one()
 
-    call_type_counts = {}
-    for ct, _ in cq(CDRRecord.call_type, CDRRecord.id).all():
-        if ct:
-            call_type_counts[ct] = call_type_counts.get(ct, 0) + 1
+    total = row.total or 0
+    dur_sum = int(row.dur_sum or 0)
+    avg_dur = round(dur_sum / total, 2) if total else 0.0
 
-    direction_counts = {}
-    for d, _ in cq(CDRRecord.direction, CDRRecord.id).all():
-        if d:
-            direction_counts[d] = direction_counts.get(d, 0) + 1
-
-    tech_counts = {}
-    for t, _ in cq(CDRRecord.technology, CDRRecord.id).all():
-        if t:
-            tech_counts[t] = tech_counts.get(t, 0) + 1
+    call_type_counts = dict(
+        cq(CDRRecord.call_type, func.count(CDRRecord.id))
+        .filter(CDRRecord.call_type.isnot(None))
+        .group_by(CDRRecord.call_type)
+        .all()
+    )
+    direction_counts = dict(
+        cq(CDRRecord.direction, func.count(CDRRecord.id))
+        .filter(CDRRecord.direction.isnot(None))
+        .group_by(CDRRecord.direction)
+        .all()
+    )
+    tech_counts = dict(
+        cq(CDRRecord.technology, func.count(CDRRecord.id))
+        .filter(CDRRecord.technology.isnot(None))
+        .group_by(CDRRecord.technology)
+        .all()
+    )
 
     return {
-        "total_records": total_records,
-        "unique_a_party": unique_a_party,
-        "unique_b_party": unique_b_party,
-        "total_duration_seconds": total_duration_sum,
-        "avg_duration_seconds": round(avg_duration, 2),
+        "total_records": total,
+        "unique_a_party": row.uniq_a or 0,
+        "unique_b_party": row.uniq_b or 0,
+        "total_duration_seconds": dur_sum,
+        "avg_duration_seconds": avg_dur,
         "call_type_distribution": call_type_counts,
         "direction_distribution": direction_counts,
         "technology_distribution": tech_counts,
+        "date_range": {
+            "min": row.min_ts.isoformat() if row.min_ts else None,
+            "max": row.max_ts.isoformat() if row.max_ts else None,
+        },
     }
 
 
-def get_ipdr_stats(db, case_id=None):
+def get_ipdr_stats(db: Session, case_id: str | None = None) -> dict:
     def iq(*cols):
         q = db.query(*cols)
         return q.filter(IPDRRecord.case_id == case_id) if case_id else q
 
-    total_records = iq(IPDRRecord).count()
-    total_uploaded = iq(IPDRRecord.bytes_uploaded).filter(IPDRRecord.bytes_uploaded.isnot(None)).all()
-    total_downloaded = iq(IPDRRecord.bytes_downloaded).filter(IPDRRecord.bytes_downloaded.isnot(None)).all()
-    total_uploaded_sum = sum(u[0] for u in total_uploaded if u[0])
-    total_downloaded_sum = sum(d[0] for d in total_downloaded if d[0])
+    row = iq(
+        func.count(IPDRRecord.id).label("total"),
+        func.sum(IPDRRecord.bytes_uploaded).label("up_sum"),
+        func.sum(IPDRRecord.bytes_downloaded).label("dn_sum"),
+        func.count(func.distinct(IPDRRecord.msisdn)).label("uniq_msisdn"),
+        func.min(IPDRRecord.start_time).label("min_ts"),
+        func.max(IPDRRecord.start_time).label("max_ts"),
+    ).one()
 
-    protocol_counts = {}
-    for p, _ in iq(IPDRRecord.protocol, IPDRRecord.id).all():
-        if p:
-            protocol_counts[p] = protocol_counts.get(p, 0) + 1
+    up = int(row.up_sum or 0)
+    dn = int(row.dn_sum or 0)
 
-    apn_counts = {}
-    for a, _ in iq(IPDRRecord.apn, IPDRRecord.id).all():
-        if a:
-            apn_counts[a] = apn_counts.get(a, 0) + 1
-
-    rat_counts = {}
-    for r, _ in iq(IPDRRecord.rat, IPDRRecord.id).all():
-        if r:
-            rat_counts[r] = rat_counts.get(r, 0) + 1
+    protocol_counts = dict(
+        iq(IPDRRecord.protocol, func.count(IPDRRecord.id))
+        .filter(IPDRRecord.protocol.isnot(None))
+        .group_by(IPDRRecord.protocol)
+        .all()
+    )
+    apn_counts = dict(
+        iq(IPDRRecord.apn, func.count(IPDRRecord.id))
+        .filter(IPDRRecord.apn.isnot(None))
+        .group_by(IPDRRecord.apn)
+        .all()
+    )
+    rat_counts = dict(
+        iq(IPDRRecord.rat, func.count(IPDRRecord.id))
+        .filter(IPDRRecord.rat.isnot(None))
+        .group_by(IPDRRecord.rat)
+        .all()
+    )
 
     return {
-        "total_records": total_records,
-        "total_bytes_uploaded": total_uploaded_sum,
-        "total_bytes_downloaded": total_downloaded_sum,
-        "total_bytes": total_uploaded_sum + total_downloaded_sum,
+        "total_records": row.total or 0,
+        "total_bytes_uploaded": up,
+        "total_bytes_downloaded": dn,
+        "total_bytes": up + dn,
+        "unique_msisdn": row.uniq_msisdn or 0,
         "protocol_distribution": protocol_counts,
         "apn_distribution": apn_counts,
         "rat_distribution": rat_counts,
+        "date_range": {
+            "min": row.min_ts.isoformat() if row.min_ts else None,
+            "max": row.max_ts.isoformat() if row.max_ts else None,
+        },
     }

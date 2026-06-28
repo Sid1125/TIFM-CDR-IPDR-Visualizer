@@ -19,9 +19,14 @@ if url.get_backend_name() == "sqlite":
 
 def _create_engine(url_string: str):
     parsed = make_url(url_string)
-    kwargs = {"pool_pre_ping": True}
+    kwargs: dict = {"pool_pre_ping": True}
     if parsed.get_backend_name() == "sqlite":
         kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        kwargs["pool_size"] = 10
+        kwargs["max_overflow"] = 20
+        kwargs["pool_timeout"] = 30
+        kwargs["pool_recycle"] = 1800
     return create_engine(url_string, **kwargs)
 
 
