@@ -6823,6 +6823,29 @@ const _durStr=s=>{s=+s||0;return s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s'};
 
 // ====== PHASE B — CDR ANALYSIS REPORTS (server-side) ======
 let _arReports={};
+// Render the data-session (IPDR) report cards for a subject — used both when the materialised
+// report is IPDR-shaped and when a CDR lookup falls back to IPDR.
+function _arRenderIpdr(ir,total,sub){
+  const body=document.getElementById('arBody'),meta=document.getElementById('arMeta');
+  _arReports={};
+  Object.entries(ir||{}).forEach(([id,r])=>{_arReports[id]={headers:r.headers||[],rows:r.rows||[]};});
+  body.innerHTML='<div class="ar-empty" style="margin-bottom:10px;border-color:var(--accent)"><span class="ar-empty-ico">📡</span><span class="ar-empty-txt">IPDR subject — data-session analytics (no CDR records for this subject).</span></div>'+[
+    _repCard('ar-exp','daily_volume','Daily session volume',ir.daily_volume?.headers||[],ir.daily_volume?.rows||[]),
+    _repCard('ar-exp','protocol_breakdown','Protocol breakdown',ir.protocol_breakdown?.headers||[],ir.protocol_breakdown?.rows||[]),
+    _repCard('ar-exp','top_destinations','Top destination IPs (top 30)',ir.top_destinations?.headers||[],ir.top_destinations?.rows||[]),
+    _repCard('ar-exp','hourly_pattern','Hourly activity pattern',ir.hourly_pattern?.headers||[],ir.hourly_pattern?.rows||[]),
+    _repCard('ar-exp','data_throughput','Data throughput by day',ir.data_throughput?.headers||[],ir.data_throughput?.rows||[]),
+    _repCard('ar-exp','off_periods','OFF / unused periods (gap ≥ 3 days)',ir.off_periods?.headers||[],ir.off_periods?.rows||[]),
+    _repCard('ar-exp','port_usage','Port usage (top 30)',ir.port_usage?.headers||[],ir.port_usage?.rows||[]),
+    _repCard('ar-exp','tower_footprint','Tower footprint',ir.tower_footprint?.headers||[],ir.tower_footprint?.rows||[]),
+    _repCard('ar-exp','apn_breakdown','APN breakdown',ir.apn_breakdown?.headers||[],ir.apn_breakdown?.rows||[]),
+    _repCard('ar-exp','rat_breakdown','RAT / network technology',ir.rat_breakdown?.headers||[],ir.rat_breakdown?.rows||[]),
+  ].join('');
+  if(meta)meta.textContent=(total||0)+' IPDR records for this subject';
+  _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
+  _tabMarkRendered('analysisreports');
+}
+
 async function renderAnalysisReports(){
   if(!_tabNeedsRender('analysisreports'))return;
   const sel=document.getElementById('arSubject'),body=document.getElementById('arBody'),meta=document.getElementById('arMeta');
@@ -6849,6 +6872,13 @@ async function renderAnalysisReports(){
     // Try materialised cache first; fall back to live CDR endpoint on miss
     const matData=await API.get('/analytics/reports?'+qp.toString()).catch(()=>null);
     const data=matData&&(matData.total_records!==undefined)?matData:await API.get('/analysis/cdr-reports?'+qp.toString());
+    // IPDR subject: the report is data-session-shaped (daily_volume etc.), not CDR — render the
+    // IPDR cards directly rather than empty CDR cards.
+    const _reps=data.reports||{};
+    if((data.subject_type==='ipdr'||(_reps.daily_volume&&!_reps.day_first_last))&&data.total_records){
+      _arRenderIpdr(_reps,data.total_records,sub);
+      return;
+    }
     if(!data.total_records){
       // Try IPDR-native reports for this subject before declaring "no data"
       const iqp=new URLSearchParams({sub});
@@ -6856,23 +6886,7 @@ async function renderAnalysisReports(){
       let idata;
       try{idata=await API.get('/analysis/ipdr-reports?'+iqp.toString());}catch(_){idata=null;}
       if(idata&&idata.total_records){
-        const ir=idata.reports||{};
-        Object.entries(ir).forEach(([id,r])=>{_arReports[id]={headers:r.headers||[],rows:r.rows||[]};});
-        body.innerHTML='<div class="ar-empty" style="margin-bottom:10px;border-color:var(--accent)"><span class="ar-empty-ico">📡</span><span class="ar-empty-txt">IPDR subject — showing data-session analytics (no CDR records for this subject).</span></div>'+[
-          _repCard('ar-exp','daily_volume','Daily session volume',ir.daily_volume?.headers||[],ir.daily_volume?.rows||[]),
-          _repCard('ar-exp','protocol_breakdown','Protocol breakdown',ir.protocol_breakdown?.headers||[],ir.protocol_breakdown?.rows||[]),
-          _repCard('ar-exp','top_destinations','Top destination IPs (top 30)',ir.top_destinations?.headers||[],ir.top_destinations?.rows||[]),
-          _repCard('ar-exp','hourly_pattern','Hourly activity pattern',ir.hourly_pattern?.headers||[],ir.hourly_pattern?.rows||[]),
-          _repCard('ar-exp','data_throughput','Data throughput by day',ir.data_throughput?.headers||[],ir.data_throughput?.rows||[]),
-          _repCard('ar-exp','off_periods','OFF / unused periods (gap ≥ 3 days)',ir.off_periods?.headers||[],ir.off_periods?.rows||[]),
-          _repCard('ar-exp','port_usage','Port usage (top 30)',ir.port_usage?.headers||[],ir.port_usage?.rows||[]),
-          _repCard('ar-exp','tower_footprint','Tower footprint',ir.tower_footprint?.headers||[],ir.tower_footprint?.rows||[]),
-          _repCard('ar-exp','apn_breakdown','APN breakdown',ir.apn_breakdown?.headers||[],ir.apn_breakdown?.rows||[]),
-          _repCard('ar-exp','rat_breakdown','RAT / network technology',ir.rat_breakdown?.headers||[],ir.rat_breakdown?.rows||[]),
-        ].join('');
-        if(meta)meta.textContent=idata.total_records+' IPDR records for this subject';
-        _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
-        _tabMarkRendered('analysisreports');
+        _arRenderIpdr(idata.reports||{},idata.total_records,sub);
         return;
       }
       body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR or IPDR records found for <b>'+esc(sub)+'</b>.</span></div>';
