@@ -1897,6 +1897,39 @@ D.cpCloseBtn.addEventListener('click',()=>{D.cpResults.style.display='none';D.cp
 
 // ====== 2. NETWORK GRAPH (D3) ======
 let curGraphNodes=null,curGraphLinks=null,curGraphSim=null,curCentrality=null;
+// Network Intelligence sidebar panel — surfaces the server's full-graph centrality leaderboards
+// (PageRank, betweenness, degree, closeness) so the new metrics are visible, not just node weight.
+async function renderNetworkIntel(){
+  const el=document.getElementById('graphNetIntel');
+  if(!el) return;
+  el.innerHTML='<div style="font-size:0.74rem;opacity:0.55">Computing network intelligence…</div>';
+  let m;
+  try{
+    const p=new URLSearchParams(); if(activeCaseId)p.set('case_id',activeCaseId);
+    m=await API.get('/graph/metrics?'+p.toString());
+  }catch(e){el.innerHTML='';return;}
+  if(!m||!m.degree_centrality||!Object.keys(m.degree_centrality).length){el.innerHTML='';return;}
+  const top=(obj,n=8)=>Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]).slice(0,n);
+  const board=(title,obj,note)=>{
+    const rows=top(obj); if(!rows.length) return '';
+    return '<div style="margin-bottom:9px"><div style="font-size:0.74rem;font-weight:600;margin-bottom:2px">'+title
+      +(note?' <span style="font-weight:400;opacity:0.6">('+note+')</span>':'')+'</div>'
+      +rows.map(([id,v])=>'<div onclick="showProfile(\''+esc(String(id))+'\')" style="display:flex;justify-content:space-between;gap:8px;cursor:pointer;font-size:0.76rem;padding:1px 0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(String(id))+'</span><span style="opacity:0.65;font-variant-numeric:tabular-nums">'+(+v).toFixed(3)+'</span></div>').join('')
+      +'</div>';
+  };
+  let html='<h3 style="margin:0 0 6px">Network Intelligence</h3>';
+  html+='<div style="font-size:0.7rem;opacity:0.6;margin-bottom:8px">Leaders across the whole case graph ('+(m.total_nodes||0)+' nodes). Click to open a profile.</div>';
+  html+=board('PageRank — influence',m.pagerank);
+  html+=board('Betweenness — brokers',m.betweenness_centrality,m.betweenness_sampled?'sampled':'');
+  html+=board('Degree — most connected',m.degree_centrality);
+  html+=m.closeness_skipped
+    ? '<div style="font-size:0.74rem;font-weight:600;margin-bottom:9px">Closeness — reach <span style="font-weight:400;opacity:0.6">(skipped — graph too large)</span></div>'
+    : board('Closeness — reach',m.closeness_centrality);
+  const nc=(m.communities||[]).length, nb=(m.bridges||[]).length;
+  html+='<div style="font-size:0.72rem;opacity:0.7;margin-top:4px">'+nc+' communit'+(nc===1?'y':'ies')+' · '+nb+' bridge'+(nb===1?'':'s')+'</div>';
+  el.innerHTML=html;
+}
+
 async function renderGraph(){
   const subject=D.graphSubject.value;
   // Max links to draw: user-selectable (0 = all). The browser force-layout gets sluggish past
@@ -1924,6 +1957,7 @@ async function renderGraph(){
   if(!nodes.length){D.graphStats.textContent='No connections'+(subject?' for this subject':'')+'.';return;}
   const moreEdges=(payload.total_edges||links.length)-(payload.shown_edges||links.length);
   D.graphStats.textContent=`${nodes.length} nodes, ${links.length} links`+(moreEdges>0?` (top ${links.length} of ${payload.total_edges})`:'')+(payload.total_nodes?` · ${payload.total_nodes} nodes total`:'');
+  renderNetworkIntel();  // full-graph centrality leaderboards in the sidebar (fire-and-forget)
 
   // -- Centrality (Degree only — real betweenness/closeness requires shortest-path traversal) --
   const degree=new Map();nodes.forEach(n=>degree.set(n.id,0));

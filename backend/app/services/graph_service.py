@@ -93,6 +93,35 @@ def build_graph(db, start_date: datetime | None = None, end_date: datetime | Non
     }
 
 
+def _pagerank_py(graph, alpha: float = 0.85, max_iter: int = 100, tol: float = 1.0e-6) -> dict:
+    """Weighted PageRank by power iteration — pure Python so it works in the air-gapped build
+    (NetworkX's nx.pagerank pulls in SciPy, which we don't ship). Equivalent ranking; bounded by
+    max_iter. Returns {} for an empty graph."""
+    nodes = list(graph)
+    n = len(nodes)
+    if n == 0:
+        return {}
+    x = {v: 1.0 / n for v in nodes}
+    deg = {v: sum(graph[v][u].get("weight", 1) for u in graph[v]) for v in nodes}
+    dangling = [v for v in nodes if deg[v] == 0.0]
+    teleport = (1.0 - alpha) / n
+    for _ in range(max_iter):
+        xlast = x
+        x = dict.fromkeys(nodes, 0.0)
+        danglesum = alpha * sum(xlast[v] for v in dangling) / n
+        for v in nodes:
+            d = deg[v]
+            if d:
+                share = alpha * xlast[v] / d
+                for u in graph[v]:
+                    x[u] += share * graph[v][u].get("weight", 1)
+        for v in nodes:
+            x[v] += danglesum + teleport
+        if sum(abs(x[v] - xlast[v]) for v in nodes) < tol:
+            break
+    return x
+
+
 def get_graph_metrics(db, start_date: datetime | None = None, end_date: datetime | None = None, case_id=None):
     # Build over the FULL graph (limit=0) so metrics cover every edge.
     graph_payload = build_graph(db, start_date=start_date, end_date=end_date, case_id=case_id, limit=0)
@@ -105,6 +134,8 @@ def get_graph_metrics(db, start_date: datetime | None = None, end_date: datetime
         return {
             "degree_centrality": {},
             "betweenness_centrality": {},
+            "pagerank": {},
+            "closeness_centrality": {},
             "communities": [],
             "bridges": [],
         }
@@ -126,10 +157,28 @@ def get_graph_metrics(db, start_date: datetime | None = None, end_date: datetime
         betweenness = nx.betweenness_centrality(graph)
         betweenness_sampled = False
 
+    # PageRank — cheap (power iteration, ~O(E) per step) and a strong "influence" signal that
+    # rewards being connected to other well-connected nodes, so always computed. Pure-Python impl
+    # (no SciPy) to keep the air-gapped build dependency-free.
+    pagerank = _pagerank_py(graph)
+
+    # Closeness is O(V·E) (an all-pairs shortest-path per node) — like exact betweenness it's
+    # infeasible at scale, and unlike betweenness NetworkX has no k-sampling for it, so above the
+    # threshold we skip it and flag that rather than hang.
+    if n <= 800:
+        closeness = nx.closeness_centrality(graph)
+        closeness_skipped = False
+    else:
+        closeness = {}
+        closeness_skipped = True
+
     return {
         "degree_centrality": nx.degree_centrality(graph),
         "betweenness_centrality": betweenness,
         "betweenness_sampled": betweenness_sampled,
+        "pagerank": pagerank,
+        "closeness_centrality": closeness,
+        "closeness_skipped": closeness_skipped,
         "communities": communities,
         "bridges": [{"source": a, "target": b} for a, b in nx.bridges(graph)],
         "total_nodes": n,

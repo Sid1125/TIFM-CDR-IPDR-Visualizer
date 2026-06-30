@@ -467,9 +467,21 @@ def network_structure(cdr_records):
                     u, v = nbrs[i], nbrs[j]
                     if not graph.has_edge(u, v):
                         cand.add(tuple(sorted((u, v))))
-        for u, v, score in nx.adamic_adar_index(graph, cand):
-            predicted.append({"subject_a": u, "subject_b": v, "score": round(score, 3),
-                              "common_contacts": sum(1 for _ in nx.common_neighbors(graph, u, v))})
+        # Three complementary link-prediction scores over the same candidate set:
+        #   Adamic-Adar  — shared contacts, rare ones weighted higher (primary sort key)
+        #   Jaccard      — shared/total contacts, normalised so hubs don't dominate
+        #   Resource-allocation — like AA but penalises high-degree intermediaries harder
+        aa = {tuple(sorted((u, v))): s for u, v, s in nx.adamic_adar_index(graph, cand)}
+        jc = {tuple(sorted((u, v))): s for u, v, s in nx.jaccard_coefficient(graph, cand)}
+        ra = {tuple(sorted((u, v))): s for u, v, s in nx.resource_allocation_index(graph, cand)}
+        for u, v in cand:
+            predicted.append({
+                "subject_a": u, "subject_b": v,
+                "score": round(aa.get((u, v), 0.0), 3),  # Adamic-Adar — kept as the primary score
+                "jaccard": round(jc.get((u, v), 0.0), 3),
+                "resource_allocation": round(ra.get((u, v), 0.0), 3),
+                "common_contacts": sum(1 for _ in nx.common_neighbors(graph, u, v)),
+            })
         predicted = sorted(predicted, key=lambda x: -x["score"])[:NET_PREDICT_TOPN]
     elif n > NET_PREDICT_MAX_NODES:
         notes.append(f"link prediction skipped — {n} nodes over cap")
