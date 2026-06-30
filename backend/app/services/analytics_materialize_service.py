@@ -42,6 +42,10 @@ _SUBJECT_CAP = 100  # max subjects per case materialised as individual reports
 # recomputed on demand — so a code deploy can never serve analytics in a stale format.
 SCHEMA_VERSION = 1
 
+# Internal cache entry (not served to the UI) holding the per-table max row id at the last
+# materialisation — the watermark an append diffs against to find only the new rows.
+_META_KEY = "_agg_meta"
+
 
 # ── internal helpers ──────────────────────────────────────────────────────────
 
@@ -123,6 +127,42 @@ def _case_record_count(db: Session, case_id: str | None) -> int:
         cq = cq.filter(CDRRecord.case_id == case_id)
         iq = iq.filter(IPDRRecord.case_id == case_id)
     return int((cq.scalar() or 0) + (iq.scalar() or 0))
+
+
+def _max_id(db: Session, model, case_id: str | None) -> int:
+    q = db.query(func.max(model.id))
+    if case_id:
+        q = q.filter(model.case_id == case_id)
+    return int(q.scalar() or 0)
+
+
+def _touched_subjects(db: Session, model, subj_col, case_id: str | None, since_id: int) -> set[str]:
+    """Distinct subjects appearing in rows added after the watermark (id > since_id)."""
+    q = db.query(subj_col).filter(model.id > since_id, subj_col.isnot(None))
+    if case_id:
+        q = q.filter(model.case_id == case_id)
+    return {str(r[0]) for r in q.distinct().all() if r[0]}
+
+
+def _sync_reports(db: Session, cid: str, prefix: str, capped_subjects: list[str],
+                  touched: set[str], build_fn) -> None:
+    """Bring the per-subject report cache for one prefix in line with an append, recomputing
+    only what changed — the touched-subject win. Reports for untouched subjects still inside the
+    cap are left intact; subjects pushed out of the cap are dropped; subjects newly inside the
+    cap (or touched) are (re)built. This yields the same set of rows a full recompute would."""
+    capped_set = set(capped_subjects)
+    existing = {
+        row[0][len(prefix):]
+        for row in db.query(AnalyticsCache.key).filter(AnalyticsCache.case_id == cid).all()
+        if row[0].startswith(prefix)
+    }
+    for sub in existing - capped_set:  # fell out of the top-N cap
+        db.query(AnalyticsCache).filter(
+            AnalyticsCache.case_id == cid, AnalyticsCache.key == prefix + sub
+        ).delete(synchronize_session=False)
+    for sub in capped_subjects:
+        if sub in touched or sub not in existing:  # changed, or newly inside the cap
+            _upsert(db, cid, prefix + sub, build_fn(sub))
 
 
 # ── AI overview (SQL-native) ──────────────────────────────────────────────────
@@ -280,6 +320,13 @@ def materialize_case(db: Session, case_id: str | None) -> None:
         for sub in ipdr_subs[:_SUBJECT_CAP]:
             _upsert(db, cid, f"ipdr_report:{sub}", get_ipdr_reports(db, case_id, sub))
 
+        # 6. Watermark — the max row id per table at this point, so a later append can find
+        #    exactly the new rows and update incrementally (incremental_update).
+        _upsert(db, cid, _META_KEY, {
+            "cdr_max_id": _max_id(db, CDRRecord, case_id),
+            "ipdr_max_id": _max_id(db, IPDRRecord, case_id),
+        })
+
         db.commit()
         log.info("analytics: done case=%r  cdr=%d ipdr=%d rows=%d in %dms",
                  cid, len(cdr_subs), len(ipdr_subs), rec_count, int((time.monotonic() - started) * 1000))
@@ -287,6 +334,59 @@ def materialize_case(db: Session, case_id: str | None) -> None:
     except Exception:
         log.exception("analytics: materialisation failed for case=%r", cid)
         db.rollback()
+
+
+def incremental_update(db: Session, case_id: str | None) -> None:
+    """Update a case's analytics after an *append*, recomputing only what the new rows touch.
+
+    Case-wide aggregates (dashboard, subjects, ai_overview) are recomputed — they reflect every
+    row and have no correct partial form here — but the per-subject report cache, which grows
+    with the case's breadth, is synced touched-only via `_sync_reports`. Falls back to a full
+    `materialize_case` when there is no prior watermark (nothing to diff against). The result is
+    byte-identical to a full recompute (guarded by a parity test)."""
+    cid = case_id or ""
+    meta = get_cached(db, case_id, _META_KEY)
+    if not meta or "cdr_max_id" not in meta:
+        materialize_case(db, case_id)  # no baseline → full build
+        return
+
+    cdr_wm = int(meta.get("cdr_max_id", 0))
+    ipdr_wm = int(meta.get("ipdr_max_id", 0))
+    new_cdr_max = _max_id(db, CDRRecord, case_id)
+    new_ipdr_max = _max_id(db, IPDRRecord, case_id)
+    if new_cdr_max <= cdr_wm and new_ipdr_max <= ipdr_wm:
+        return  # no new rows since the last build
+
+    started = time.monotonic()
+    touched_cdr = _touched_subjects(db, CDRRecord, CDRRecord.a_party_number, case_id, cdr_wm)
+    touched_ipdr = _touched_subjects(db, IPDRRecord, IPDRRecord.source_ip, case_id, ipdr_wm)
+    log.info("analytics: incremental case=%r touched cdr=%d ipdr=%d",
+             cid, len(touched_cdr), len(touched_ipdr))
+
+    try:
+        cdr_subs = _cdr_subjects(db, case_id)
+        ipdr_subs = _ipdr_subjects(db, case_id)
+        rec_count = _case_record_count(db, case_id)
+        build_ms = int((time.monotonic() - started) * 1000)
+
+        _upsert(db, cid, "dashboard", get_chart_data(db, case_id),
+                record_count=rec_count, build_ms=build_ms)
+        _upsert(db, cid, "subjects", {"cdr": cdr_subs, "ipdr": ipdr_subs})
+        _upsert(db, cid, "ai_overview", _compute_ai_overview(db, case_id))
+
+        _sync_reports(db, cid, "cdr_report:", cdr_subs[:_SUBJECT_CAP], touched_cdr,
+                      lambda s: get_cdr_reports(db, case_id, s))
+        _sync_reports(db, cid, "ipdr_report:", ipdr_subs[:_SUBJECT_CAP], touched_ipdr,
+                      lambda s: get_ipdr_reports(db, case_id, s))
+
+        _upsert(db, cid, _META_KEY, {"cdr_max_id": new_cdr_max, "ipdr_max_id": new_ipdr_max})
+        db.commit()
+        log.info("analytics: incremental done case=%r rows=%d in %dms",
+                 cid, rec_count, int((time.monotonic() - started) * 1000))
+    except Exception:
+        log.exception("analytics: incremental update failed for case=%r — full rebuild", cid)
+        db.rollback()
+        materialize_case(db, case_id)  # safety net: never leave the cache half-updated
 
 
 # ── cache readers ─────────────────────────────────────────────────────────────

@@ -50,25 +50,29 @@ def clear() -> None:
 
 # ── default handlers ──────────────────────────────────────────────────────────
 
-def _enqueue_materialize(case_id: str | None) -> None:
+def _enqueue(func_name: str, case_id: str | None) -> None:
+    """Enqueue a materialisation job (`materialize_case` or `incremental_update`) onto the
+    JobQueue, each in its own session."""
     from app.core.database import SessionLocal
     from app.core.jobs import get_job_queue
-    from app.services.analytics_materialize_service import materialize_case
+    import app.services.analytics_materialize_service as ms
+
+    fn = getattr(ms, func_name)
 
     def job() -> None:
         with SessionLocal() as db:
-            materialize_case(db, case_id)
+            fn(db, case_id)
 
-    get_job_queue().enqueue(job, name=f"materialize:{case_id or 'global'}")
+    label = "materialize" if func_name == "materialize_case" else "incremental"
+    get_job_queue().enqueue(job, name=f"{label}:{case_id or 'global'}")
 
 
 def _on_case_imported(case_id: str | None = None, **_) -> None:
-    _enqueue_materialize(case_id)
+    _enqueue("materialize_case", case_id)  # replace-mode upload → full (re)build
 
 
 def _on_records_appended(case_id: str | None = None, **_) -> None:
-    # Phase 1a swaps this for an O(delta) incremental update; full re-materialise for now.
-    _enqueue_materialize(case_id)
+    _enqueue("incremental_update", case_id)  # append → O(touched) update
 
 
 _registered = False
