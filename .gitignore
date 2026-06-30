@@ -103,3 +103,7 @@ TIFM_Project_Report_v2.docx
 TIFM_Project_Report.docx
 
 samples/generated_ipdr.csv
+
+# Phase 5 DB snapshots (contain credential hashes — never commit)
+backups/
+backend/backups/

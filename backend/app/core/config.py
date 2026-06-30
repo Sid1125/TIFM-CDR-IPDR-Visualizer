@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""           # e.g. redis://localhost:6379/0 — caching + pub/sub
     CELERY_BROKER_URL: str = ""   # e.g. redis://localhost:6379/1 — background job workers
     ANALYTICS_CACHE_TTL: int = 0  # seconds; 0 = no expiry (DB cache is invalidated by events)
+    BACKUP_DIR: str = "backups"   # where admin-triggered DB snapshots are written
 
     if SettingsConfigDict is not None:  # pragma: no branch
         model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

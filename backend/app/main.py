@@ -30,6 +30,7 @@ from app.api.ai import router as ai_router
 from app.api.analysis import router as analysis_router
 from app.api.analytics import router as analytics_router
 from app.api.jobs import router as jobs_router
+from app.api.backup import router as backup_router
 from app.core.config import settings
 from app.core.database import Base
 from app.core.database import engine
@@ -247,4 +248,5 @@ app.include_router(ai_router, prefix="/ai", tags=["AI"], dependencies=[Depends(g
 app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"], dependencies=[Depends(get_current_user)])
 app.include_router(analytics_router, prefix="/analytics", tags=["Analytics"], dependencies=[Depends(get_current_user)])
 app.include_router(jobs_router, prefix="/jobs", tags=["Jobs"], dependencies=[Depends(get_current_user)])
+app.include_router(backup_router, prefix="/backup", tags=["Backup"], dependencies=[Depends(get_current_user)])
 app.mount("/static", StaticFiles(directory=static_dir), name="static")

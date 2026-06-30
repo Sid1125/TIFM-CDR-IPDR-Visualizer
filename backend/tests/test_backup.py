@@ -93,5 +93,14 @@ class BackupRoundtripTests(unittest.TestCase):
         db.close(); dest.dispose()
 
 
+class BackupEndpointAuthTests(unittest.TestCase):
+    def test_backup_endpoints_require_auth(self):
+        from starlette.testclient import TestClient
+        from app.main import app
+        c = TestClient(app)
+        self.assertEqual(c.post("/backup").status_code, 401)
+        self.assertEqual(c.get("/backup").status_code, 401)
+
+
 if __name__ == "__main__":
     unittest.main()
