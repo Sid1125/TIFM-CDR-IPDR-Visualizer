@@ -176,6 +176,17 @@ def on_startup():
     detect(engine)  # best-effort probe of optional accelerators; never fatal
     from app.core.events import register_default_handlers
     register_default_handlers()  # wire analytics (re)materialisation to upload events
+    # Search acceleration (no-op unless the accelerator is present): create the FTS5 tables /
+    # pg_trgm indexes, then bring the FTS index in line with any data already loaded.
+    from app.services.search_service import ensure_fts_tables, ensure_pg_trgm_indexes, fts_sync_all
+    try:
+        ensure_fts_tables(engine)
+        ensure_pg_trgm_indexes(engine)
+        with SessionLocal() as db:
+            fts_sync_all(db)
+    except Exception:  # noqa: BLE001 — search acceleration is best-effort, never blocks boot
+        import logging
+        logging.getLogger(__name__).exception("search index init failed; falling back to ILIKE")
     with SessionLocal() as db:
         bootstrap_default_user(db)
 

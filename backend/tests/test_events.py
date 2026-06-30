@@ -40,9 +40,11 @@ class EventBusTests(unittest.TestCase):
         events.register_default_handlers()
         self.assertIn(events._on_case_imported, events._subscribers[events.CASE_IMPORTED])
         self.assertIn(events._on_records_appended, events._subscribers[events.RECORDS_APPENDED])
-        # idempotent
-        events.register_default_handlers()
-        self.assertEqual(len(events._subscribers[events.CASE_IMPORTED]), 1)
+        # CASE_IMPORTED drives both materialisation and the FTS index refresh.
+        self.assertIn(events._on_data_changed_search, events._subscribers[events.CASE_IMPORTED])
+        before = len(events._subscribers[events.CASE_IMPORTED])
+        events.register_default_handlers()  # idempotent — no duplicate handlers
+        self.assertEqual(len(events._subscribers[events.CASE_IMPORTED]), before)
 
     def test_case_imported_handler_enqueues_a_job(self):
         # Patch the queue + materialize so we exercise wiring without a DB.

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from sqlalchemy import or_, literal, union_all, select, func, desc
+from sqlalchemy import literal, union_all, select, func, desc
 
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
+from app.services.search_service import cdr_search_clause, ipdr_search_clause
 
 
 def list_cdr_records(
@@ -41,19 +42,9 @@ def list_cdr_records(
         query = query.filter(CDRRecord.direction == direction)
     if case_id is not None:
         query = query.filter(CDRRecord.case_id == str(case_id))
-    if search:
-        like = f"%{search}%"
-        query = query.filter(
-            or_(
-                CDRRecord.a_party_number.ilike(like),
-                CDRRecord.b_party_number.ilike(like),
-                CDRRecord.tower_id.ilike(like),
-                CDRRecord.case_id.ilike(like),
-                CDRRecord.msisdn.ilike(like),
-                CDRRecord.imsi.ilike(like),
-                CDRRecord.imei.ilike(like),
-            )
-        )
+    _sc = cdr_search_clause(search)
+    if _sc is not None:
+        query = query.filter(_sc)
 
     q = query.order_by(CDRRecord.start_time.desc()).offset(offset)
     if limit > 0:
@@ -99,21 +90,9 @@ def list_ipdr_records(
         query = query.filter(IPDRRecord.rat == rat)
     if case_id is not None:
         query = query.filter(IPDRRecord.case_id == str(case_id))
-    if search:
-        like = f"%{search}%"
-        query = query.filter(
-            or_(
-                IPDRRecord.source_ip.ilike(like),
-                IPDRRecord.destination_ip.ilike(like),
-                IPDRRecord.protocol.ilike(like),
-                IPDRRecord.tower_id.ilike(like),
-                IPDRRecord.case_id.ilike(like),
-                IPDRRecord.msisdn.ilike(like),
-                IPDRRecord.imsi.ilike(like),
-                IPDRRecord.imei.ilike(like),
-                IPDRRecord.apn.ilike(like),
-            )
-        )
+    _sc = ipdr_search_clause(search)
+    if _sc is not None:
+        query = query.filter(_sc)
 
     q = query.order_by(IPDRRecord.start_time.desc()).offset(offset)
     if limit > 0:
@@ -133,14 +112,9 @@ def _cdr_id_select(case_id=None, search=None, service=None):
         s = s.where(CDRRecord.case_id == str(case_id))
     if service:  # CDR "service" maps to call_type (Voice/SMS/…)
         s = s.where(CDRRecord.call_type == service)
-    if search:
-        like = f"%{search}%"
-        s = s.where(or_(
-            CDRRecord.a_party_number.ilike(like), CDRRecord.b_party_number.ilike(like),
-            CDRRecord.tower_id.ilike(like), CDRRecord.msisdn.ilike(like),
-            CDRRecord.imsi.ilike(like), CDRRecord.imei.ilike(like),
-            CDRRecord.cell_id.ilike(like), CDRRecord.call_type.ilike(like),
-        ))
+    _sc = cdr_search_clause(search)
+    if _sc is not None:
+        s = s.where(_sc)
     return s
 
 
@@ -154,14 +128,9 @@ def _ipdr_id_select(case_id=None, search=None, service=None):
         s = s.where(IPDRRecord.case_id == str(case_id))
     if service:  # IPDR "service" maps to protocol
         s = s.where(IPDRRecord.protocol == service)
-    if search:
-        like = f"%{search}%"
-        s = s.where(or_(
-            IPDRRecord.source_ip.ilike(like), IPDRRecord.destination_ip.ilike(like),
-            IPDRRecord.protocol.ilike(like), IPDRRecord.tower_id.ilike(like),
-            IPDRRecord.msisdn.ilike(like), IPDRRecord.imsi.ilike(like),
-            IPDRRecord.imei.ilike(like), IPDRRecord.apn.ilike(like),
-        ))
+    _sc = ipdr_search_clause(search)
+    if _sc is not None:
+        s = s.where(_sc)
     return s
 
 

@@ -34,6 +34,13 @@ class RecordsPaginationTests(unittest.TestCase):
         db.add(CDRRecord(case_id="B", a_party_number="700", b_party_number="701",
                          call_type="SMS", start_time=datetime(2026, 1, 1, 9, 0)))
         db.commit()
+        # Mirror production: when this SQLite build has FTS5 the search path queries the FTS
+        # index, so create + sync it here. (Harmless when FTS is unavailable.)
+        from app.core.capabilities import detect
+        from app.services import search_service as ss
+        detect(self.engine)
+        ss.ensure_fts_tables(self.engine)
+        ss.fts_sync_all(db)
         db.close()
 
     def _db(self):

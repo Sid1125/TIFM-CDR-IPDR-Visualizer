@@ -75,6 +75,19 @@ def _on_records_appended(case_id: str | None = None, **_) -> None:
     _enqueue("incremental_update", case_id)  # append → O(touched) update
 
 
+def _on_data_changed_search(**_) -> None:
+    """Keep the FTS search index in line with any record change (no-op unless SQLite FTS5)."""
+    from app.core.database import SessionLocal
+    from app.core.jobs import get_job_queue
+    from app.services.search_service import fts_sync_all
+
+    def job() -> None:
+        with SessionLocal() as db:
+            fts_sync_all(db)
+
+    get_job_queue().enqueue(job, name="fts_sync")
+
+
 _registered = False
 
 
@@ -85,4 +98,7 @@ def register_default_handlers() -> None:
         return
     subscribe(CASE_IMPORTED, _on_case_imported)
     subscribe(RECORDS_APPENDED, _on_records_appended)
+    # Search index follows every record change (import/append/reset/delete).
+    for _evt in (CASE_IMPORTED, RECORDS_APPENDED, CASE_RESET, CASE_DELETED):
+        subscribe(_evt, _on_data_changed_search)
     _registered = True
