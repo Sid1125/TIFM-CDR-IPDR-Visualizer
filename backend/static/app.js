@@ -84,7 +84,8 @@ const _W = {
 
 // ====== STATE ======
 const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{},subjectTags:{},_ownedSubjects:[],_cdrStats:null,_ipdrStats:null,_cd:null,_totalCdr:0,_totalIpdr:0};
-// _ownedSubjects: distinct a_party numbers from server (for analysis+group-compare pickers)
+// _ownedSubjects: the case's real subjects from server — CDR a-parties + IPDR source IPs (NOT
+// counterparts/destination IPs). Drives the analysis / correlation / group-compare subject pickers.
 // _cdrStats/_ipdrStats: server-side aggregated totals (accurate even for large cases)
 // _cd: chart data fetched lazily from /analysis/chart-data
 // _totalCdr/_totalIpdr: true record counts (not bounded by the 500-row allRows sample)
@@ -445,14 +446,18 @@ async function loadCaseData(){
       API.get('/towers/'),
       API.get('/stats/cdr'+caseParam),
       API.get('/stats/ipdr'+caseParam),
-      API.get('/analysis/subjects'+caseParam),
+      API.get('/analytics/subjects'+caseParam),  // {cdr:a-parties, ipdr:source-ips} = real subjects
     ]);
     state.towers=towers;
     state._cdrStats=cdrStats;
     state._ipdrStats=ipdrStats;
     state._totalCdr=cdrStats.total_records||0;
     state._totalIpdr=ipdrStats.total_records||0;
-    state._ownedSubjects=Array.isArray(ownedSubjects)?ownedSubjects:[];
+    // Real, analyzable subjects only (CDR a-parties + IPDR source IPs) — NOT the tens of
+    // thousands of counterparts/destination IPs, which would flood the subject pickers.
+    {const _os=ownedSubjects||{};
+     state._ownedSubjects=Array.isArray(_os)?_os
+       :[...new Set([...(_os.cdr||[]),...(_os.ipdr||[])])].sort();}
     // allRows = bounded 500-record sample for timeline, comparison, mini-graph, map, geofence
     const rows=page1.rows||[];
     const cdrRows=rows.filter(r=>r.rtype==='CDR');
@@ -6330,7 +6335,8 @@ function renderCorrelationTab(){
   // Build the two subject dropdowns ONCE per dataset (signature-guarded). Rebuilding thousands
   // of <option>s on every change is what made this tab crawl; on change we only toggle the
   // Compare button. Same subject for A and B is allowed in the list but rejected on Compare.
-  const subs=state.subjects||[];
+  // Use the real subjects (a-parties + source IPs), not every counterpart/destination IP.
+  const subs=(state._ownedSubjects&&state._ownedSubjects.length)?state._ownedSubjects:(state.subjects||[]);
   const sig=subs.length+'|'+(subs[0]||'')+'|'+(subs[subs.length-1]||'');
   if(D.corrSubA.dataset.sig!==sig){
     const opts=subs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
@@ -6501,16 +6507,9 @@ D.corrGoBtn.addEventListener('click',runCorrelation);
 D.corrSwapBtn.addEventListener('click',()=>{
   const a=D.corrSubA.value,b=D.corrSubB.value;
   if(!a&&!b)return;
-  // Temp swap via value change
-  const optsA=[...D.corrSubA.options];D.corrSubA.value='';D.corrSubB.value='';
-  // Set swapped via render which filters each other out
-  D.corrSubA.value='';D.corrSubB.value='';
-  // Manually set and re-render  
-  const subs=state.subjects;
-  // Quick swap: just exchange the selected values directly
-  D.corrSubA.innerHTML='<option value="">Select subject A...</option>'+subs.map(s=>`<option value="${esc(s)}"${s===b?' selected':''}>${esc(s)}</option>`).join('');
-  D.corrSubB.innerHTML='<option value="">Select subject B...</option>'+subs.map(s=>`<option value="${esc(s)}"${s===a?' selected':''}>${esc(s)}</option>`).join('');
-  D.corrGoBtn.disabled=!(a&&b);
+  // Dropdowns are already populated — just exchange the two selected values (no rebuild).
+  D.corrSubA.value=b;D.corrSubB.value=a;
+  D.corrGoBtn.disabled=!(D.corrSubA.value&&D.corrSubB.value);
 });
 
 // ====== BOOTSTRAP ======
