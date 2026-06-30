@@ -3009,9 +3009,19 @@ function showMapPath(sub){
   D.mapAnalysis.innerHTML=h;
   D.mapTimeBar.style.display='flex';setupMapTime(rows);
 }
-function showMapHeat(sub){
+function showMapHeat(sub,_retry){
   clearMap();const rows=geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null);
   if(!rows.length){D.mapAnalysis.innerHTML='No records.';return}
+  // leaflet-heat draws via getImageData(width,height); if the map container isn't laid out yet
+  // (0×0) that throws IndexSizeError. Make sure the map has a real size first — invalidate and
+  // retry a few times — before drawing.
+  const _sz=mapInstance&&mapInstance.getSize?mapInstance.getSize():{x:0,y:0};
+  if((_sz.x===0||_sz.y===0)&&(_retry||0)<10){
+    if(mapInstance&&mapInstance.invalidateSize)mapInstance.invalidateSize();
+    setTimeout(()=>showMapHeat(sub,(_retry||0)+1),120);
+    return;
+  }
+  const _mapSized=_sz.x>0&&_sz.y>0;
   // Aggregate per tower, snapping its records to their centroid. Records carry ~400 m of
   // per-event jitter around a tower; using raw coords makes one tower fragment into several
   // blobs when zoomed in, so we collapse each tower to a single representative point.
@@ -3027,24 +3037,29 @@ function showMapHeat(sub){
   // light basemap and blue water and only read once zoomed in. Warm colours stay legible on
   // land and water, and the 0.5 opacity floor keeps sparse areas visible at any zoom.
   const grad={0.0:'#7b2d8e',0.35:'#c2185b',0.6:'#ef6c00',0.8:'#e53935',1.0:'#b71c1c'};
-  if(typeof L.heatLayer==='function'){
+  let heatOk=false;
+  if(typeof L.heatLayer==='function'&&_mapSized){
     // Stack `count` points at each tower's centroid. Stacking accumulates into a graded hot
     // core (a single weighted point can't — its alpha is capped, not additive, so it reads
     // cold), and because the points share one exact coordinate the tower stays a single blob
     // at every zoom level. Total points == record count, so no extra cost over per-record.
-    const heatPts=[];
-    towers.forEach(t=>{for(let i=0;i<t.count;i++)heatPts.push([t.lat,t.lng,1]);});
-    const heat=L.heatLayer(heatPts,
-      {radius:30,blur:20,maxZoom:16,minOpacity:0.5,gradient:grad}).addTo(mapInstance);
-    mapLayers.push(heat);
-    // tiny clickable dots keep every location inspectable on top of the gradient
-    towers.forEach(t=>{
-      const m=L.circleMarker([t.lat,t.lng],{radius:3,color:'#fff',weight:1,opacity:0.5,fillColor:'#222',fillOpacity:0.45});
-      m.bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`);
-      m.addTo(mapInstance);mapMarkers.push(m);
-    });
-  }else{
-    // fallback: graduated bubbles if the heat plugin failed to load
+    try{
+      const heatPts=[];
+      towers.forEach(t=>{for(let i=0;i<t.count;i++)heatPts.push([t.lat,t.lng,1]);});
+      const heat=L.heatLayer(heatPts,
+        {radius:30,blur:20,maxZoom:16,minOpacity:0.5,gradient:grad}).addTo(mapInstance);
+      mapLayers.push(heat);
+      // tiny clickable dots keep every location inspectable on top of the gradient
+      towers.forEach(t=>{
+        const m=L.circleMarker([t.lat,t.lng],{radius:3,color:'#fff',weight:1,opacity:0.5,fillColor:'#222',fillOpacity:0.45});
+        m.bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`);
+        m.addTo(mapInstance);mapMarkers.push(m);
+      });
+      heatOk=true;
+    }catch(e){console.warn('heatmap draw failed — falling back to bubbles',e);clearMap();}
+  }
+  if(!heatOk){
+    // fallback: graduated bubbles if the heat plugin failed/unavailable or the map wasn't sized
     towers.forEach(t=>{const p=t.count/maxC;const c=p>0.7?'#b71c1c':p>0.4?'#ef6c00':'#7b2d8e';
       mapCircles.push(L.circleMarker([t.lat,t.lng],{radius:5+15*p,color:c,fillColor:c,fillOpacity:0.25+0.55*p,weight:1,opacity:0.6}).bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`).addTo(mapInstance))});
   }
@@ -6294,18 +6309,26 @@ function renderServiceCard(svc){
 
 // ====== CROSS-SUBJECT CORRELATION TAB ======
 function renderCorrelationTab(){
-  // Populate subject dropdowns
-  const subs=state.subjects.filter(s=>s!==(D.corrSubB.value||''));
-  const subsB=state.subjects.filter(s=>s!==(D.corrSubA.value||''));
-  const curA=D.corrSubA.value;
-  D.corrSubA.innerHTML='<option value="">Select subject A...</option>'+subs.map(s=>`<option value="${esc(s)}"${s===curA?' selected':''}>${esc(s)}</option>`).join('');
-  const curB=D.corrSubB.value;
-  D.corrSubB.innerHTML='<option value="">Select subject B...</option>'+subsB.map(s=>`<option value="${esc(s)}"${s===curB?' selected':''}>${esc(s)}</option>`).join('');
+  // Build the two subject dropdowns ONCE per dataset (signature-guarded). Rebuilding thousands
+  // of <option>s on every change is what made this tab crawl; on change we only toggle the
+  // Compare button. Same subject for A and B is allowed in the list but rejected on Compare.
+  const subs=state.subjects||[];
+  const sig=subs.length+'|'+(subs[0]||'')+'|'+(subs[subs.length-1]||'');
+  if(D.corrSubA.dataset.sig!==sig){
+    const opts=subs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    const curA=D.corrSubA.value,curB=D.corrSubB.value;
+    D.corrSubA.innerHTML='<option value="">Select subject A...</option>'+opts;
+    D.corrSubB.innerHTML='<option value="">Select subject B...</option>'+opts;
+    if(curA)D.corrSubA.value=curA;
+    if(curB)D.corrSubB.value=curB;
+    D.corrSubA.dataset.sig=sig;D.corrSubB.dataset.sig=sig;
+  }
   D.corrGoBtn.disabled=!(D.corrSubA.value&&D.corrSubB.value);
 }
 function runCorrelation(){
   const a=D.corrSubA.value,b=D.corrSubB.value;
   if(!a||!b){D.corrResults.innerHTML='<div class="corr-empty">Select two subjects and click Compare.</div>';return}
+  if(a===b){D.corrResults.innerHTML='<div class="corr-empty">Pick two different subjects.</div>';return}
   const rowsA=allRows.filter(r=>r.sub===a),rowsB=allRows.filter(r=>r.sub===b);
   if(!rowsA.length||!rowsB.length){D.corrResults.innerHTML='<div class="corr-empty">One or both subjects have no records.</div>';return}
   // Common towers
@@ -6790,9 +6813,15 @@ async function renderAnalysisReports(){
   const subs=state._ownedSubjects.length?state._ownedSubjects:(state.subjects.filter(Boolean));
   if(!subs.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Load a case to run analysis reports.</span></div>';sel.innerHTML='';if(meta)meta.textContent='';return;}
   if(!sel._wired){sel._wired=true;sel.addEventListener('change',()=>{delete _tabRendered['analysisreports'];renderAnalysisReports();});}
-  const cur=sel.value;
-  sel.innerHTML=subs.map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+'</option>').join('');
-  if(cur&&subs.includes(cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
+  // Build the (potentially huge) subject <select> ONCE per dataset, not on every render/change —
+  // rebuilding it each time (with a tag lookup per option) was a big part of this tab's lag.
+  const sig=subs.length+'|'+(subs[0]||'')+'|'+(subs[subs.length-1]||'');
+  if(sel.dataset.sig!==sig){
+    const cur=sel.value;
+    sel.innerHTML=subs.map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+'</option>').join('');
+    sel.dataset.sig=sig;
+    if(cur&&subs.includes(cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
+  }
   const sub=sel.value;
   if(!sub){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR subjects in this case.</span></div>';return;}
   body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⋯</span><span class="ar-empty-txt">Loading analysis reports…</span></div>';
