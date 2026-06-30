@@ -158,6 +158,9 @@ def _ensure_columns():
         "ALTER TABLE analytics_cache ADD COLUMN schema_version INTEGER DEFAULT 0",
         "ALTER TABLE analytics_cache ADD COLUMN record_count INTEGER",
         "ALTER TABLE analytics_cache ADD COLUMN build_ms INTEGER",
+        # audit-log hash chain (Phase 5)
+        "ALTER TABLE audit_logs ADD COLUMN prev_hash VARCHAR(64)",
+        "ALTER TABLE audit_logs ADD COLUMN entry_hash VARCHAR(64)",
     ]
     for s in stmts:
         try:

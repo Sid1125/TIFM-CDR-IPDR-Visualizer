@@ -22,6 +22,11 @@ class AuditLog(Base):
     case_name = Column(String, nullable=True)
     target = Column(String, nullable=True)                 # subject id, filename, ref id, etc.
     detail = Column(Text, nullable=True)                   # JSON: extra context for the action
+    # Tamper-evidence (Phase 5): each row's entry_hash = sha256(this row's content + prev_hash),
+    # forming a chain. Altering or removing any row breaks every hash after it, so the log is
+    # verifiable (verify_audit_chain). NULL on legacy rows written before the chain existed.
+    prev_hash = Column(String(64), nullable=True)
+    entry_hash = Column(String(64), nullable=True, index=True)
 
 
 # Composite index to make the common Admin-viewer query (recent rows, optionally by user) fast.

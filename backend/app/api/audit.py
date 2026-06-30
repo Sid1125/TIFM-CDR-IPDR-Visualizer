@@ -13,8 +13,16 @@ from app.services.auth_service import get_current_admin
 from app.services.auth_service import get_current_user
 from app.services.audit_service import list_audit
 from app.services.audit_service import log_action
+from app.services.audit_service import verify_audit_chain
 
 router = APIRouter()
+
+
+@router.get("/verify")
+def audit_verify(db: Session = Depends(get_db), _admin: User = Depends(get_current_admin)):
+    """Verify the audit log's tamper-evidence hash chain (admin only). Returns ok=True when intact,
+    or the id of the first row where the chain breaks."""
+    return verify_audit_chain(db)
 
 
 @router.get("/log")
