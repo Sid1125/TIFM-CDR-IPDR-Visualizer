@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
 from app.core.database import Base
 
@@ -13,3 +13,5 @@ class Case(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Phase 5: archived cases drop out of the active case list (kept for the record, not deleted).
+    archived = Column(Boolean, default=False, nullable=False)

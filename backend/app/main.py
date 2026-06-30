@@ -34,6 +34,7 @@ from app.core.database import Base
 from app.core.database import engine
 from app.core.database import SessionLocal
 from app.services.auth_service import bootstrap_default_user
+from app.services.auth_service import get_current_admin
 from app.services.auth_service import get_current_user
 from app.models import cdr  # noqa: F401
 from app.models import auth  # noqa: F401
@@ -95,6 +96,31 @@ def health():
     running with no external services (the air-gapped guarantee)."""
     from app.core.capabilities import CAPS
     return {"status": "ok", "capabilities": CAPS.summary()}
+
+
+@app.get("/metrics")
+def metrics(_admin=Depends(get_current_admin)):
+    """Operational snapshot (admin only): active capabilities, row counts across the core tables,
+    and the audit-chain integrity status. JSON — no external scrape stack needed for an air-gapped
+    single-machine deployment."""
+    from sqlalchemy import func
+    from app.models.analytics import AnalyticsCache
+    from app.models.audit_log import AuditLog
+    from app.models.case import Case
+    from app.models.cdr import CDRRecord
+    from app.models.ipdr import IPDRRecord
+    from app.core.capabilities import CAPS
+    from app.services.audit_service import verify_audit_chain
+    with SessionLocal() as db:
+        counts = {
+            "cases": db.query(func.count(Case.id)).scalar() or 0,
+            "cdr_records": db.query(func.count(CDRRecord.id)).scalar() or 0,
+            "ipdr_records": db.query(func.count(IPDRRecord.id)).scalar() or 0,
+            "analytics_cache_rows": db.query(func.count(AnalyticsCache.id)).scalar() or 0,
+            "audit_rows": db.query(func.count(AuditLog.id)).scalar() or 0,
+        }
+        chain = verify_audit_chain(db)
+    return {"capabilities": CAPS.summary(), "counts": counts, "audit_chain": chain}
 
 
 @app.get("/", include_in_schema=False)
@@ -161,6 +187,8 @@ def _ensure_columns():
         # audit-log hash chain (Phase 5)
         "ALTER TABLE audit_logs ADD COLUMN prev_hash VARCHAR(64)",
         "ALTER TABLE audit_logs ADD COLUMN entry_hash VARCHAR(64)",
+        # case archiving (Phase 5)
+        "ALTER TABLE cases ADD COLUMN archived BOOLEAN DEFAULT FALSE",
     ]
     for s in stmts:
         try:

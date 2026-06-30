@@ -11,6 +11,7 @@ class CaseCreate(BaseModel):
 class CaseUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    archived: bool | None = None
 
 
 class CaseRead(BaseModel):
@@ -20,5 +21,6 @@ class CaseRead(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     record_count: int = 0
+    archived: bool = False
 
     model_config = {"from_attributes": True}

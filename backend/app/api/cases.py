@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -20,8 +20,13 @@ router = APIRouter()
 
 
 @router.get("/", response_model=list[CaseRead])
-def list_cases(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
-    cases = db.query(Case).order_by(Case.updated_at.desc()).all()
+def list_cases(db: Session = Depends(get_db), _user: User = Depends(get_current_user),
+               include_archived: bool = Query(default=False)):
+    q = db.query(Case)
+    if not include_archived:
+        # exclude archived; isnot(True) also keeps legacy rows where archived is NULL
+        q = q.filter(Case.archived.isnot(True))
+    cases = q.order_by(Case.updated_at.desc()).all()
     # Two GROUP BY queries instead of 2N per-case COUNT queries
     cdr_counts = dict(db.query(CDRRecord.case_id, func.count(CDRRecord.id)).group_by(CDRRecord.case_id).all())
     ipdr_counts = dict(db.query(IPDRRecord.case_id, func.count(IPDRRecord.id)).group_by(IPDRRecord.case_id).all())
@@ -35,6 +40,7 @@ def list_cases(db: Session = Depends(get_db), _user: User = Depends(get_current_
             created_at=c.created_at,
             updated_at=c.updated_at,
             record_count=cdr_counts.get(cid, 0) + ipdr_counts.get(cid, 0),
+            archived=bool(c.archived),
         ))
     return result
 
@@ -58,12 +64,15 @@ def update_case(case_id: int, payload: CaseUpdate, db: Session = Depends(get_db)
         c.name = payload.name
     if payload.description is not None:
         c.description = payload.description
+    if payload.archived is not None:
+        c.archived = payload.archived
     c.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(c)
     cdr_count = db.query(func.count(CDRRecord.id)).filter(CDRRecord.case_id == str(c.id)).scalar() or 0
     ipdr_count = db.query(func.count(IPDRRecord.id)).filter(IPDRRecord.case_id == str(c.id)).scalar() or 0
-    return CaseRead(id=c.id, name=c.name, description=c.description, created_at=c.created_at, updated_at=c.updated_at, record_count=cdr_count + ipdr_count)
+    return CaseRead(id=c.id, name=c.name, description=c.description, created_at=c.created_at,
+                    updated_at=c.updated_at, record_count=cdr_count + ipdr_count, archived=bool(c.archived))
 
 
 @router.delete("/{case_id}")
