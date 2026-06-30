@@ -17,6 +17,7 @@ from app.services.records_service import list_cdr_records
 from app.services.records_service import list_ipdr_records
 from app.services.records_service import page_records
 from app.services.records_service import distinct_services
+from app.services.analytics_materialize_service import invalidate, invalidate_all
 
 router = APIRouter()
 
@@ -56,9 +57,11 @@ def reset_records(case_id: str | None = Query(default=None), db: Session = Depen
         if case_id:
             cdr_deleted = db.query(CDRRecord).filter(CDRRecord.case_id == case_id).delete(synchronize_session=False)
             ipdr_deleted = db.query(IPDRRecord).filter(IPDRRecord.case_id == case_id).delete(synchronize_session=False)
+            invalidate(db, case_id)  # stale materialised analytics would otherwise survive the reset
         else:
             cdr_deleted = db.query(CDRRecord).delete(synchronize_session=False)
             ipdr_deleted = db.query(IPDRRecord).delete(synchronize_session=False)
+            invalidate_all(db)
         db.commit()
         return {
             "success": True,

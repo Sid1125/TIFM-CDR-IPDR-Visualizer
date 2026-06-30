@@ -55,6 +55,22 @@ def _invalidate(db: Session, case_id: str) -> None:
     )
 
 
+def invalidate(db: Session, case_id: str | None) -> None:
+    """Public: drop cached analytics for one case AND the global ("") aggregate,
+    since changing one case's records also invalidates the all-cases view.
+    Caller is responsible for committing."""
+    cid = case_id or ""
+    db.query(AnalyticsCache).filter(
+        AnalyticsCache.case_id.in_({cid, ""})
+    ).delete(synchronize_session=False)
+
+
+def invalidate_all(db: Session) -> None:
+    """Public: drop every cached analytics row (used when all records are wiped).
+    Caller is responsible for committing."""
+    db.query(AnalyticsCache).delete(synchronize_session=False)
+
+
 def _upsert(db: Session, case_id: str, key: str, data: dict | list) -> None:
     existing = (
         db.query(AnalyticsCache)

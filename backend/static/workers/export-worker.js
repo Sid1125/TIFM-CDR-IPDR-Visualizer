@@ -1,16 +1,16 @@
 /**
- * export-worker.js — off-main-thread CSV / XLSX export
+ * export-worker.js — off-main-thread CSV export
  *
  * Receives:
- *   { type: 'csv',  rows: [...], headers: [...], filename: 'foo.csv' }
- *   { type: 'xlsx', rows: [...], headers: [...], filename: 'foo.xlsx' }
+ *   { type: 'csv', rows: [...], headers: [...], filename: 'foo.csv' }
  *
  * Posts back:
- *   { type: 'done', dataUrl: 'data:...', filename: 'foo.csv' }
+ *   { type: 'done', blobUrl: 'blob:...', filename: 'foo.csv' }
  *   { type: 'error', message: string }
  *
- * For XLSX we importScripts SheetJS (already vendored at /static/vendor/xlsx.full.min.js).
- * Workers cannot access the DOM but can use importScripts and Blob/URL APIs.
+ * Workers cannot access the DOM but can use Blob/URL APIs. XLSX export is handled
+ * server-side (POST /export/xlsx via openpyxl) — there is no client-side xlsx path,
+ * so this worker only builds CSV and vendors no JS spreadsheet library.
  */
 
 self.onmessage = function (e) {
@@ -21,19 +21,6 @@ self.onmessage = function (e) {
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       self.postMessage({ type: 'done', blobUrl: url, filename: msg.filename || 'export.csv' });
-
-    } else if (msg.type === 'xlsx') {
-      importScripts('/static/vendor/xlsx.full.min.js');
-      /* global XLSX */
-      const wb = XLSX.utils.book_new();
-      const wsData = [msg.headers || [], ...(msg.rows || [])];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      XLSX.utils.book_append_sheet(wb, ws, 'Export');
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      self.postMessage({ type: 'done', blobUrl: url, filename: msg.filename || 'export.xlsx' });
-
     } else {
       self.postMessage({ type: 'error', message: 'Unknown message type: ' + msg.type });
     }

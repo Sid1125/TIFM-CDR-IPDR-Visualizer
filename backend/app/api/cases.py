@@ -12,6 +12,7 @@ from app.models.ipdr import IPDRRecord
 from app.schemas.case import CaseCreate, CaseRead, CaseUpdate
 from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
+from app.services.analytics_materialize_service import invalidate
 from app.models.auth import User
 
 router = APIRouter()
@@ -72,6 +73,7 @@ def delete_case(case_id: int, request: Request, db: Session = Depends(get_db), u
     case_name = c.name
     db.query(CDRRecord).filter(CDRRecord.case_id == str(c.id)).delete(synchronize_session=False)
     db.query(IPDRRecord).filter(IPDRRecord.case_id == str(c.id)).delete(synchronize_session=False)
+    invalidate(db, str(c.id))  # don't leave orphaned analytics_cache rows for a deleted case
     db.delete(c)
     db.commit()
     log_action(db, user, request, "case_delete", case_id=case_id, case_name=case_name)

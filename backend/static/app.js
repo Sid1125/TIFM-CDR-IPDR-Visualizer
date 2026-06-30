@@ -6,6 +6,7 @@ const _W = {
   _export: null,
   _aiPending: [],   // queue of {resolve, reject} waiting for the AI result
   _aiRunning: false,
+  _exportQueue: [], // FIFO of {resolve, reject} — worker answers postMessages in order
 
   ai() {
     if (!this._ai && typeof Worker !== 'undefined') {
@@ -49,7 +50,9 @@ const _W = {
     });
   },
 
-  // Export to CSV or XLSX off-main-thread.
+  // Export to CSV off-main-thread. Handlers are attached once and a FIFO queue
+  // pairs each worker reply with its caller, so overlapping exports don't clobber
+  // each other's onmessage/onerror.
   export(format, headers, rows, filename) {
     if (typeof Worker === 'undefined') {
       return Promise.resolve(null);  // caller falls back to sync export
@@ -57,18 +60,21 @@ const _W = {
     try {
       if (!this._export) {
         this._export = new Worker('/static/workers/export-worker.js');
+        this._export.onmessage = (e) => {
+          const job = this._exportQueue.shift();
+          if (!job) return;
+          if (e.data.type === 'done') job.resolve(e.data);
+          else job.reject(new Error(e.data.message || 'export failed'));
+        };
+        this._export.onerror = (err) => {
+          const pending = this._exportQueue; this._exportQueue = [];
+          this._export = null;  // recreate on next call
+          pending.forEach(({reject}) => reject(err));
+        };
       }
       return new Promise((resolve, reject) => {
-        const w = this._export;
-        w.onmessage = (e) => {
-          if (e.data.type === 'done') {
-            resolve(e.data);
-          } else if (e.data.type === 'error') {
-            reject(new Error(e.data.message));
-          }
-        };
-        w.onerror = (err) => { this._export = null; reject(err); };
-        w.postMessage({type: format, headers, rows, filename});
+        this._exportQueue.push({resolve, reject});
+        this._export.postMessage({type: format, headers, rows, filename});
       });
     } catch (err) {
       return Promise.reject(err);
