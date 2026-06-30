@@ -154,6 +154,10 @@ def _ensure_columns():
     from sqlalchemy import text
     stmts = [
         "ALTER TABLE watchlist_entries ADD COLUMN group_name VARCHAR",
+        # analytics_cache versioning (Phase 1b)
+        "ALTER TABLE analytics_cache ADD COLUMN schema_version INTEGER DEFAULT 0",
+        "ALTER TABLE analytics_cache ADD COLUMN record_count INTEGER",
+        "ALTER TABLE analytics_cache ADD COLUMN build_ms INTEGER",
     ]
     for s in stmts:
         try:
@@ -170,6 +174,8 @@ def on_startup():
     _ensure_columns()
     from app.core.capabilities import detect
     detect(engine)  # best-effort probe of optional accelerators; never fatal
+    from app.core.events import register_default_handlers
+    register_default_handlers()  # wire analytics (re)materialisation to upload events
     with SessionLocal() as db:
         bootstrap_default_user(db)
 

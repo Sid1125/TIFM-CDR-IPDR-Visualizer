@@ -13,6 +13,7 @@ from app.schemas.case import CaseCreate, CaseRead, CaseUpdate
 from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
 from app.services.analytics_materialize_service import invalidate
+from app.core import events
 from app.models.auth import User
 
 router = APIRouter()
@@ -77,4 +78,5 @@ def delete_case(case_id: int, request: Request, db: Session = Depends(get_db), u
     db.delete(c)
     db.commit()
     log_action(db, user, request, "case_delete", case_id=case_id, case_name=case_name)
+    events.publish(events.CASE_DELETED, case_id=str(case_id))
     return {"success": True, "deleted_records": True}

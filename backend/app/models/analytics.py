@@ -28,5 +28,11 @@ class AnalyticsCache(Base):
     key = Column(String(512), nullable=False)
     data = Column(Text, nullable=False)
     computed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Versioning (Phase 1b): a stored row whose schema_version != the running
+    # SCHEMA_VERSION is treated as a cache miss, so analytics never go stale across a
+    # code update that changes their shape. record_count / build_ms are telemetry.
+    schema_version = Column(Integer, default=0, nullable=False)
+    record_count = Column(Integer, nullable=True)
+    build_ms = Column(Integer, nullable=True)
 
     __table_args__ = (UniqueConstraint("case_id", "key", name="uq_analytics_case_key"),)

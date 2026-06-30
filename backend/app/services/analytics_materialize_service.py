@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime
 
 from sqlalchemy import Integer, and_, cast, extract, func
@@ -35,6 +36,11 @@ from app.services.analysis_service import (
 log = logging.getLogger(__name__)
 
 _SUBJECT_CAP = 100  # max subjects per case materialised as individual reports
+
+# Bump whenever the SHAPE of any materialised analytic changes (new chart field, different
+# report structure, etc.). A cached row with an older schema_version is ignored as a miss and
+# recomputed on demand — so a code deploy can never serve analytics in a stale format.
+SCHEMA_VERSION = 1
 
 
 # ── internal helpers ──────────────────────────────────────────────────────────
@@ -71,7 +77,8 @@ def invalidate_all(db: Session) -> None:
     db.query(AnalyticsCache).delete(synchronize_session=False)
 
 
-def _upsert(db: Session, case_id: str, key: str, data: dict | list) -> None:
+def _upsert(db: Session, case_id: str, key: str, data: dict | list,
+           record_count: int | None = None, build_ms: int | None = None) -> None:
     existing = (
         db.query(AnalyticsCache)
         .filter(AnalyticsCache.case_id == case_id, AnalyticsCache.key == key)
@@ -81,8 +88,15 @@ def _upsert(db: Session, case_id: str, key: str, data: dict | list) -> None:
     if existing:
         existing.data = payload
         existing.computed_at = datetime.utcnow()
+        existing.schema_version = SCHEMA_VERSION
+        if record_count is not None:
+            existing.record_count = record_count
+        if build_ms is not None:
+            existing.build_ms = build_ms
     else:
-        db.add(AnalyticsCache(case_id=case_id, key=key, data=payload))
+        db.add(AnalyticsCache(case_id=case_id, key=key, data=payload,
+                              schema_version=SCHEMA_VERSION,
+                              record_count=record_count, build_ms=build_ms))
 
 
 # ── subject discovery ─────────────────────────────────────────────────────────
@@ -99,6 +113,16 @@ def _ipdr_subjects(db: Session, case_id: str | None) -> list[str]:
     if case_id:
         q = q.filter(IPDRRecord.case_id == case_id)
     return sorted({str(r[0]) for r in q.distinct().all() if r[0]})
+
+
+def _case_record_count(db: Session, case_id: str | None) -> int:
+    """Total CDR + IPDR rows in scope — telemetry stored alongside the dashboard cache."""
+    cq = db.query(func.count(CDRRecord.id))
+    iq = db.query(func.count(IPDRRecord.id))
+    if case_id:
+        cq = cq.filter(CDRRecord.case_id == case_id)
+        iq = iq.filter(IPDRRecord.case_id == case_id)
+    return int((cq.scalar() or 0) + (iq.scalar() or 0))
 
 
 # ── AI overview (SQL-native) ──────────────────────────────────────────────────
@@ -228,16 +252,21 @@ def materialize_case(db: Session, case_id: str | None) -> None:
     immediately after a CDR or IPDR upload completes."""
     cid = case_id or ""
     log.info("analytics: materialising case=%r", cid)
+    started = time.monotonic()
 
     try:
         _invalidate(db, cid)
 
-        # 1. Dashboard chart data
-        _upsert(db, cid, "dashboard", get_chart_data(db, case_id))
-
-        # 2. Subject lists
+        # 2. Subject lists (computed early so we can report record_count telemetry)
         cdr_subs = _cdr_subjects(db, case_id)
         ipdr_subs = _ipdr_subjects(db, case_id)
+        rec_count = _case_record_count(db, case_id)
+        build_ms = int((time.monotonic() - started) * 1000)
+
+        # 1. Dashboard chart data (carries the case-level telemetry read by get_status)
+        _upsert(db, cid, "dashboard", get_chart_data(db, case_id),
+                record_count=rec_count, build_ms=build_ms)
+
         _upsert(db, cid, "subjects", {"cdr": cdr_subs, "ipdr": ipdr_subs})
 
         # 3. AI overview
@@ -252,7 +281,8 @@ def materialize_case(db: Session, case_id: str | None) -> None:
             _upsert(db, cid, f"ipdr_report:{sub}", get_ipdr_reports(db, case_id, sub))
 
         db.commit()
-        log.info("analytics: done case=%r  cdr=%d ipdr=%d", cid, len(cdr_subs), len(ipdr_subs))
+        log.info("analytics: done case=%r  cdr=%d ipdr=%d rows=%d in %dms",
+                 cid, len(cdr_subs), len(ipdr_subs), rec_count, int((time.monotonic() - started) * 1000))
 
     except Exception:
         log.exception("analytics: materialisation failed for case=%r", cid)
@@ -270,6 +300,10 @@ def get_cached(db: Session, case_id: str | None, key: str) -> dict | list | None
     )
     if row is None:
         return None
+    # Stale-format guard: a row written by an older analytics shape is ignored, forcing a
+    # recompute. (Older rows pre-versioning have schema_version 0.)
+    if (row.schema_version or 0) != SCHEMA_VERSION:
+        return None
     try:
         return json.loads(row.data)
     except Exception:
@@ -277,13 +311,15 @@ def get_cached(db: Session, case_id: str | None, key: str) -> dict | list | None
 
 
 def get_status(db: Session, case_id: str | None) -> dict:
-    """Return whether analytics have been materialised for this case and when."""
+    """Return whether analytics have been materialised for this case, when, and how big."""
     cid = case_id or ""
     row = (
-        db.query(AnalyticsCache.computed_at)
+        db.query(AnalyticsCache.computed_at, AnalyticsCache.schema_version,
+                 AnalyticsCache.record_count, AnalyticsCache.build_ms)
         .filter(AnalyticsCache.case_id == cid, AnalyticsCache.key == "dashboard")
         .one_or_none()
     )
-    if row is None:
+    if row is None or (row[1] or 0) != SCHEMA_VERSION:
         return {"ready": False, "computed_at": None}
-    return {"ready": True, "computed_at": _ts(row[0])}
+    return {"ready": True, "computed_at": _ts(row[0]),
+            "schema_version": row[1], "record_count": row[2], "build_ms": row[3]}

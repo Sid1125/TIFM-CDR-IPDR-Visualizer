@@ -18,6 +18,7 @@ from app.services.records_service import list_ipdr_records
 from app.services.records_service import page_records
 from app.services.records_service import distinct_services
 from app.services.analytics_materialize_service import invalidate, invalidate_all
+from app.core import events
 
 router = APIRouter()
 
@@ -63,6 +64,9 @@ def reset_records(case_id: str | None = Query(default=None), db: Session = Depen
             ipdr_deleted = db.query(IPDRRecord).delete(synchronize_session=False)
             invalidate_all(db)
         db.commit()
+        # Cache invalidation stays inline above (atomic with the delete); the event lets other
+        # subscribers (e.g. the search index) react too.
+        events.publish(events.CASE_RESET, case_id=case_id, all=not case_id)
         return {
             "success": True,
             "cdr_deleted": cdr_deleted,
