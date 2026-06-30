@@ -48,21 +48,41 @@ from app.models import subscriber  # noqa: F401
 from app.models import analytics  # noqa: F401
 
 from fastapi.middleware.gzip import GZipMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
 
 app = FastAPI(title=settings.APP_NAME)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
-class _StaticCacheMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-        path = request.url.path
+class _StaticCacheMiddleware:
+    """Pure-ASGI middleware that only rewrites Cache-Control headers for static
+    assets. Unlike a BaseHTTPMiddleware, it never consumes the response body, so
+    streaming responses (e.g. /export/records) pass through unbuffered."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        path = scope.get("path", "")
         if path in ("/static/app.js", "/static/styles.css"):
-            response.headers["Cache-Control"] = "no-cache"
+            cache_value = b"no-cache"
         elif path.startswith("/static/vendor/"):
-            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-        return response
+            cache_value = b"public, max-age=31536000, immutable"
+        else:
+            return await self.app(scope, receive, send)  # no rewrite, no wrapping
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = [
+                    (k, v) for (k, v) in message.get("headers", [])
+                    if k.lower() != b"cache-control"
+                ]
+                headers.append((b"cache-control", cache_value))
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
 app.add_middleware(_StaticCacheMiddleware)
@@ -71,7 +91,10 @@ static_dir = Path(__file__).resolve().parents[1] / "static"
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Health + capability report. `capabilities.self_contained_offline` confirms ARGUS is
+    running with no external services (the air-gapped guarantee)."""
+    from app.core.capabilities import CAPS
+    return {"status": "ok", "capabilities": CAPS.summary()}
 
 
 @app.get("/", include_in_schema=False)
@@ -99,6 +122,9 @@ def _ensure_indexes():
         "CREATE INDEX IF NOT EXISTS ix_cdr_case_imsi ON cdr_records (case_id, imsi)",
         "CREATE INDEX IF NOT EXISTS ix_cdr_case_imei ON cdr_records (case_id, imei)",
         "CREATE INDEX IF NOT EXISTS ix_cdr_case_msisdn ON cdr_records (case_id, msisdn)",
+        # CDR — co-presence self-join (case_id, tower_id, start_time): the analytics
+        # meetings query joins on same tower + same date/hour, so cover all three columns.
+        "CREATE INDEX IF NOT EXISTS ix_cdr_case_tower_time ON cdr_records (case_id, tower_id, start_time)",
         # IPDR — existing
         "CREATE INDEX IF NOT EXISTS ix_ipdr_case_start ON ipdr_records (case_id, start_time)",
         "CREATE INDEX IF NOT EXISTS ix_ipdr_case_tower ON ipdr_records (case_id, tower_id)",
@@ -142,6 +168,8 @@ def on_startup():
     Base.metadata.create_all(bind=engine)
     _ensure_indexes()
     _ensure_columns()
+    from app.core.capabilities import detect
+    detect(engine)  # best-effort probe of optional accelerators; never fatal
     with SessionLocal() as db:
         bootstrap_default_user(db)
 

@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     AUTH_BOOTSTRAP_PASSWORD: str = "admin12345"
     AUTH_BOOTSTRAP_ROLE: str = "admin"
 
+    # Optional accelerators — ARGUS runs fully offline with these unset (FastAPI + DB only).
+    # When set AND reachable, the capability layer (app/core/capabilities.py) opportunistically
+    # uses them; if a configured service is unreachable the app silently falls back to the
+    # self-contained path. Leave blank for an air-gapped deployment.
+    REDIS_URL: str = ""           # e.g. redis://localhost:6379/0 — caching + pub/sub
+    CELERY_BROKER_URL: str = ""   # e.g. redis://localhost:6379/1 — background job workers
+    ANALYTICS_CACHE_TTL: int = 0  # seconds; 0 = no expiry (DB cache is invalidated by events)
+
     if SettingsConfigDict is not None:  # pragma: no branch
         model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     else:  # pragma: no cover - pydantic v1 fallback
