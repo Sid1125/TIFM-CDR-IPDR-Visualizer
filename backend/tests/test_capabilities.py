@@ -67,6 +67,15 @@ class ThreadJobQueueTests(unittest.TestCase):
     def test_unknown_job_id_is_none(self):
         self.assertIsNone(ThreadJobQueue().status("does-not-exist"))
 
+    def test_recent_lists_newest_first(self):
+        q = ThreadJobQueue()
+        ids = [q.enqueue(lambda: None, name=f"j{i}") for i in range(3)]
+        for jid in ids:
+            self._await(q, jid)
+        recent = q.recent(limit=10)
+        self.assertEqual([r["id"] for r in recent[:3]], ids[::-1])  # newest first
+        self.assertTrue(all(r["state"] == "done" for r in recent[:3]))
+
 
 class CacheFactoryTests(unittest.TestCase):
     def test_default_cache_is_db_backed(self):

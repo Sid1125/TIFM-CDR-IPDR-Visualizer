@@ -31,6 +31,9 @@ class JobQueue:
     def status(self, job_id: str) -> dict | None:
         raise NotImplementedError
 
+    def recent(self, limit: int = 50) -> list[dict]:
+        raise NotImplementedError
+
 
 class ThreadJobQueue(JobQueue):
     def __init__(self) -> None:
@@ -75,6 +78,12 @@ class ThreadJobQueue(JobQueue):
         with self._lock:
             job = self._jobs.get(job_id)
             return dict(job) if job else None
+
+    def recent(self, limit: int = 50) -> list[dict]:
+        """Most-recently-enqueued jobs first (for a status/progress view)."""
+        with self._lock:
+            ids = self._order[-limit:][::-1]
+            return [dict(self._jobs[i]) for i in ids if i in self._jobs]
 
 
 _queue: JobQueue | None = None
