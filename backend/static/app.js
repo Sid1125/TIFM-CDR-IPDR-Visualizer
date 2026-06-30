@@ -135,11 +135,26 @@ function _getDashAgg(){
 // Background loader: fetches ALL remaining records after the initial 500-row paint.
 // Once done, allRows has the full dataset and features like timeline/map/story/graph work accurately.
 let _bgLoadGen=0;
+// Hard cap on the in-browser allRows mirror. Beyond this, the client holds a bounded sample
+// (newest-first) for live previews — timeline, correlation, mini-graph, geofence — while the
+// authoritative analytics (dashboard, analysis reports, inference, graph, search) are computed
+// server-side over the WHOLE case. This is what keeps a 1–5M-row case from OOM-ing / freezing
+// the browser; loadCaseData also seeds state.subjects from the server's full owned-subjects list,
+// so the dropdowns still list every subject even when allRows is sampled.
+const MAX_CLIENT_ROWS=150000;
+
 async function _bgLoadAll(total,caseId,gen){
   if(total<=500)return;
-  const remaining=total-500;
+  const want=Math.min(total,MAX_CLIENT_ROWS);   // rows to mirror client-side
+  const sampled=total>want;
+  if(want<=500){ // already have enough of a sample
+    const b0=$('bgLoadBanner');
+    if(b0&&sampled){b0.textContent='Showing a '+n(500)+'-record sample of '+n(total)+' — full analytics are server-side.';b0.style.display='block';setTimeout(()=>{if(b0)b0.style.display='none';},6000);}
+    return;
+  }
+  const remaining=want-500;
   const banner=$('bgLoadBanner');
-  if(banner){banner.textContent='Loading '+n(total)+' records…';banner.style.display='block';}
+  if(banner){banner.textContent=sampled?('Loading a '+n(want)+'-record sample of '+n(total)+'…'):('Loading '+n(total)+' records…');banner.style.display='block';}
   try{
     const qp=new URLSearchParams({limit:remaining,offset:500});
     if(caseId)qp.set('case_id',caseId);
@@ -152,7 +167,10 @@ async function _bgLoadAll(total,caseId,gen){
     // Expand subjects list
     more.forEach(r=>{if(r.sub)state.subjects.push(r.sub);if(r.cnt)state.subjects.push(r.cnt);});
     state.subjects=[...new Set(state.subjects)].sort();
-    if(banner)banner.style.display='none';
+    if(banner){
+      if(sampled){banner.textContent='Showing a '+n(want)+'-record sample of '+n(total)+' — full analytics are server-side.';setTimeout(()=>{if(banner)banner.style.display='none';},6000);}
+      else{banner.style.display='none';}
+    }
     // Pre-warm AI cache in background worker now that allRows is complete
     try{_prefetchAiCache();}catch(e){}
     // Re-render live features that depend on allRows
