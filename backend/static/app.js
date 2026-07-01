@@ -1,4 +1,5 @@
 import { esc, fmt, fmts, fmtd, fmtBytes, colWidth, n, debounce, renderMd } from './core/utils.js';
+import { SERVICE_DB, IP_RANGES, ISP_PROVIDERS, KNOWN_IP_HINTS, HOSTING_PROVIDERS, PRIVATE_LABEL, DISTINCTIVE_INDICATORS, EPHEMERAL_MIN, PORT_SVC, PORT_FAMILY, FAMILY_GAP } from './core/constants.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -519,37 +520,13 @@ async function showCaseManager(){
   m.querySelector('.cm-close').addEventListener('click',()=>{m.style.display='none'});
   m.style.display='flex';
 }
-// -- Service Provider Database --
-// Format: { provider, asn, domains, ranges, services: [{name, activities, ports:{tcp,udp}, proto}] }
-const SERVICE_DB=ATTR_DATA.providers;
-// -- IP Range Lookup --
-const IP_RANGES=SERVICE_DB.flatMap(p=>(p.ranges||[]).map(c=>{const[r,bits]=c.split('/');const m=~(2**(32-parseInt(bits))-1)>>>0;const rn=r.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);const pfx=parseInt(bits);return{mask:m,range:rn,provider:p.pr,raw:c,isp:!!p.isp,specificity:pfx>=24?1:pfx>=20?0.8:pfx>=16?0.6:0.4}}));
-// Providers that are access networks (telecom/ISP), not content services. A match on
-// these identifies the carrier, and must never override a real content-provider match.
-const ISP_PROVIDERS=new Set(SERVICE_DB.filter(p=>p.isp).map(p=>p.pr));
 function isIspProvider(name){return ISP_PROVIDERS.has(name)}
-const KNOWN_IP_HINTS=[{cidr:'8.8.8.0/24',prov:'Google',svc:'Google DNS',act:'DNS Resolution'},{cidr:'8.8.4.0/24',prov:'Google',svc:'Google DNS',act:'DNS Resolution'},{cidr:'1.1.1.0/24',prov:'Cloudflare',svc:'Cloudflare DNS',act:'DNS Resolution'},{cidr:'1.0.0.0/24',prov:'Cloudflare',svc:'Cloudflare DNS',act:'DNS Resolution'}].map(h=>{const[r,bits]=h.cidr.split('/');const m=~(2**(32-parseInt(bits))-1)>>>0;const rn=r.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);return{mask:m,range:rn,...h}});
 // Longest-prefix match: among all CIDRs containing the IP, return the most specific
 // (largest mask = most 1-bits), so a tight block beats a broad one.
 function ipInRange(ip,range){if(!ip||!ip.includes('.'))return null;const n=ip.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);let best=null;for(const r of range){if((n&r.mask)===(r.range&r.mask)&&(!best||(r.mask>>>0)>(best.mask>>>0)))best=r}return best}
 // Non-public address classification (CGNAT / private / loopback / link-local).
 function ipKind(ip){if(!ip||!ip.includes('.'))return null;const o=ip.split('.').map(x=>parseInt(x));if(o.length!==4||o.some(isNaN))return null;const n=((o[0]*256+o[1])*256+o[2])*256+o[3];const in_=(a,bits)=>{const m=~(2**(32-bits)-1)>>>0;const r=a.split('.').reduce((s,x)=>(s*256+parseInt(x))>>>0,0);return (n&m)===(r&m)};if(in_('100.64.0.0',10))return'cgnat';if(in_('127.0.0.0',8))return'loopback';if(in_('169.254.0.0',16))return'link_local';if(in_('10.0.0.0',8)||in_('172.16.0.0',12)||in_('192.168.0.0',16))return'private';return null}
-const HOSTING_PROVIDERS=new Set(ATTR_DATA.constants.hosting_providers);
-const PRIVATE_LABEL={cgnat:'Carrier NAT (CGNAT)',private:'Private / Internal Network',loopback:'Loopback',link_local:'Link-Local'};
 function ipHint(ip){if(!ip||!ip.includes('.'))return null;const n=ip.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);const h=KNOWN_IP_HINTS.find(r=>(n&r.mask)===(r.range&r.mask));return h?{provider:h.prov,service:h.svc,activity:h.act}:null}
-// -- Distinctive Indicators --
-// Strong multi-factor signatures that add +30 to service score
-const DISTINCTIVE_INDICATORS=[
-  {svc:'WhatsApp',check:(p,pr,pt,ps)=>p==='Meta'&&pr==='UDP'&&([3478,3479,3480].some(po=>ps.has(po)))},
-  {svc:'Telegram',check:(p,pr,pt,ps)=>p==='Telegram'},
-  {svc:'Google Meet',check:(p,pr,pt,ps)=>p==='Google'&&pr==='UDP'&&[19302,19303,19304,19305].some(po=>ps.has(po))},
-  {svc:'MS Teams',check:(p,pr,pt,ps)=>p==='Microsoft'&&pr==='UDP'&&[3478,3479,3480,3481].some(po=>ps.has(po))},
-  {svc:'Zoom',check:(p,pr,pt,ps)=>p==='Zoom'&&pr==='UDP'&&[8801,8810].some(po=>ps.has(po))},
-  {svc:'FaceTime',check:(p,pr,pt,ps)=>p==='Apple'&&pr==='UDP'&&[16384,16387,3497].some(po=>ps.has(po))},
-  {svc:'Steam',check:(p,pr,pt,ps)=>p==='Valve'&&([27000,27100,27015,27050].some(po=>ps.has(po)))},
-  {svc:'NordVPN',check:(p,pr,pt,ps)=>p==='NordVPN'&&pr==='UDP'&&ps.has(1194)},
-  {svc:'Mullvad',check:(p,pr,pt,ps)=>p==='Mullvad'&&pr==='UDP'&&ps.has(51820)},
-];
 // -- Identity Resolution --
 // Builds per-subject identity profiles linking MSISDN, IMEI, IMSI
 function buildIdentityProfile(sub){
@@ -753,10 +730,6 @@ function renderQualityCard(){
   cards.parentNode.insertBefore(div,cards.nextSibling);
 }
 // -- Port?Description map --
-// IANA dynamic/ephemeral port range. A connection's own source port is usually
-// drawn from here, so a match on it is likely coincidental, not the real service.
-const EPHEMERAL_MIN=ATTR_DATA.constants.ephemeral_min;
-const PORT_SVC=ATTR_DATA.port_svc;
 function portSvc(p){return p?PORT_SVC[parseInt(p)]||'':''}
 // -- Behavioral Patterns (bytes / duration / time-of-day analysis) --
 function trafficPattern(dur,up,dwn,protocol,portSet,recCount,hour){
@@ -1169,12 +1142,6 @@ function classifySession(recs){
   if(continuous)evidence.push('Continuous traffic');
   return{provider:'',providerConfidence:10,tier:4,primary:{service:'Unknown',activity:'Unclassified'},serviceLabel:'Unknown',activityLabel:'Unclassified Session',serviceConfidence:8,candidates:[],evidence,start,end,duration:durSec,records:recs.length};
 }
-// Coarse activity family per port, used to pick session idle thresholds and to keep
-// distinct activities to the same peer in separate sessions.
-const PORT_FAMILY=ATTR_DATA.port_families;
-// Idle gap (seconds) that ends a session, tuned per activity: chatty/streaming flows
-// tolerate long pauses; lookups/browsing are bursty.
-const FAMILY_GAP=ATTR_DATA.family_gaps;
 function recPortFamily(r){
   const dp=parseInt(r.dport),sp=parseInt(r.sport);
   return PORT_FAMILY[dp]||PORT_FAMILY[sp]||'Other';
