@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services.graph_service import build_graph
+from app.services.graph_service import build_graph_with_layout
 from app.services.graph_service import get_graph_metrics
 
 router = APIRouter()
@@ -22,11 +23,11 @@ def graph(
     case_id: str = Query(default=""),
     subject: str = Query(default=""),
     limit: int = Query(default=0, ge=0, le=5000),
+    layout: int = Query(default=0),  # 1 = attach server-computed node positions (cached)
 ):
-    return build_graph(
-        db, start_date=start_date, end_date=end_date, case_id=case_id or None,
-        subject=subject or None, limit=limit,
-    )
+    args = dict(start_date=start_date, end_date=end_date, case_id=case_id or None,
+                subject=subject or None, limit=limit)
+    return build_graph_with_layout(db, **args) if layout else build_graph(db, **args)
 
 
 @router.get("/metrics")

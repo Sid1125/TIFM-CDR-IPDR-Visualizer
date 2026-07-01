@@ -14,6 +14,7 @@ from app.core.database import Base
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord  # noqa: F401
 from app.models.tower import Tower  # noqa: F401
+from app.models.analytics import AnalyticsCache  # noqa: F401  (cached_layout uses it)
 from app.services.graph_service import get_graph_metrics, _pagerank_py
 from app.services.inference_service import network_structure
 
@@ -84,6 +85,42 @@ class LinkPredictionTests(unittest.TestCase):
         for field in ("subject_a", "subject_b", "score", "jaccard", "resource_allocation", "common_contacts"):
             self.assertIn(field, link)
         self.assertGreaterEqual(link["common_contacts"], 1)
+
+
+class ServerLayoutTests(unittest.TestCase):
+    def test_compute_layout_covers_all_nodes_in_bounds_and_deterministic(self):
+        from app.services.graph_service import compute_layout
+        ids = [f"n{i}" for i in range(60)]
+        edges = [(f"n{i}", f"n{(i + 1) % 60}") for i in range(60)]
+        pos = compute_layout(ids, edges, iterations=30)
+        self.assertEqual(set(pos), set(ids))
+        for x, y in pos.values():
+            self.assertTrue(0 <= x <= 1000 and 0 <= y <= 1000)
+        # seeded → deterministic
+        self.assertEqual(pos, compute_layout(ids, edges, iterations=30))
+
+    def test_cached_layout_reuses_then_recomputes_on_new_nodes(self):
+        from app.services.graph_service import cached_layout
+        db = self.Session()
+        ids = ["a", "b", "c"]
+        edges = [("a", "b"), ("b", "c")]
+        p1 = cached_layout(db, "CASE", None, 300, ids, edges)
+        self.assertEqual(set(p1), set(ids))
+        # same node set → served from cache (identical)
+        p2 = cached_layout(db, "CASE", None, 300, ids, edges)
+        self.assertEqual(p1, p2)
+        # a new node not covered by the cache → recomputed to include it
+        p3 = cached_layout(db, "CASE", None, 300, ids + ["d"], edges + [("c", "d")])
+        self.assertIn("d", p3)
+        db.close()
+
+    def setUp(self):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from app.core.database import Base
+        self.engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(self.engine)
+        self.Session = sessionmaker(bind=self.engine)
 
 
 if __name__ == "__main__":

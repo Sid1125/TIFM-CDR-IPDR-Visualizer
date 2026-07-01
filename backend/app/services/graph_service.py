@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import random
 from collections import Counter
 from datetime import datetime
 
@@ -8,6 +10,76 @@ from networkx.algorithms.community import greedy_modularity_communities
 
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
+
+
+def compute_layout(node_ids, edges, iterations: int = 60, seed: int = 42) -> dict:
+    """Pure-Python grid-approximated Fruchterman-Reingold force layout — no SciPy (NetworkX's
+    layouts require it), so it fits the air-gapped build. Repulsion is computed only within each
+    node's grid cell + neighbours (≈O(n) per iteration instead of O(n²)), so a few-thousand-node
+    subgraph lays out in a couple of seconds; the result is cached, making it a one-time cost, and
+    the browser then just *draws* the positions instead of running its own simulation.
+
+    Returns ``{node_id: [x, y]}`` in a normalised 1000×1000 box."""
+    rnd = random.Random(seed)
+    ids = list(node_ids)
+    n = len(ids)
+    if n == 0:
+        return {}
+    if n == 1:
+        return {ids[0]: [500.0, 500.0]}
+    W = H = 1000.0
+    k = math.sqrt((W * H) / n)          # optimal edge length
+    cell = k                            # grid cell size == k
+    pos = {i: [rnd.uniform(0, W), rnd.uniform(0, H)] for i in ids}
+    disp = {i: [0.0, 0.0] for i in ids}
+    t = W / 10.0
+    cool = t / (iterations + 1)
+    for _ in range(iterations):
+        for i in ids:
+            disp[i][0] = 0.0
+            disp[i][1] = 0.0
+        grid: dict = {}
+        for i in ids:
+            grid.setdefault((int(pos[i][0] // cell), int(pos[i][1] // cell)), []).append(i)
+        for (cx, cy), members in grid.items():
+            neigh = []
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    neigh.extend(grid.get((cx + dx, cy + dy), ()))
+            for i in members:
+                pix, piy = pos[i]
+                for j in neigh:
+                    if i == j:
+                        continue
+                    ddx = pix - pos[j][0]
+                    ddy = piy - pos[j][1]
+                    d2 = ddx * ddx + ddy * ddy
+                    if d2 == 0:
+                        ddx, ddy = rnd.uniform(-1, 1), rnd.uniform(-1, 1)
+                        d2 = ddx * ddx + ddy * ddy + 1e-6
+                    d = math.sqrt(d2)
+                    f = (k * k) / d
+                    disp[i][0] += ddx / d * f
+                    disp[i][1] += ddy / d * f
+        for a, b in edges:
+            if a not in pos or b not in pos:
+                continue
+            ddx = pos[a][0] - pos[b][0]
+            ddy = pos[a][1] - pos[b][1]
+            d = math.sqrt(ddx * ddx + ddy * ddy) or 1e-6
+            f = (d * d) / k
+            fx, fy = ddx / d * f, ddy / d * f
+            disp[a][0] -= fx
+            disp[a][1] -= fy
+            disp[b][0] += fx
+            disp[b][1] += fy
+        for i in ids:
+            dx, dy = disp[i]
+            dl = math.sqrt(dx * dx + dy * dy) or 1e-6
+            pos[i][0] = min(W, max(0.0, pos[i][0] + dx / dl * min(dl, t)))
+            pos[i][1] = min(H, max(0.0, pos[i][1] + dy / dl * min(dl, t)))
+        t = max(t - cool, 1.0)
+    return {i: [round(pos[i][0], 1), round(pos[i][1], 1)] for i in ids}
 
 
 def _filtered_records(db, start_date: datetime | None = None, end_date: datetime | None = None, case_id=None):
@@ -120,6 +192,37 @@ def _pagerank_py(graph, alpha: float = 0.85, max_iter: int = 100, tol: float = 1
         if sum(abs(x[v] - xlast[v]) for v in nodes) < tol:
             break
     return x
+
+
+def cached_layout(db, case_id, subject, limit, node_ids, edges) -> dict:
+    """Return precomputed positions for this exact view, computing + caching on miss. The layout is
+    stored in analytics_cache (so it's cleared with the case on any data change); a cached layout is
+    reused only if it covers every current node, otherwise it's recomputed."""
+    from app.services.analytics_materialize_service import get_cached, _upsert
+    key = f"graph_layout:{subject or 'all'}:{limit}"
+    cached = get_cached(db, case_id, key)
+    if isinstance(cached, dict) and all(nid in cached for nid in node_ids):
+        return cached
+    pos = compute_layout(node_ids, edges)
+    _upsert(db, case_id or "", key, pos)
+    db.commit()
+    return pos
+
+
+def build_graph_with_layout(db, start_date=None, end_date=None, case_id=None, subject=None, limit=0):
+    """build_graph + server-computed node positions (Phase 2 server-side layout). The browser draws
+    the returned x/y directly instead of running its own force simulation."""
+    payload = build_graph(db, start_date=start_date, end_date=end_date, case_id=case_id,
+                          subject=subject, limit=limit)
+    node_ids = [n["id"] for n in payload["nodes"]]
+    edges = [(e["source"], e["target"]) for e in payload["edges"]]
+    pos = cached_layout(db, case_id, subject, limit, node_ids, edges)
+    for n in payload["nodes"]:
+        xy = pos.get(n["id"])
+        if xy:
+            n["x"], n["y"] = xy[0], xy[1]
+    payload["layout"] = True
+    return payload
 
 
 def get_graph_metrics(db, start_date: datetime | None = None, end_date: datetime | None = None, case_id=None):

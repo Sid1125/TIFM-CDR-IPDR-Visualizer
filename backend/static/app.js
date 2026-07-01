@@ -1999,12 +1999,20 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
     }
     ctx.restore();
   }
+  // Server-computed layout (Phase 2): if the nodes arrived with x/y, scale them into the viewport
+  // and pin them (fx/fy) so the browser just draws the precomputed positions — no client force run.
+  const _serverPos=nodes.length&&nodes[0].x!=null&&nodes[0].y!=null;
+  if(_serverPos){
+    const pad=50;
+    nodes.forEach(d=>{d.x=pad+(d.x/1000)*(w-2*pad);d.y=pad+(d.y/1000)*(h-2*pad);d.fx=d.x;d.fy=d.y;});
+  }
   const sim=d3.forceSimulation(nodes)
     .force('link',d3.forceLink(links).id(d=>d.id).distance(60))
     .force('charge',d3.forceManyBody().strength(-90))
-    .force('center',d3.forceCenter(w/2,h/2))
-    .force('collision',d3.forceCollide(8))
+    .force('center',_serverPos?null:d3.forceCenter(w/2,h/2))
+    .force('collision',_serverPos?null:d3.forceCollide(8))
     .on('tick',draw);
+  if(_serverPos){sim.stop();draw();}  // static — positions are authoritative
   curGraphNodes=nodes;curGraphLinks=links;curGraphSim=sim;
   const zoom=d3.zoom().scaleExtent([0.05,8]).on('zoom',e=>{transform=e.transform;draw();});
   d3.select(canvas).call(zoom);
@@ -2045,12 +2053,15 @@ async function renderGraph(){
     if(activeCaseId)p.set('case_id',activeCaseId);
     if(subject)p.set('subject',subject);
     p.set('limit',limit);
+    // For large graphs (the canvas path) ask the server to precompute + cache node positions so
+    // the browser just draws them instead of running its own force simulation.
+    if(limit===0||limit>=GRAPH_CANVAS_MIN)p.set('layout','1');
     payload=await API.get('/graph/?'+p.toString());
   }catch(e){console.error('graph load',e);D.graphStats.textContent='Failed to load graph.';return;}
   D.graphSvg.innerHTML='<svg width="100%" height="100%"></svg>';
   const svg=d3.select(D.graphSvg).select('svg'),w=D.graphSvg.clientWidth||800,h=D.graphSvg.clientHeight||500;
   const links=(payload.edges||[]).map(e=>({key:e.source+'|'+e.target,source:e.source,target:e.target,weight:e.weight}));
-  const nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight,kind:n.kind||'cdr'}));
+  const nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight,kind:n.kind||'cdr',x:n.x,y:n.y}));
   if(!nodes.length){D.graphStats.textContent='No connections'+(subject?' for this subject':'')+'.';return;}
   const moreEdges=(payload.total_edges||links.length)-(payload.shown_edges||links.length);
   D.graphStats.textContent=`${nodes.length} nodes, ${links.length} links`+(moreEdges>0?` (top ${links.length} of ${payload.total_edges})`:'')+(payload.total_nodes?` · ${payload.total_nodes} nodes total`:'');
