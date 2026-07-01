@@ -1,0 +1,41 @@
+# ARGUS packaging (installer)
+
+Turns ARGUS into a one-click **`ARGUS_Setup.exe`** for Windows — install, run, done — instead of
+clone → Python → Postgres → Redis. It bundles the FastAPI app + Python + the frontend and runs
+**zero-config against SQLite**, so a packaged install is fully self-contained and air-gapped.
+
+## What's here
+| File | Purpose |
+|------|---------|
+| `launch.py` | Frozen entry point — starts the server and opens the browser. |
+| `argus.spec` | PyInstaller spec — bundles the app, static frontend, and data files. |
+| `build.ps1` | Builds `dist/ARGUS/ARGUS.exe` from the spec. |
+| `argus_installer.iss` | Inno Setup script — wraps the bundle into `ARGUS_Setup.exe` with shortcuts. |
+
+## Build (on a Windows build machine with internet for the toolchain)
+```powershell
+cd packaging
+./build.ps1                     # → dist/ARGUS/ARGUS.exe  (PyInstaller one-dir bundle)
+# install Inno Setup (https://jrsoftware.org/isinfo.php), then:
+iscc argus_installer.iss        # → Output/ARGUS_Setup.exe
+```
+`ARGUS.exe` alone is already a runnable, self-contained folder; the Inno step just adds the
+installer wrapper + shortcuts.
+
+## Database
+- **Default (bundled):** SQLite — no setup, no external services. Data lives in `cdrdb.sqlite3`
+  next to the executable. This is the true one-click / air-gapped path.
+- **PostgreSQL (optional):** drop a `.env` next to `ARGUS.exe` with `DATABASE_URL=postgresql://…`.
+  The capability layer auto-detects it (and `pg_trgm`, Redis, etc.) and falls back to SQLite if it
+  can't connect. Bundling a Postgres server into the installer is intentionally **out of scope** —
+  ship it as an optional prerequisite for the large-scale deployments that need partitioning.
+
+## Notes / gotchas
+- The spec excludes `scipy`/`numpy.testing`/`matplotlib` — ARGUS is deliberately SciPy-free
+  (PageRank and the graph layout are pure-Python), which keeps the bundle small.
+- `console=True` in the spec keeps a terminal window so the operator sees the URL and can stop the
+  server; set an `.ico` and flip to `console=False` for a windowed launch once you're happy.
+- First launch on a big existing DB will build the search indexes / materialise analytics once —
+  expected, and cached thereafter.
+- This toolchain is provided as the packaging path; run the two build commands on your target
+  Windows build box to produce and smoke-test the actual installer.

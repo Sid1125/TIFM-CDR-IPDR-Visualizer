@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from fastapi import Depends
@@ -92,7 +93,12 @@ class _StaticCacheMiddleware:
 
 
 app.add_middleware(_StaticCacheMiddleware)
-static_dir = Path(__file__).resolve().parents[1] / "static"
+# Frozen (PyInstaller) bundles the frontend under _MEIPASS/backend/static (see packaging/argus.spec);
+# from source it's backend/static relative to this file. The guard leaves the source path untouched.
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    static_dir = Path(sys._MEIPASS) / "backend" / "static"
+else:
+    static_dir = Path(__file__).resolve().parents[1] / "static"
 
 
 @app.get("/health")
