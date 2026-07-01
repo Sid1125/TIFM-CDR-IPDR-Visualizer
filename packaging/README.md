@@ -33,6 +33,15 @@ installer wrapper + shortcuts.
 ## Notes / gotchas
 - The spec excludes `scipy`/`numpy.testing`/`matplotlib` — ARGUS is deliberately SciPy-free
   (PageRank and the graph layout are pure-Python), which keeps the bundle small.
+- **The fine-tuned local LLM is excluded from the installer.** The optional `/ai/chat` feature
+  (`app/ai/inference.py`) needs a multi-GB GPU stack (torch / transformers / peft / bitsandbytes /
+  accelerate / datasets / …) plus a 7 GB base model + LoRA adapter — out of scope for a one-click,
+  air-gapped SQLite install, the same way a Postgres *server* is. The spec excludes that whole stack
+  (`ML_EXCLUDES`), and `inference.py` imports it lazily so the app starts fine without it; the
+  endpoint just reports the model as unavailable. To enable it, install
+  `torch`/`transformers`/`peft`/`bitsandbytes` into the runtime alongside ARGUS and supply the model.
+  The rest of the AI panel (Ollama-backed) is unaffected — it talks to a local Ollama over HTTP.
+- `pandas`/`numpy` stay bundled — the CSV importer depends on them.
 - `console=True` in the spec keeps a terminal window so the operator sees the URL and can stop the
   server; set an `.ico` and flip to `console=False` for a windowed launch once you're happy.
 - First launch on a big existing DB will build the search indexes / materialise analytics once —

@@ -11,15 +11,25 @@ import threading
 from pathlib import Path
 from typing import Any
 
-import torch
-from peft import PeftModel
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-)
+# NOTE: torch / peft / transformers are imported LAZILY (inside the functions below), not at module
+# top level. This lets the app — and especially the packaged one-click installer, which excludes the
+# multi-GB ML stack — import this module and start normally without those libraries present. The
+# fine-tuned model is an optional, GPU-class feature; when the stack is missing the endpoints simply
+# report the model as unavailable (mirroring the existing "no adapter" path).
 
 logger = logging.getLogger(__name__)
+
+
+def _import_ml():
+    """Import the heavy ML stack on demand. Raises ImportError if it isn't installed."""
+    import torch
+    from peft import PeftModel
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        BitsAndBytesConfig,
+    )
+    return torch, PeftModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 ADAPTER_PATH = Path(__file__).parents[2] / "tifm_lora_output"
 # Prefer a local copy of the base model if present (avoids re-downloading the 7 GB
@@ -56,6 +66,15 @@ def load_model():
 
     with _load_lock:
         if _adapter_loaded:
+            return
+
+        try:
+            torch, PeftModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig = _import_ml()
+        except ImportError as e:
+            logger.warning(
+                "Fine-tuned model unavailable: ML stack not installed (%s). "
+                "This is expected in the lightweight/packaged build.", e
+            )
             return
 
         try:
@@ -97,8 +116,12 @@ def unload_model():
             del _model
         if _tokenizer is not None:
             del _tokenizer
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
         _model = None
         _tokenizer = None
         _adapter_loaded = False
@@ -115,6 +138,8 @@ def generate_answer(
         load_model()
     if not _adapter_loaded or _model is None or _tokenizer is None:
         return "Fine-tuned model not available. Please run train_qwen_tifm.py first."
+
+    import torch  # available here — the model only loads when the ML stack is present
 
     analytics_json = json.dumps(analytics, indent=2, default=str)
     if len(analytics_json) > MAX_ANALYTICS_CHARS:

@@ -6,6 +6,8 @@ __pycache__/
 .Python
 build/
 dist/
+# Inno Setup installer output (packaging/Output/ARGUS_Setup.exe — a multi-hundred-MB binary)
+Output/
 *.egg-info/
 .eggs/
 .pytest_cache/

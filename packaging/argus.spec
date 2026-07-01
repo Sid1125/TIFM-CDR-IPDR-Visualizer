@@ -25,8 +25,25 @@ hiddenimports = (
     collect_submodules("uvicorn")
     + collect_submodules("app")
     + ["sqlalchemy.dialects.sqlite", "sqlalchemy.dialects.postgresql",
-       "anyio", "click", "h11", "passlib.handlers.pbkdf2"]
+       "anyio", "click", "h11"]
 )
+
+# The optional fine-tuned-model feature (app/ai/inference.py) pulls in a multi-GB GPU ML stack
+# (torch / transformers / peft / bitsandbytes / accelerate / datasets / pyarrow ...). It's out of
+# scope for the one-click, air-gapped SQLite installer — the same way a Postgres server is — so we
+# exclude the whole stack to keep the bundle small. inference.py imports these LAZILY and degrades
+# gracefully ("model not available") when they're absent, so excluding them doesn't break startup.
+# An operator who wants the fine-tuned model installs torch/transformers alongside ARGUS separately.
+ML_EXCLUDES = [
+    "torch", "torchvision", "torchaudio",
+    "transformers", "peft", "accelerate", "bitsandbytes",
+    "datasets", "pyarrow", "tokenizers", "safetensors",
+    "huggingface_hub", "sentencepiece", "xformers",
+    "tensorflow", "jax", "jaxlib", "flax",
+    "sklearn", "scipy",
+]
+# NOTE: pandas + numpy are deliberately NOT excluded — the CSV importer (csv_parser.py,
+# ingest_service.py, upload.py, towers.py) uses pandas, so they must stay in the bundle.
 
 a = Analysis(
     ["launch.py"],
@@ -36,7 +53,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "scipy", "numpy.testing"],
+    excludes=["tkinter", "matplotlib", "numpy.testing"] + ML_EXCLUDES,
     noarchive=False,
 )
 pyz = PYZ(a.pure)
