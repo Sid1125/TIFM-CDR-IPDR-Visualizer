@@ -10,6 +10,7 @@ from app.services.analytics_materialize_service import (
     get_cached,
     get_status,
     materialize_case,
+    read_through,
 )
 from app.services.analysis_service import (
     get_chart_data,
@@ -46,15 +47,9 @@ def analytics_dashboard(
     db: Session = Depends(get_db),
     case_id: str = Query(default=""),
 ):
-    """Return materialised chart data.  On cache miss, computes + caches then returns."""
+    """Return materialised chart data (Redis-fronted when active, else DB cache), computing on miss."""
     cid = case_id or None
-    cached = get_cached(db, cid, "dashboard")
-    if cached is not None:
-        return cached
-    data = get_chart_data(db, cid)
-    _upsert(db, cid or "", "dashboard", data)
-    db.commit()
-    return data
+    return read_through(db, cid, "dashboard", lambda: get_chart_data(db, cid))
 
 
 @router.get("/subjects")
@@ -64,13 +59,8 @@ def analytics_subjects(
 ):
     """Return {cdr:[...], ipdr:[...]} subject lists from cache or compute on miss."""
     cid = case_id or None
-    cached = get_cached(db, cid, "subjects")
-    if cached is not None:
-        return cached
-    data = {"cdr": _cdr_subjects(db, cid), "ipdr": _ipdr_subjects(db, cid)}
-    _upsert(db, cid or "", "subjects", data)
-    db.commit()
-    return data
+    return read_through(db, cid, "subjects",
+                        lambda: {"cdr": _cdr_subjects(db, cid), "ipdr": _ipdr_subjects(db, cid)})
 
 
 @router.get("/ai-overview")
@@ -81,13 +71,7 @@ def analytics_ai_overview(
     """AI overview: pair_counts, sub_days, svc_counts, meetings.
     On miss, runs the SQL aggregation + caches."""
     cid = case_id or None
-    cached = get_cached(db, cid, "ai_overview")
-    if cached is not None:
-        return cached
-    data = _compute_ai_overview(db, cid)
-    _upsert(db, cid or "", "ai_overview", data)
-    db.commit()
-    return data
+    return read_through(db, cid, "ai_overview", lambda: _compute_ai_overview(db, cid))
 
 
 @router.get("/reports")

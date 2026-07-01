@@ -88,6 +88,20 @@ def _on_data_changed_search(**_) -> None:
     get_job_queue().enqueue(job, name="fts_sync")
 
 
+def _on_data_changed_redis(case_id: str | None = None, all: bool = False, **_) -> None:
+    """Clear the optional Redis cache tier on any record change (no-op unless Redis is active).
+    The DB cache is invalidated inline/by materialisation; this keeps the Redis front-tier in sync."""
+    from app.core.capabilities import CAPS
+    if not CAPS.redis:
+        return
+    from app.core.cache import get_cache
+    try:
+        c = get_cache()
+        c.invalidate_all() if all else c.invalidate(case_id)
+    except Exception:  # noqa: BLE001
+        log.exception("redis invalidation failed")
+
+
 _registered = False
 
 
@@ -98,7 +112,8 @@ def register_default_handlers() -> None:
         return
     subscribe(CASE_IMPORTED, _on_case_imported)
     subscribe(RECORDS_APPENDED, _on_records_appended)
-    # Search index follows every record change (import/append/reset/delete).
+    # Search index + optional Redis tier follow every record change (import/append/reset/delete).
     for _evt in (CASE_IMPORTED, RECORDS_APPENDED, CASE_RESET, CASE_DELETED):
         subscribe(_evt, _on_data_changed_search)
+        subscribe(_evt, _on_data_changed_redis)
     _registered = True

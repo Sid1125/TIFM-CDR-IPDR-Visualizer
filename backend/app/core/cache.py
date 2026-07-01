@@ -32,6 +32,9 @@ class Cache:
     def invalidate(self, case_id: str | None) -> None:
         raise NotImplementedError
 
+    def invalidate_all(self) -> None:
+        raise NotImplementedError
+
 
 class DBCache(Cache):
     """Delegates to the analytics_cache table via the materialize service (lazy-imported to
@@ -66,16 +69,26 @@ class DBCache(Cache):
             invalidate(db, case_id)
             db.commit()
 
+    def invalidate_all(self) -> None:
+        from app.core.database import SessionLocal
+        from app.services.analytics_materialize_service import invalidate_all
+        with SessionLocal() as db:
+            invalidate_all(db)
+            db.commit()
+
 
 class RedisCache(Cache):
     """TTL cache in front of nothing — a miss simply recomputes. Redis being volatile is fine:
     it is an accelerator, not the source of truth (the DB cache remains authoritative)."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, client: Any = None) -> None:
         import json
-        import redis
         self._json = json
-        self._r = redis.Redis.from_url(url, decode_responses=True)
+        if client is not None:
+            self._r = client  # injectable for tests (any redis-py-compatible client)
+        else:
+            import redis
+            self._r = redis.Redis.from_url(url, decode_responses=True)
 
     def _k(self, case_id: str | None, key: str) -> str:
         return f"{_NS}:{case_id or ''}:{key}"
@@ -105,14 +118,24 @@ class RedisCache(Cache):
         except Exception as exc:  # noqa: BLE001
             log.warning("RedisCache.delete failed (%s)", exc)
 
+    def _drop(self, pattern: str) -> None:
+        keys = list(self._r.scan_iter(match=pattern, count=500))
+        if keys:
+            self._r.delete(*keys)
+
     def invalidate(self, case_id: str | None) -> None:
         try:
-            pattern = f"{_NS}:{case_id or ''}:*"
-            keys = list(self._r.scan_iter(match=pattern, count=500))
-            if keys:
-                self._r.delete(*keys)
+            self._drop(f"{_NS}:{case_id or ''}:*")
+            if case_id:  # a per-case change also invalidates the global ("") aggregate
+                self._drop(f"{_NS}::*")
         except Exception as exc:  # noqa: BLE001
             log.warning("RedisCache.invalidate failed (%s)", exc)
+
+    def invalidate_all(self) -> None:
+        try:
+            self._drop(f"{_NS}:*")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("RedisCache.invalidate_all failed (%s)", exc)
 
 
 _cache: Cache | None = None

@@ -410,6 +410,33 @@ def get_cached(db: Session, case_id: str | None, key: str) -> dict | list | None
         return None
 
 
+def read_through(db: Session, case_id: str | None, key: str, compute) -> dict | list:
+    """Serve an analytic with an optional Redis tier in front of the DB cache (Phase 3a).
+
+    Order: Redis (only when CAPS.redis) → DB cache → compute+persist. When Redis is not active this
+    is byte-for-byte the previous behaviour (DB cache on the caller's session, compute on miss), so
+    the offline deployment is unchanged; when Redis is active it fronts the DB cache for faster
+    reopen / cross-investigator sharing. Redis is a volatile accelerator — the DB cache stays
+    authoritative and event-driven invalidation clears both."""
+    from app.core.capabilities import CAPS
+    cid = case_id
+    if CAPS.redis:
+        from app.core.cache import get_cache
+        hit = get_cache().get(cid, key)
+        if hit is not None:
+            return hit
+    val = get_cached(db, cid, key)
+    if val is None:
+        val = compute()
+        _upsert(db, cid or "", key, val)
+        db.commit()
+    if CAPS.redis:
+        from app.core.cache import get_cache
+        from app.core.config import settings
+        get_cache().set(cid, key, val, ttl=getattr(settings, "ANALYTICS_CACHE_TTL", 0) or 0)
+    return val
+
+
 def get_status(db: Session, case_id: str | None) -> dict:
     """Return whether analytics have been materialised for this case, when, and how big."""
     cid = case_id or ""
