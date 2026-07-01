@@ -3909,12 +3909,24 @@ async function renderRecTable(){
 }
 function _recPrev(){if(_recPage.offset>0){_recPage.offset=Math.max(0,_recPage.offset-_recPage.limit);renderRecTable();}}
 function _recNext(){if(_recPage.offset+_recPage.limit<_recPage.total){_recPage.offset+=_recPage.limit;renderRecTable();}}
+// Jump straight to a page number (1-based, clamped) — no linear Prev/Next traversal.
+function _recGoto(p){
+  const total=Math.max(1,Math.ceil(_recPage.total/_recPage.limit));
+  let page=parseInt(p,10);
+  if(!page||page<1)page=1; else if(page>total)page=total;
+  const off=(page-1)*_recPage.limit;
+  if(off!==_recPage.offset){_recPage.offset=off;renderRecTable();}
+}
 function _renderRecPagination(){
   const el=$('recPagination');if(!el)return;
   const cur=Math.floor(_recPage.offset/_recPage.limit)+1;
   const total=Math.max(1,Math.ceil(_recPage.total/_recPage.limit));
   el.innerHTML=`<button class="btn-sm" onclick="_recPrev()" ${_recPage.offset===0?'disabled':''}>&#8592; Prev</button>
-    <span style="font-size:0.8rem;opacity:0.7">Page ${cur} of ${total} &middot; ${n(_recPage.total)} records</span>
+    <span style="font-size:0.8rem;opacity:0.7">Page
+      <input type="number" min="1" max="${total}" value="${cur}" title="Type a page number and press Enter"
+        style="width:58px;padding:2px 4px;font-size:0.8rem;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--text);text-align:center"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();_recGoto(this.value);}" onchange="_recGoto(this.value)">
+      of ${n(total)} &middot; ${n(_recPage.total)} records</span>
     <button class="btn-sm" onclick="_recNext()" ${cur>=total?'disabled':''}>Next &#8594;</button>`;
 }
 function _recExport(){
