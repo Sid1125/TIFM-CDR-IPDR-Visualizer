@@ -17,8 +17,9 @@ Write-Host "Building the bundle (this can take a few minutes)..."
 
 $exe = Join-Path $here "dist\ARGUS\ARGUS.exe"
 if (Test-Path $exe) {
-    Write-Host "`nBuilt: $exe"
+    Write-Host ""
+    Write-Host "Built: $exe"
     Write-Host "Smoke-test it, then run argus_installer.iss through Inno Setup to make ARGUS_Setup.exe."
 } else {
-    Write-Error "Build finished but ARGUS.exe was not found — check the PyInstaller output above."
+    Write-Error "Build finished but ARGUS.exe was not found. Check the PyInstaller output above."
 }
