@@ -318,7 +318,7 @@ async function loadCaseData(){
   // Bump render generation: tabs will know their cached render is stale.
   state.render.gen++;Object.keys(state.render.rendered).forEach(k=>delete state.render.rendered[k]);
   state._cd=null;  // chart data needs re-fetch
-  invalidateAiCache();state.state.data.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
+  invalidateAiCache();state.data.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
   try{
     const qp=new URLSearchParams({limit:500});
     if(state.data.caseId)qp.set('case_id',state.data.caseId);
@@ -2053,7 +2053,7 @@ function initGraphSubjects(){
 // ====== 3. TOWER MAP (Leaflet) ======
 let mapInstance=null,mapLayers=[],mapMarkers=[],mapPolyline=null,mapCircles=[],mapTimeData=[],mapTimePlaying=false,geofenceDrawn=null,_towerHi=null;
 async function initMap(){
-  if(!state.state.data.geoRecords)await loadGeoData();
+  if(!state.data.geoRecords)await loadGeoData();
   if(!mapInstance){
     mapInstance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
@@ -2078,7 +2078,7 @@ async function showTower(towerId){
   state.tab='map';
   document.querySelectorAll('.topbar-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='map'));
   document.querySelectorAll('.tab-content').forEach(s=>s.classList.toggle('active',s.id==='tab-map'));
-  if(!state.state.data.geoRecords)await loadGeoData();
+  if(!state.data.geoRecords)await loadGeoData();
   if(!mapInstance){
     mapInstance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
@@ -2754,7 +2754,7 @@ if(D.trImportFile)D.trImportFile.addEventListener('change',async function(){
 
 async function loadGeoData(){
   const cq=state.data.caseId?'?case_id='+state.data.caseId:'';
-  try{const[recs,subs]=await Promise.all([API.get('/geo/records'+cq),API.get('/geo/subjects'+cq)]);state.data.geoRecords=recs;state.data.geoSubjects=subs;state.state.data.geoRecords=recs;populateMapSubjects()}catch(e){console.error(e)}
+  try{const[recs,subs]=await Promise.all([API.get('/geo/records'+cq),API.get('/geo/subjects'+cq)]);state.data.geoRecords=recs;state.data.geoSubjects=subs;populateMapSubjects()}catch(e){console.error(e)}
 }
 function populateMapSubjects(){
   const dl=document.getElementById('mapSubjectList');
