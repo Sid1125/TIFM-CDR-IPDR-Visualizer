@@ -8,6 +8,7 @@ import { switchTab, registerTab, tabNeedsRender, tabMarkRendered } from './core/
 import { checkAuth, resetIdle, startHealthCheck, initAuth, onAuthenticated } from './core/auth.js';
 import { subjTag, subjLabel, subjLabelTxt, isSuspect } from './core/subjects.js';
 import { toast } from './ui/toast.js';
+import { nCdr, nIpdr, portSvc, twr } from './data/records.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -370,20 +371,7 @@ async function loadCaseData(){
     try{updateEvidenceCount();}catch(e){}
   }catch(e){console.error(e)}
 }
-function nCdr(r){
-  const s=r.a_party_number||'',c=r.b_party_number||'';
-  return{type:'CDR',id:'c'+r.id,ts:r.start_time,tsMs:r.start_time?Date.parse(r.start_time):0,sub:s,cnt:c,tow:r.tower_id||'',dur:r.duration_seconds,svc:s?'Voice':'Unknown',raw:r,
-    msisdn:r.msisdn,imsi:r.imsi,imei:r.imei,lat:r.latitude,lng:r.longitude,
-    cll:r.call_type,dir:r.direction,cell:r.cell_id,tec:r.technology,end:r.end_time,
-    case_id:r.case_id,lac:r.lac};
-}
-function nIpdr(r){
-  const s=r.source_ip||'',c=r.destination_ip||'';
-  return{type:'IPDR',id:'i'+r.id,ts:r.start_time,tsMs:r.start_time?Date.parse(r.start_time):0,sub:s,cnt:c,tow:r.tower_id||'',dur:r.duration_seconds,svc:r.protocol||'Unknown',raw:r,
-    msisdn:r.msisdn,imsi:r.imsi,imei:r.imei,lat:r.latitude,lng:r.longitude,
-    bytesUp:r.bytes_uploaded,bytesDn:r.bytes_downloaded,sport:r.source_port,dport:r.destination_port,prot:r.protocol,apn:r.apn,rat:r.rat,end:r.end_time,
-    case_id:r.case_id,lac:r.lac,cell:r.cell_id};
-}
+// nCdr/nIpdr (record normalizers) now in data/records.js (imported above)
 // -- Case Management --
 async function loadCases(){
   try{let cases=await API.get('/cases/');
@@ -660,7 +648,7 @@ function renderQualityCard(){
   cards.parentNode.insertBefore(div,cards.nextSibling);
 }
 // -- Port?Description map --
-function portSvc(p){return p?PORT_SVC[parseInt(p)]||'':''}
+// portSvc now in data/records.js (imported above)
 // -- Behavioral Patterns (bytes / duration / time-of-day analysis) --
 function trafficPattern(dur,up,dwn,protocol,portSet,recCount,hour){
   // Returns {category, activity, confidenceDelta, evidence}
@@ -2093,11 +2081,7 @@ async function showTower(towerId){
 }
 // Render a tower id as a clickable chip (stops row clicks; reads the id from a data attr so
 // nothing is injected into the handler string).
-function twr(id){
-  if(id==null||id==='')return '';
-  const s=esc(String(id));
-  return '<span class="twr-link" data-tower="'+s+'" onclick="event.stopPropagation();showTower(this.dataset.tower)" title="Show tower '+s+' on map">'+s+'</span>';
-}
+// twr (tower link cell) now in data/records.js (imported above)
 
 // ====== CROSS-CASE LINKING ======
 // Suspects reoffend. These surface a subject's history in OTHER cases (matched by number +
