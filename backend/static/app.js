@@ -2161,8 +2161,12 @@ async function renderGraph(){
     // Open the profile from drag-end when the pointer didn't move — d3-drag swallows the native
     // 'click', so we detect a click as a zero-movement gesture instead.
     .call(d3.drag()
-      .on('start',(e,d)=>{d.fx=d.x;d.fy=d.y;d._sx=e.x;d._sy=e.y;d._moved=false})
-      .on('drag',(e,d)=>{d._moved=true;if(!e.active)sim.alphaTarget(0.3).restart();d.fx=e.x;d.fy=e.y})
+      // Reheat on START (event.active is 0 here) so the sim keeps ticking through the drag — the
+      // tick handler is what repaints cx/cy. The reheat used to live in 'drag' guarded by
+      // `!e.active`, but event.active is 1 during a drag, so it never fired and a settled graph
+      // froze (nodes undraggable once the initial layout cooled).
+      .on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;d._sx=e.x;d._sy=e.y;d._moved=false})
+      .on('drag',(e,d)=>{d._moved=true;d.fx=e.x;d.fy=e.y})
       .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;const dx=e.x-(d._sx||0),dy=e.y-(d._sy||0);if(!d._moved||dx*dx+dy*dy<36)showProfile(d.id);}));
 
   const showTags=!!(D.graphShowTags&&D.graphShowTags.checked);
