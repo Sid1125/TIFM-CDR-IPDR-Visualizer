@@ -5804,8 +5804,6 @@ function auditView(action,opts){
   }catch(e){}
 }
 
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-
 // ---- Admin Modal ----
 function showAdminModal(title,fields,onSubmit){
   let m=document.getElementById('adminModal');
@@ -7328,5 +7326,20 @@ async function resetCase(){
   const q=activeCaseId?'?case_id='+activeCaseId:'';
   try{await API.del('/records/reset'+q);D.importStatus.textContent='Case reset. Reloading...';await loadCaseData();D.importStatus.textContent='Case reset. Upload files to begin.'}catch(e){D.importStatus.textContent='Reset failed: '+e.message;console.error(e)}
 }
+// ── ESM window bridge (TRANSITIONAL) ─────────────────────────────────────────────────────────
+// app.js is now an ES module, so its top-level `function` declarations are module-scoped, not
+// global. Inline on*= handlers (in index.html and in generated HTML strings) resolve their names
+// on `window`, so we re-expose exactly the handlers they reference here. Functions already assigned
+// via `window.x = ...` (addToSuspectGroup, removeFromSuspectGroup, wlAdd, wlRemove, wlExport) don't
+// need bridging. This shim is TEMPORARY: as each feature migrates to event delegation (data-act),
+// its entries are dropped, and the whole block is deleted in the final cleanup step.
+Object.assign(window, {
+  switchTab, showProfile, showSubjectRecords, openInCase, showTower, showMeetingOverlay,
+  showSessionRecords, saveProfileTag, exportFeedback, toggleFindingDetail, investToggleMore,
+  toggleInvestModule, runFullInvestigation, generateAiReport, chatWithContext, analyzeWithAI,
+  clearAiConversation, switchNarrativeSubject, tlToggleEntity, _tlLoadMore, _recPrev, _recNext,
+  _recGoto, showGanttTip, scheduleHideGanttTip,
+});
+
 if(!D.loginUser.value)D.loginUser.value='admin';
 checkAuth();
