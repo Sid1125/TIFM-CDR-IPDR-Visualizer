@@ -6877,7 +6877,7 @@ Object.assign(window, {
   showSessionRecords, saveProfileTag, exportFeedback, toggleFindingDetail, investToggleMore,
   toggleInvestModule, runFullInvestigation, generateAiReport, chatWithContext, analyzeWithAI,
   clearAiConversation, switchNarrativeSubject, tlToggleEntity, _tlLoadMore, _recPrev, _recNext,
-  _recGoto, showGanttTip, scheduleHideGanttTip,
+  _recGoto, showGanttTip, scheduleHideGanttTip, toggleAnnot, markFinding,
 });
 
 wireDelegation();  // central data-act delegation (dormant until features register actions)
