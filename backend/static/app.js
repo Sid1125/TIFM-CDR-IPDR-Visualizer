@@ -1953,6 +1953,80 @@ async function renderNetworkIntel(){
   el.innerHTML=html;
 }
 
+// Phase 2c — Canvas force-graph for large networks. SVG (renderGraph below) gives nice per-node
+// interactions but bogs down past ~1-2k DOM nodes; above GRAPH_CANVAS_MIN we render to a single
+// <canvas> instead (D3 drives the layout, canvas draws), which scales to many thousands of nodes.
+// Zoom/pan, hover, click-to-profile and search-highlight are kept; per-node drag is dropped (it's
+// the costly part at scale and the least useful on a dense graph).
+const GRAPH_CANVAS_MIN=700;
+
+function _renderGraphCanvas(nodes,links,subject,w,h){
+  const cont=D.graphSvg;
+  cont.innerHTML='';
+  const dpr=window.devicePixelRatio||1;
+  const canvas=document.createElement('canvas');
+  canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+'px';canvas.style.height=h+'px';canvas.style.cursor='grab';
+  cont.appendChild(canvas);
+  const ctx=canvas.getContext('2d');
+  // group-stroke colours (mirror the SVG path)
+  const _grpPalette=['#e03131','#2f9e44','#1971c2','#e67700','#9c36b5','#c2255c','#0c8599','#5c7cfa'];
+  const _grpColor={};let _gi=0;
+  (_wl||[]).forEach(e=>{const g=e.group_name||'Default';if(!_grpColor[g])_grpColor[g]=_grpPalette[_gi++%_grpPalette.length];});
+  const _stroke=id=>{const e=(_wl||[]).find(x=>x.value===id);return e?(_grpColor[e.group_name||'Default']||'#e03131'):'#fff';};
+  const textColor=(getComputedStyle(document.body).getPropertyValue('--text')||'#333').trim()||'#333';
+  const nodeR=d=>Math.max(2.5,Math.min(14,d.weight*0.18));
+  let transform=d3.zoomIdentity, hl='';
+  const match=d=>{const id=(d.id||d);return id.toLowerCase().includes(hl);};
+  function draw(){
+    ctx.save();
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,w,h);
+    ctx.translate(transform.x,transform.y);ctx.scale(transform.k,transform.k);
+    for(const l of links){
+      const dim=hl&&!(match(l.source)||match(l.target));
+      ctx.globalAlpha=dim?0.04:0.45;ctx.strokeStyle='#cbb8a4';ctx.lineWidth=Math.max(0.4,Math.min(4,l.weight*0.4))/transform.k;
+      ctx.beginPath();ctx.moveTo(l.source.x,l.source.y);ctx.lineTo(l.target.x,l.target.y);ctx.stroke();
+    }
+    for(const d of nodes){
+      const dim=hl&&!match(d);
+      ctx.globalAlpha=dim?0.12:1;ctx.beginPath();ctx.arc(d.x,d.y,nodeR(d),0,6.2832);
+      ctx.fillStyle=d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'#2c6f79');ctx.fill();
+      if(isSuspect(d.id)){ctx.lineWidth=2.5/transform.k;ctx.strokeStyle=_stroke(d.id);ctx.stroke();}
+    }
+    if(transform.k>1.5){
+      ctx.globalAlpha=1;ctx.fillStyle=textColor;ctx.font=(10/transform.k)+'px sans-serif';
+      for(const d of nodes){if(hl&&!match(d))continue;ctx.fillText(d.id.length>16?d.id.slice(0,16)+'…':d.id,d.x+nodeR(d)+2/transform.k,d.y+3/transform.k);}
+    }
+    ctx.restore();
+  }
+  const sim=d3.forceSimulation(nodes)
+    .force('link',d3.forceLink(links).id(d=>d.id).distance(60))
+    .force('charge',d3.forceManyBody().strength(-90))
+    .force('center',d3.forceCenter(w/2,h/2))
+    .force('collision',d3.forceCollide(8))
+    .on('tick',draw);
+  curGraphNodes=nodes;curGraphLinks=links;curGraphSim=sim;
+  const zoom=d3.zoom().scaleExtent([0.05,8]).on('zoom',e=>{transform=e.transform;draw();});
+  d3.select(canvas).call(zoom);
+  const nodeAt=(mx,my)=>{
+    const x=(mx-transform.x)/transform.k,y=(my-transform.y)/transform.k;let best=null,bd=1e18;
+    for(const d of nodes){const dx=d.x-x,dy=d.y-y,dist=dx*dx+dy*dy,r=nodeR(d)+4;if(dist<r*r&&dist<bd){bd=dist;best=d;}}
+    return best;
+  };
+  canvas.addEventListener('mousemove',ev=>{
+    const rc=canvas.getBoundingClientRect();const d=nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);
+    canvas.style.cursor=d?'pointer':'grab';
+    if(d)D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>Total weight: ${d.weight}<br><button class="btn btn-sm" onclick="showSubjectRecords('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">View Records</button>`;
+  });
+  canvas.addEventListener('click',ev=>{
+    const rc=canvas.getBoundingClientRect();const d=nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);if(d)showProfile(d.id);
+  });
+  D.graphSearch._handler&&D.graphSearch.removeEventListener('input',D.graphSearch._handler);
+  D.graphSearch._handler=()=>{hl=D.graphSearch.value.trim().toLowerCase();draw();};
+  D.graphSearch.addEventListener('input',D.graphSearch._handler);
+  D.graphStats.textContent+=' · canvas';
+}
+
 async function renderGraph(){
   const subject=D.graphSubject.value;
   // Max links to draw: user-selectable (0 = all). The browser force-layout gets sluggish past
@@ -1981,6 +2055,9 @@ async function renderGraph(){
   const moreEdges=(payload.total_edges||links.length)-(payload.shown_edges||links.length);
   D.graphStats.textContent=`${nodes.length} nodes, ${links.length} links`+(moreEdges>0?` (top ${links.length} of ${payload.total_edges})`:'')+(payload.total_nodes?` · ${payload.total_nodes} nodes total`:'');
   renderNetworkIntel();  // full-graph centrality leaderboards in the sidebar (fire-and-forget)
+
+  // Large network → canvas renderer (scales to thousands of nodes); small → the SVG path below.
+  if(nodes.length>GRAPH_CANVAS_MIN){ _renderGraphCanvas(nodes,links,subject,w,h); return; }
 
   // -- Centrality (Degree only — real betweenness/closeness requires shortest-path traversal) --
   const degree=new Map();nodes.forEach(n=>degree.set(n.id,0));
@@ -2045,7 +2122,10 @@ D.graphCenter.addEventListener('click',()=>{const svg=d3.select(D.graphSvg).sele
 if(D.graphShowTags)D.graphShowTags.addEventListener('change',renderGraph);
 
 function initGraphSubjects(){
-  D.graphSubject.innerHTML='<option value="">All subjects</option>'+state.subjects.map(s=>`<option value="${esc(s)}">${esc(subjLabelTxt(s))}</option>`).join('');
+  // Focus the graph on a real subject (a-party / source IP), not one of the tens of thousands of
+  // counterparts — same reason the analysis/correlation pickers use _ownedSubjects.
+  const gsubs=(state._ownedSubjects&&state._ownedSubjects.length)?state._ownedSubjects:state.subjects;
+  D.graphSubject.innerHTML='<option value="">All subjects</option>'+gsubs.map(s=>`<option value="${esc(s)}">${esc(subjLabelTxt(s))}</option>`).join('');
   if(D.graphSubject._handler)D.graphSubject.removeEventListener('change',D.graphSubject._handler);
   D.graphSubject._handler=renderGraph;
   D.graphSubject.addEventListener('change',D.graphSubject._handler);
