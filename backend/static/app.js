@@ -307,7 +307,7 @@ window.addToSuspectGroup=async function(value,kind){
   const group=prompt('Add "'+value+'" to which suspect group?',def);
   if(group===null)return;
   state._lastGroup=(group||'').trim()||'Default';
-  try{await API.post('/watchlist',{value:value,kind:kind||undefined,group_name:state._lastGroup,case_id:activeCaseId||null});
+  try{await API.post('/watchlist',{value:value,kind:kind||undefined,group_name:state._lastGroup,case_id:state.data.caseId||null});
     await loadSuspects();try{toast('Added “'+value+'” to suspect group “'+state._lastGroup+'”.');}catch(e){}
     if(state.tab==='records')renderRecTable();
     if(state.tab==='graph')renderGraph();
@@ -345,12 +345,11 @@ function _rebuildRowIdx(){
     if(ok){if(!_ownedRowIdx.has(ok))_ownedRowIdx.set(ok,[]);_ownedRowIdx.get(ok).push(r);}
   }
 }
-let activeCaseId=null;
-// Persist the chosen case across page refreshes (activeCaseId is otherwise in-memory only,
+// Persist the chosen case across page refreshes (state.data.caseId is otherwise in-memory only,
 // so a refresh would reset to whichever case the API returns first).
 function setActiveCase(id){
-  activeCaseId=(id!=null&&id!=='')?String(id):null;
-  try{if(activeCaseId)localStorage.setItem('activeCaseId',activeCaseId);else localStorage.removeItem('activeCaseId');}catch(e){}
+  state.data.caseId=(id!=null&&id!=='')?String(id):null;
+  try{if(state.data.caseId)localStorage.setItem('state.data.caseId',state.data.caseId);else localStorage.removeItem('state.data.caseId');}catch(e){}
 }
 async function loadCaseData(){
   // Bump render generation: tabs will know their cached render is stale.
@@ -359,8 +358,8 @@ async function loadCaseData(){
   invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
   try{
     const qp=new URLSearchParams({limit:500});
-    if(activeCaseId)qp.set('case_id',activeCaseId);
-    const caseParam=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+    if(state.data.caseId)qp.set('case_id',state.data.caseId);
+    const caseParam=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';
     // Fetch sample records + stats + subjects + towers in parallel
     const[page1,towers,cdrStats,ipdrStats,ownedSubjects]=await Promise.all([
       API.get('/records/page?'+qp.toString()),
@@ -401,11 +400,11 @@ async function loadCaseData(){
     // Kick off background full-load BEFORE rendering charts so all features get complete data
     const curGen=_renderGen;
     _bgLoadGen=curGen;
-    if(page1.total>allRows.length)_bgLoadAll(page1.total,activeCaseId||'',curGen);
+    if(page1.total>allRows.length)_bgLoadAll(page1.total,state.data.caseId||'',curGen);
     renderCharts();    // async, server-side; will retry on tab switch if it fails
     initGraphSubjects();
     if(state.tab&&!['dashboard','charts','records'].includes(state.tab))switchTab(state.tab);
-    if(activeCaseId){const cn=(state.cases||[]).find(c=>String(c.id)===String(activeCaseId));auditView('view_case',{case_id:activeCaseId,case_name:cn?cn.name:null});}
+    if(state.data.caseId){const cn=(state.cases||[]).find(c=>String(c.id)===String(state.data.caseId));auditView('view_case',{case_id:state.data.caseId,case_name:cn?cn.name:null});}
     try{updateEvidenceCount();}catch(e){}
   }catch(e){console.error(e)}
 }
@@ -433,20 +432,20 @@ async function loadCases(){
     }else{
       // Keep the current selection; else restore the saved one; else fall back to first.
       const has=id=>cases.some(c=>String(c.id)===String(id));
-      const saved=(()=>{try{return localStorage.getItem('activeCaseId')}catch(e){return null}})();
-      if(activeCaseId&&has(activeCaseId)){/* keep */}
+      const saved=(()=>{try{return localStorage.getItem('state.data.caseId')}catch(e){return null}})();
+      if(state.data.caseId&&has(state.data.caseId)){/* keep */}
       else if(saved&&has(saved))setActiveCase(saved);
       else setActiveCase(cases[0].id);
     }
     const sel=D.caseSelector;
-    sel.innerHTML=cases.map(c=>`<option value="${c.id}"${activeCaseId==c.id?' selected':''}>${esc(c.name)} (${c.record_count})</option>`).join('')+
+    sel.innerHTML=cases.map(c=>`<option value="${c.id}"${state.data.caseId==c.id?' selected':''}>${esc(c.name)} (${c.record_count})</option>`).join('')+
       '<option value="__new__">+ New Case</option><option value="__manage__">Manage Cases...</option>';
   }catch(e){} 
 }
 D.caseSelector.addEventListener('change',async function(){
   const v=this.value;
-  if(v==='__new__'){const n=prompt('Case name:');if(n&&n.trim()){try{const c=await API.post('/cases/',{name:n.trim()});setActiveCase(c.id);await loadCaseData();await loadCases();}catch(e){alert('Failed: '+e.message)}}this.value=activeCaseId||'';return}
-  if(v==='__manage__'){showCaseManager();this.value=activeCaseId||'';return}
+  if(v==='__new__'){const n=prompt('Case name:');if(n&&n.trim()){try{const c=await API.post('/cases/',{name:n.trim()});setActiveCase(c.id);await loadCaseData();await loadCases();}catch(e){alert('Failed: '+e.message)}}this.value=state.data.caseId||'';return}
+  if(v==='__manage__'){showCaseManager();this.value=state.data.caseId||'';return}
   setActiveCase(v||null);await loadCaseData();
 });
 async function showCaseManager(){
@@ -482,7 +481,7 @@ async function showCaseManager(){
     row.querySelector('.cm-delete').addEventListener('click',async()=>{
       if(!confirm('Delete case "'+c.name+'" and all its records?'))return;
       await API.del('/cases/'+c.id);
-      if(String(activeCaseId)===String(c.id))setActiveCase(null);
+      if(String(state.data.caseId)===String(c.id))setActiveCase(null);
       loadCases();m.style.display='none';loadCaseData();
     });
   });
@@ -1357,7 +1356,7 @@ function collectMapping(modal){
 async function handleUploadConfirmed(kind,file,route,mode,mapping){
   const verb=mode==='append'?'Adding':'Uploading';
   D.importStatus.textContent=verb+' '+kind+'...';
-  try{const fd=new FormData();fd.append('file',file);if(activeCaseId)fd.append('case_id',activeCaseId);if(mode)fd.append('mode',mode);
+  try{const fd=new FormData();fd.append('file',file);if(state.data.caseId)fd.append('case_id',state.data.caseId);if(mode)fd.append('mode',mode);
     if(mapping)fd.append('mapping_json',JSON.stringify(mapping));
     const r=await fetch(route,{credentials:'same-origin',method:'POST',body:fd});
     if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}
@@ -1565,7 +1564,7 @@ let _meetings=null; // {list:[client-shaped], total, high, medium, low}
 async function ensureMeetingsLoaded(force){
   if(_meetings&&!force)return _meetings;
   try{
-    const p=new URLSearchParams();if(activeCaseId)p.set('case_id',activeCaseId);p.set('limit','2000');
+    const p=new URLSearchParams();if(state.data.caseId)p.set('case_id',state.data.caseId);p.set('limit','2000');
     const r=await API.get('/investigation/meetings?'+p.toString());
     const byPair=new Map();
     (r.meetings||[]).forEach(m=>{const k=[m.subject_a,m.subject_b].sort().join('|');byPair.set(k,(byPair.get(k)||0)+1);});
@@ -1817,7 +1816,7 @@ async function renderNetworkIntel(){
   el.innerHTML='<div style="font-size:0.74rem;opacity:0.55">Computing network intelligence…</div>';
   let m;
   try{
-    const p=new URLSearchParams(); if(activeCaseId)p.set('case_id',activeCaseId);
+    const p=new URLSearchParams(); if(state.data.caseId)p.set('case_id',state.data.caseId);
     m=await API.get('/graph/metrics?'+p.toString());
   }catch(e){el.innerHTML='';return;}
   if(!m||!m.degree_centrality||!Object.keys(m.degree_centrality).length){el.innerHTML='';return;}
@@ -2000,7 +1999,7 @@ async function renderGraph(){
   let payload;
   try{
     const p=new URLSearchParams();
-    if(activeCaseId)p.set('case_id',activeCaseId);
+    if(state.data.caseId)p.set('case_id',state.data.caseId);
     if(subject)p.set('subject',subject);
     p.set('limit',limit);
     payload=await API.get('/graph/?'+p.toString());
@@ -2153,9 +2152,9 @@ function _xtypes(m){return (m.match_types&&m.match_types.length?m.match_types:[m
 // Dashboard panel: this case's subjects that also appear in other cases.
 async function renderCrossCaseHits(){
   const el=D.crossCaseHits;if(!el)return;
-  if(!activeCaseId){el.style.display='none';el.innerHTML='';return;}
+  if(!state.data.caseId){el.style.display='none';el.innerHTML='';return;}
   try{
-    const data=await API.get('/cross-case/overview?case_id='+encodeURIComponent(activeCaseId));
+    const data=await API.get('/cross-case/overview?case_id='+encodeURIComponent(state.data.caseId));
     const hits=(data&&data.hits)||[];
     if(!hits.length){el.style.display='none';el.innerHTML='';return;}
     const rows=hits.map(h=>{
@@ -2179,7 +2178,7 @@ async function renderCrossCaseHits(){
 async function fillProfileCrossCase(sub){
   const el=document.getElementById('profileCrossCase');if(!el)return;
   try{
-    const data=await API.get('/cross-case/subject?case_id='+encodeURIComponent(activeCaseId)+'&subject='+encodeURIComponent(sub));
+    const data=await API.get('/cross-case/subject?case_id='+encodeURIComponent(state.data.caseId)+'&subject='+encodeURIComponent(sub));
     const matches=(data&&data.matches)||[];
     if(!matches.length){el.innerHTML='<h4>Cross-case links</h4><div style="font-size:0.74rem;color:var(--muted)">No prior occurrences in other cases.</div>';return;}
     const chips=matches.map(m=>{
@@ -2227,10 +2226,10 @@ function _xcActivity(act,full){
 }
 async function renderCrossCaseTab(){
   const el=D.crossCaseTab;if(!el)return;
-  if(!activeCaseId){el.innerHTML='<div class="xc-empty">No case selected.</div>';return;}
+  if(!state.data.caseId){el.innerHTML='<div class="xc-empty">No case selected.</div>';return;}
   el.innerHTML='<div class="xc-empty">Analysing cross-case links…</div>';
   try{
-    const rep=await API.get('/cross-case/report?case_id='+encodeURIComponent(activeCaseId));
+    const rep=await API.get('/cross-case/report?case_id='+encodeURIComponent(state.data.caseId));
     renderCrossCaseReport(rep);
   }catch(e){el.innerHTML='<div class="xc-empty" style="color:var(--danger)">Failed to load cross-case report: '+esc(e.message||String(e))+'</div>';}
 }
@@ -2325,10 +2324,10 @@ if(D.xcGraphCaptureBtn)D.xcGraphCaptureBtn.addEventListener('click',()=>{
 let xcGraphSim=null;
 async function renderCrossCaseGraph(){
   const host=D.xcGraphSvg;if(!host)return;
-  if(!activeCaseId){host.innerHTML='<div class="xc-empty">No case selected.</div>';D.xcGraphStats.textContent='';return;}
+  if(!state.data.caseId){host.innerHTML='<div class="xc-empty">No case selected.</div>';D.xcGraphStats.textContent='';return;}
   host.innerHTML='<div class="xc-empty">Building link graph…</div>';
   let data;
-  try{data=await API.get('/cross-case/graph?case_id='+encodeURIComponent(activeCaseId));}
+  try{data=await API.get('/cross-case/graph?case_id='+encodeURIComponent(state.data.caseId));}
   catch(e){host.innerHTML='<div class="xc-empty" style="color:var(--danger)">Failed to load graph.</div>';console.error(e);return;}
   const nodes=(data.nodes||[]).map(n=>({...n}));
   const edges=(data.edges||[]).map(e=>({source:e.source,target:e.target,confidence:e.confidence,match_type:e.match_type}));
@@ -2458,8 +2457,8 @@ function addAiEvents(ev,subject,fallbackTs){
 }
 
 async function getStoryXcase(){
-  const k=activeCaseId||'none';if(_storyXcaseCache[k])return _storyXcaseCache[k];
-  try{_storyXcaseCache[k]=await API.get('/cross-case/report?case_id='+encodeURIComponent(activeCaseId||''));}catch(e){_storyXcaseCache[k]={subjects:[]};}
+  const k=state.data.caseId||'none';if(_storyXcaseCache[k])return _storyXcaseCache[k];
+  try{_storyXcaseCache[k]=await API.get('/cross-case/report?case_id='+encodeURIComponent(state.data.caseId||''));}catch(e){_storyXcaseCache[k]={subjects:[]};}
   return _storyXcaseCache[k];
 }
 
@@ -2554,7 +2553,7 @@ function renderStoryTimeline(){
 }
 
 // ---- Evidence folder (per-case, localStorage) ----
-function evKey(){return 'argus_evidence_'+(activeCaseId||'none')}
+function evKey(){return 'argus_evidence_'+(state.data.caseId||'none')}
 function evLoad(){try{return JSON.parse(localStorage.getItem(evKey())||'[]')}catch(e){return[]}}
 function evSave(list){try{localStorage.setItem(evKey(),JSON.stringify(list))}catch(e){}}
 function updateEvidenceCount(){const c=evLoad().length;if(D.evidenceCount)D.evidenceCount.textContent=c;if(D.evidenceTabCount){D.evidenceTabCount.textContent=c;D.evidenceTabCount.style.display=c?'':'none';}}
@@ -2586,7 +2585,7 @@ function _flashPinned(msg){updateEvidenceCount();renderEvidence();toast(msg||'Pi
 function captureCanvasToEvidence(cv,title){
   try{if(!cv||cv.tagName!=='CANVAS'){alert('No chart to capture.');return;}
     const url=cv.toDataURL('image/png');if(!url||url.length<2000){alert('Nothing to capture yet — render the chart first.');return;}
-    pinEvidence({kind:'chart',label:title||'Chart',detail:'Chart snapshot · '+(activeCaseId?'case '+activeCaseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'chart|'+title});
+    pinEvidence({kind:'chart',label:title||'Chart',detail:'Chart snapshot · '+(state.data.caseId?'case '+state.data.caseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'chart|'+title});
     _flashPinned('Pinned “'+title+'” to evidence.');
   }catch(e){alert('Capture failed: '+(e.message||e));}
 }
@@ -2597,7 +2596,7 @@ function captureSvgToEvidence(host,title){
   const xml=new XMLSerializer().serializeToString(clone);
   const img=new Image();
   img.onload=function(){try{const c=document.createElement('canvas');c.width=w;c.height=hh;const ctx=c.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,hh);ctx.drawImage(img,0,0);const url=c.toDataURL('image/png');
-      pinEvidence({kind:'graph',label:title||'Graph',detail:'Graph snapshot · '+(activeCaseId?'case '+activeCaseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'graph|'+title});
+      pinEvidence({kind:'graph',label:title||'Graph',detail:'Graph snapshot · '+(state.data.caseId?'case '+state.data.caseId:'')+' · '+new Date().toLocaleString(),ts:new Date(),image:url,sig:'graph|'+title});
       _flashPinned('Pinned “'+title+'” to evidence.');
     }catch(e){alert('Capture failed: '+(e.message||e));}};
   img.onerror=function(){alert('Capture failed (could not rasterize the graph).');};
@@ -2637,7 +2636,7 @@ if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confir
 async function renderHypotheses(el){
   if(!el)return;
   let list=[];
-  try{list=await API.get('/hypotheses/'+(activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):''));}
+  try{list=await API.get('/hypotheses/'+(state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):''));}
   catch(e){el.innerHTML='';return;}
   const col=s=>s==='supported'?'var(--success)':s==='refuted'?'var(--danger)':'var(--accent)';
   const badge=s=>'<span style="font-size:0.6rem;padding:1px 6px;border-radius:8px;background:'+col(s)+';color:#fff">'+esc(s)+'</span>';
@@ -2661,7 +2660,7 @@ async function renderHypotheses(el){
 }
 async function _hypAdd(){
   const inp=document.getElementById('hypNew');if(!inp)return;const t=(inp.value||'').trim();if(!t)return;
-  try{await API.post('/hypotheses/',{case_id:activeCaseId||null,title:t});inp.value='';renderHypotheses(document.getElementById('hypPanel'));}
+  try{await API.post('/hypotheses/',{case_id:state.data.caseId||null,title:t});inp.value='';renderHypotheses(document.getElementById('hypPanel'));}
   catch(e){try{toast('Add failed: '+e.message)}catch(_){}}
 }
 async function renderRelationships(el){
@@ -2686,7 +2685,7 @@ function renderEvidenceTab(){
   const list=evLoad();
   const head='<div id="hypPanel" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)"></div>'
     +'<div id="relPanel" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)"></div>'
-    +'<div class="evt-bar"><div><b>'+n(list.length)+'</b> saved item'+(list.length===1?'':'s')+(activeCaseId?' · case '+esc(activeCaseId):'')+'</div>'
+    +'<div class="evt-bar"><div><b>'+n(list.length)+'</b> saved item'+(list.length===1?'':'s')+(state.data.caseId?' · case '+esc(state.data.caseId):'')+'</div>'
     +'<div style="flex:1"></div>'
     +'<button class="btn-sm" id="evtDossierBtn">Open dossier</button>'
     +'<button class="btn-sm" id="evtExportBtn">Export (.json)</button>'
@@ -2704,7 +2703,7 @@ function renderEvidenceTab(){
   box.querySelectorAll('.evidence-rm').forEach(b=>b.onclick=()=>{unpinEvidence(b.dataset.id);renderEvidenceTab();});
   const cb=box.querySelector('#evtClearBtn');if(cb)cb.onclick=()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();refreshCapButtons();renderEvidenceTab();renderStoryTimeline&&renderStoryTimeline();}};
   const db=box.querySelector('#evtDossierBtn');if(db)db.onclick=()=>renderDossier();
-  const xb=box.querySelector('#evtExportBtn');if(xb)xb.onclick=()=>{const blob=new Blob([JSON.stringify(evLoad(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ARGUS_evidence_'+(activeCaseId||'case')+'.json';a.click();URL.revokeObjectURL(a.href);};
+  const xb=box.querySelector('#evtExportBtn');if(xb)xb.onclick=()=>{const blob=new Blob([JSON.stringify(evLoad(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ARGUS_evidence_'+(state.data.caseId||'case')+'.json';a.click();URL.revokeObjectURL(a.href);};
   renderHypotheses(document.getElementById('hypPanel'));   // investigation workspace: theory of the case
   renderRelationships(document.getElementById('relPanel')); // + labelled links between subjects
 }
@@ -2797,7 +2796,7 @@ if(D.trImportFile)D.trImportFile.addEventListener('change',async function(){
 
 let geoRecords=[],geoSubjects=[];
 async function loadGeoData(){
-  const cq=activeCaseId?'?case_id='+activeCaseId:'';
+  const cq=state.data.caseId?'?case_id='+state.data.caseId:'';
   try{const[recs,subs]=await Promise.all([API.get('/geo/records'+cq),API.get('/geo/subjects'+cq)]);geoRecords=recs;geoSubjects=subs;state.geoRecords=recs;populateMapSubjects()}catch(e){console.error(e)}
 }
 function populateMapSubjects(){
@@ -3319,7 +3318,7 @@ async function showMapMeetings(sub){
   let res;
   try{
     const p=new URLSearchParams();
-    if(activeCaseId)p.set('case_id',activeCaseId);
+    if(state.data.caseId)p.set('case_id',state.data.caseId);
     if(sub)p.set('subject',sub);
     res=await API.get('/investigation/meetings?'+p.toString());
   }catch(e){console.error('meetings',e);D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to detect meetings.</p>';return;}
@@ -3541,7 +3540,7 @@ D.tlCompare.addEventListener('change',renderTimeline);
 // ====== 5. CHARTS ======
 async function renderCharts(){
   if(!_tabNeedsRender('charts'))return;
-  const qp=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+  const qp=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';
   try{
     const mat=await API.get('/analytics/dashboard'+qp).catch(()=>null);
     state._cd=(mat&&Object.keys(mat).length)?mat:await API.get('/analysis/chart-data'+qp);
@@ -3862,7 +3861,7 @@ let _recRows=[];   // current visible page rows (for export / annotation paint)
 function renderRecords(){
   loadAnnotations();      // triggers first renderRecTable() as callback
   // Service dropdown from server
-  const caseParam=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+  const caseParam=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';
   API.get('/records/services'+caseParam).then(svcs=>{
     const cur=D.recService.value;
     D.recService.innerHTML='<option value="all">All services</option>'+(svcs||[]).sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
@@ -3904,7 +3903,7 @@ function recRowHtml(r){
 // Server-side paginated records table
 async function renderRecTable(){
   const qp=new URLSearchParams({limit:_recPage.limit,offset:_recPage.offset});
-  if(activeCaseId)qp.set('case_id',activeCaseId);
+  if(state.data.caseId)qp.set('case_id',state.data.caseId);
   if(D.recType.value!=='all')qp.set('type',D.recType.value);
   if(D.recService.value!=='all')qp.set('service',D.recService.value);
   const q=D.recSearch.value.trim();
@@ -3949,7 +3948,7 @@ function _recExport(){
   const t=D.recType.value;
   const svc=D.recService.value;
   let src=allRows;
-  if(activeCaseId)src=src.filter(r=>!r.case_id||r.case_id===activeCaseId);
+  if(state.data.caseId)src=src.filter(r=>!r.case_id||r.case_id===state.data.caseId);
   if(t)src=src.filter(r=>r.type===t);
   if(svc)src=src.filter(r=>(r.svc||'')===svc);
   if(q)src=src.filter(r=>(r.sub||'').toLowerCase().includes(q)||(r.cnt||'').toLowerCase().includes(q));
@@ -3964,7 +3963,7 @@ async function _recServerExport(fmt){
   const t=D.recType.value;
   const svc=D.recService.value;
   const p=new URLSearchParams({format:fmt});
-  if(activeCaseId)p.set('case_id',activeCaseId);
+  if(state.data.caseId)p.set('case_id',state.data.caseId);
   if(t&&t!=='all')p.set('type',t);
   if(svc&&svc!=='all')p.set('service',svc);
   if(q)p.set('search',q);
@@ -3988,7 +3987,7 @@ D.recService.addEventListener('change',()=>{_recPage.offset=0;renderRecTable();}
 // ====== 7. SUBJECT PROFILE ======
 function showProfile(sub){
   if(!sub){D.profile.style.display='none';return}
-  auditView('view_subject',{case_id:activeCaseId,target:sub});
+  auditView('view_subject',{case_id:state.data.caseId,target:sub});
   const rows=rowsFor(sub);
   const contacts=new Set();const towers=new Set();const svcCounts={};const hours=Array(24).fill(0);const dailyMap={};
   rows.forEach(r=>{
@@ -4438,13 +4437,13 @@ let _infCache=null,_infReport=null;
 // Shared fetch+cache of the inference report, reused by the Inferences tab and the map.
 async function getInfReport(force){
   if(_infReport&&!force)return _infReport;
-  const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';
+  const cq=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';
   _infReport=await API.get('/inference/report'+cq);
   return _infReport;
 }
 let _wl=[],_exports=[];
-async function loadWatchlist(){try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';_wl=await API.get('/watchlist'+cq);}catch(e){_wl=[];}}
-async function loadExports(){try{const cq=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):'';_exports=await API.get('/inference/exports'+cq);}catch(e){_exports=[];}}
+async function loadWatchlist(){try{const cq=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';_wl=await API.get('/watchlist'+cq);}catch(e){_wl=[];}}
+async function loadExports(){try{const cq=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';_exports=await API.get('/inference/exports'+cq);}catch(e){_exports=[];}}
 function _exportsHtml(){
   if(!(_exports||[]).length)return '<span class="wl-exp-empty">No exports yet.</span>';
   return _exports.slice(0,6).map(e=>{
@@ -4475,7 +4474,7 @@ function _watchlistBarHtml(rep){
     +'<details class="wl-exports"><summary>Export history <span id="wlExportNote" class="wl-note"></span></summary><div id="wlExportsList">'+_exportsHtml()+'</div></details>'
     +'</div>';
 }
-window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;const g=($('wlGroup')&&$('wlGroup').value||'Default').trim()||'Default';state._lastGroup=g;try{await API.post('/watchlist',{value:v,group_name:g,case_id:activeCaseId||null});await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;const g=($('wlGroup')&&$('wlGroup').value||'Default').trim()||'Default';state._lastGroup=g;try{await API.post('/watchlist',{value:v,group_name:g,case_id:state.data.caseId||null});await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 window.removeFromSuspectGroup=async function(value){
   // Use /watchlist/by-value so removal works regardless of which case the entry was
@@ -4490,7 +4489,7 @@ function _caseSafe(){const cn=(D.caseSelector&&D.caseSelector.options[D.caseSele
 window.wlExport=async function(){
   const btn=$('wlExportBtn');const prev=btn?btn.innerHTML:'';if(btn){btn.innerHTML='Exporting…';btn.disabled=true;}
   try{
-    const base=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId)+'&':'?';
+    const base=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId)+'&':'?';
     const r=await fetch('/inference/report.md'+base+'source=analysis',{credentials:'same-origin'});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const ref=r.headers.get('X-Export-Ref')||'ARGUS-ANL';
@@ -4992,7 +4991,7 @@ async function generateAiReport(type){
   if(D.aiMode && D.aiMode.value==='tifm'){
     D.aiStatus.textContent='Generating via backend TIFM...';
     try{
-      const r=await API.post('/ai/generate-report?report_type='+encodeURIComponent(type)+(activeCaseId?'&case_id='+encodeURIComponent(activeCaseId):''),{});
+      const r=await API.post('/ai/generate-report?report_type='+encodeURIComponent(type)+(state.data.caseId?'&case_id='+encodeURIComponent(state.data.caseId):''),{});
       reportContent.innerHTML=renderMd(r.report)||'[Empty]';
       D.aiStatus.textContent='Done.';
     }catch(e){
@@ -5040,7 +5039,7 @@ async function analyzeWithAI(){
     D.aiStatus.textContent='Connecting to backend TIFM...';
     D.aiResponse.innerHTML='<em>Waiting for analysis...</em>';
     try{
-      const r=await API.post('/ai/analyze'+(activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):''),{});
+      const r=await API.post('/ai/analyze'+(state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):''),{});
       const analytics=r.analytics;
       const investigatorNotes=D.aiInvestigatorInput.value.trim();
       if(investigatorNotes){
@@ -5078,7 +5077,7 @@ async function analyzeWithAI(){
       const investigatorNotes=D.aiInvestigatorInput.value.trim();
       const q=investigatorNotes||'Analyze this case and provide key insights.';
       const contexts=getActiveContexts();
-      let url='/ai/chat?query='+encodeURIComponent(q)+(activeCaseId?'&case_id='+encodeURIComponent(activeCaseId):'');
+      let url='/ai/chat?query='+encodeURIComponent(q)+(state.data.caseId?'&case_id='+encodeURIComponent(state.data.caseId):'');
       if(contexts.length)url+='&context='+encodeURIComponent(contexts.join(','));
       const r=await API.post(url,{});
       D.aiResponse.innerHTML=renderMd(r.answer||'[No response]');
@@ -5167,7 +5166,7 @@ async function runFullInvestigation(){
   modulesEl.style.display='none';
   summaryEl.style.display='none';
   try{
-    const r=await API.post('/ai/investigate'+(activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):''),{});
+    const r=await API.post('/ai/investigate'+(state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):''),{});
     const inv=r.investigation;
     if(!inv){statusEl.textContent='Empty response';return}
     
@@ -5784,7 +5783,7 @@ D.exportBtn.addEventListener('click',async ()=>{
   const caseName=(D.caseSelector.options[D.caseSelector.selectedIndex]?.text||'None');
   // Pull the full analytics report (risk leaderboards + all inferences) to lead the file.
   let analytics='',ref='';
-  try{const base=activeCaseId?'?case_id='+encodeURIComponent(activeCaseId)+'&':'?';const ar=await fetch('/inference/report.md'+base+'source=evidence',{credentials:'same-origin'});if(ar.ok){analytics=await ar.text();ref=ar.headers.get('X-Export-Ref')||'';}}catch(e){}
+  try{const base=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId)+'&':'?';const ar=await fetch('/inference/report.md'+base+'source=evidence',{credentials:'same-origin'});if(ar.ok){analytics=await ar.text();ref=ar.headers.get('X-Export-Ref')||'';}}catch(e){}
   let report='';
   report+='# ARGUS — Case Evidence Report\n\n';
   if(ref)report+='**Reference:** `'+ref+'`  \n';
@@ -6004,7 +6003,7 @@ async function renderDossier(){
     const CLASS='RESTRICTED — FOR OFFICIAL USE ONLY';
     // Official reference id + chain-of-custody log (best-effort; dossier still renders if it fails).
     let ref='';let serverCase=caseName;
-    try{const r=await API.post('/inference/dossier'+(activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):''),{});if(r){ref=r.ref||'';if(r.case_name)serverCase=r.case_name;}}catch(e){}
+    try{const r=await API.post('/inference/dossier'+(state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):''),{});if(r){ref=r.ref||'';if(r.case_name)serverCase=r.case_name;}}catch(e){}
     if(!ref)ref='ARGUS-EVD-'+now.toISOString().slice(0,10).replace(/-/g,'')+'-LOCAL';
 
     // Ensure analytical inputs are loaded for the narrative / summary.
@@ -6044,7 +6043,7 @@ async function renderDossier(){
       +'<h1 class="dc-title">'+esc(serverCase)+'</h1>'
       +'<table class="dc-meta">'
       +'<tr><td>Document reference</td><td><b>'+esc(ref)+'</b></td></tr>'
-      +'<tr><td>Case</td><td>'+esc(serverCase)+(activeCaseId?' (ID '+esc(activeCaseId)+')':'')+'</td></tr>'
+      +'<tr><td>Case</td><td>'+esc(serverCase)+(state.data.caseId?' (ID '+esc(state.data.caseId)+')':'')+'</td></tr>'
       +'<tr><td>Prepared by</td><td>'+esc(officer)+(role?' ('+esc(role)+')':'')+'</td></tr>'
       +'<tr><td>Date / time generated</td><td>'+esc(now.toLocaleString())+'</td></tr>'
       +'<tr><td>Evidence window</td><td>'+esc(dr)+'</td></tr>'
@@ -6235,7 +6234,7 @@ async function renderDossier(){
 async function fillDossierXcase(){
   const box=document.getElementById('dossierXcase');if(!box)return;
   try{
-    const rep=await API.get('/cross-case/report?case_id='+encodeURIComponent(activeCaseId||''));
+    const rep=await API.get('/cross-case/report?case_id='+encodeURIComponent(state.data.caseId||''));
     const subs=(rep&&rep.subjects)||[];
     if(!subs.length){box.className='d-note';box.textContent='No subjects from this case were found in any other case.';return}
     let h='<div class="d-note">'+n(subs.length)+' subject(s) from this case also appear in other cases.</div>';
@@ -7020,7 +7019,7 @@ async function renderAnalysisReports(){
   body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⋯</span><span class="ar-empty-txt">Loading analysis reports…</span></div>';
   _arReports={};
   const qp=new URLSearchParams({sub});
-  if(activeCaseId)qp.set('case_id',activeCaseId);
+  if(state.data.caseId)qp.set('case_id',state.data.caseId);
   try{
     // Try materialised cache first; fall back to live CDR endpoint on miss
     const matData=await API.get('/analytics/reports?'+qp.toString()).catch(()=>null);
@@ -7035,7 +7034,7 @@ async function renderAnalysisReports(){
     if(!data.total_records){
       // Try IPDR-native reports for this subject before declaring "no data"
       const iqp=new URLSearchParams({sub});
-      if(activeCaseId)iqp.set('case_id',activeCaseId);
+      if(state.data.caseId)iqp.set('case_id',state.data.caseId);
       let idata;
       try{idata=await API.get('/analysis/ipdr-reports?'+iqp.toString());}catch(_){idata=null;}
       if(idata&&idata.total_records){
@@ -7092,7 +7091,7 @@ async function _gcRun(){
   if(sel.length<2){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 2 subjects, then click Compare.</span></div>';return;}
   body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⋯</span><span class="ar-empty-txt">Running comparison…</span></div>';
   const qp=new URLSearchParams({subjects:sel.join(',')});
-  if(activeCaseId)qp.set('case_id',activeCaseId);
+  if(state.data.caseId)qp.set('case_id',state.data.caseId);
   try{
     const data=await API.get('/analysis/group-compare?'+qp.toString());
     if(data.error){body.innerHTML='<div class="ar-empty">'+esc(data.error)+'</div>';return;}
@@ -7129,7 +7128,7 @@ function renderTowerDump(){
     imp._wired=true;
     imp.onclick=async()=>{
       if(!file.files[0]){st.textContent='Choose a file first.';return;}
-      const fd=new FormData();fd.append('file',file.files[0]);fd.append('case_id',activeCaseId||'');fd.append('dump_label',(lbl.value||'').trim());fd.append('mode','replace');
+      const fd=new FormData();fd.append('file',file.files[0]);fd.append('case_id',state.data.caseId||'');fd.append('dump_label',(lbl.value||'').trim());fd.append('mode','replace');
       st.textContent='Importing…';
       try{const r=await fetch('/upload/tower-dump',{method:'POST',credentials:'same-origin',body:fd});if(!r.ok)throw new Error(await r.text());const j=await r.json();st.textContent='Imported '+j.records_imported+' rows into "'+(j.validation&&j.validation.dump_label||'dump')+'".';file.value='';lbl.value='';_tdLoadDumps();}
       catch(e){st.textContent='Import failed: '+(e.message||e);}
@@ -7144,7 +7143,7 @@ function _tdSelectedLabels(){return [...document.querySelectorAll('#tdDumpList i
 async function _tdLoadDumps(){
   const list=document.getElementById('tdDumpList');if(!list)return;
   try{
-    const dumps=await API.get('/tower-dump/dumps?case_id='+encodeURIComponent(activeCaseId||''));
+    const dumps=await API.get('/tower-dump/dumps?case_id='+encodeURIComponent(state.data.caseId||''));
     if(!dumps.length){list.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No dumps imported for this case yet.</span></div>';return;}
     list.innerHTML=dumps.map(d=>'<label class="gc-chk"><input type="checkbox" value="'+esc(d.dump_label)+'" checked> '+esc(d.dump_label)+' <span class="gc-cn">'+d.distinct_numbers+'&thinsp;nos</span> <button class="td-ut" data-label="'+esc(d.dump_label)+'" title="List all numbers under this dump">under-tower</button></label>').join('');
     list.querySelectorAll('.td-ut').forEach(b=>b.onclick=ev=>{ev.preventDefault();_tdUnderTower(b.dataset.label);});
@@ -7154,7 +7153,7 @@ async function _tdRun(kind){
   const body=document.getElementById('tdBody');const labels=_tdSelectedLabels();
   if(labels.length<2&&kind!=='multiplicity'){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 2 dumps first.</span></div>';return;}
   if(!labels.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 1 dump first.</span></div>';return;}
-  const cid=encodeURIComponent(activeCaseId||''),ls=encodeURIComponent(labels.join(','));
+  const cid=encodeURIComponent(state.data.caseId||''),ls=encodeURIComponent(labels.join(','));
   body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico" style="animation:spin 1s linear infinite">◌</span><span class="ar-empty-txt">Running…</span></div>';
   try{
     if(kind==='common'){
@@ -7183,7 +7182,7 @@ async function _tdRun(kind){
 async function _tdUnderTower(label){
   const body=document.getElementById('tdBody');body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Loading…</span></div>';
   try{
-    const j=await API.get('/tower-dump/under-tower?case_id='+encodeURIComponent(activeCaseId||'')+'&label='+encodeURIComponent(label));
+    const j=await API.get('/tower-dump/under-tower?case_id='+encodeURIComponent(state.data.caseId||'')+'&label='+encodeURIComponent(label));
     const rows=j.rows.map(r=>[r.msisdn,refOperator(r.msisdn),refCircle(r.msisdn),r.appearances,r.imeis.join(' | ')]);
     _tdReports.undertower={headers:['Number','Operator','Circle','Appearances','IMEIs'],rows};
     body.innerHTML=_repCard('td-exp','undertower','Under tower — '+esc(label),_tdReports.undertower.headers,rows,j.total+' distinct numbers.');
@@ -7205,12 +7204,12 @@ async function bootstrap(){
 
 async function resetCase(){
   const caseName=(D.caseSelector&&D.caseSelector.options[D.caseSelector.selectedIndex]?.text)||'';
-  const msg=activeCaseId
+  const msg=state.data.caseId
     ? 'Reset case "'+caseName+'"? This deletes its CDR & IPDR records. Shared tower locations are kept.'
     : 'Reset ALL data? This deletes every CDR & IPDR record across all cases. Tower locations are kept.';
   if(!confirm(msg))return;
   D.importStatus.textContent='Resetting case data...';
-  const q=activeCaseId?'?case_id='+activeCaseId:'';
+  const q=state.data.caseId?'?case_id='+state.data.caseId:'';
   try{await API.del('/records/reset'+q);D.importStatus.textContent='Case reset. Reloading...';await loadCaseData();D.importStatus.textContent='Case reset. Upload files to begin.'}catch(e){D.importStatus.textContent='Reset failed: '+e.message;console.error(e)}
 }
 // ── ESM window bridge (TRANSITIONAL) ─────────────────────────────────────────────────────────
