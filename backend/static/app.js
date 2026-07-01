@@ -42,7 +42,7 @@ const _W = {
   },
 
   // Returns a Promise that resolves with the AI result object.
-  // If allRows is large, this runs in the worker; otherwise inline.
+  // If state.data.records is large, this runs in the worker; otherwise inline.
   computeAi(rows, wl) {
     const worker = this.ai();
     if (!worker) return Promise.resolve(_aiComputeInline(rows, wl));
@@ -93,7 +93,7 @@ const _W = {
 // counterparts/destination IPs). Drives the analysis / correlation / group-compare subject pickers.
 // _cdrStats/_ipdrStats: server-side aggregated totals (accurate even for large cases)
 // _cd: chart data fetched lazily from /analysis/chart-data
-// _totalCdr/_totalIpdr: true record counts (not bounded by the 500-row allRows sample)
+// _totalCdr/_totalIpdr: true record counts (not bounded by the 500-row state.data.records sample)
 
 let _renderGen=0;            // increments on every loadCaseData; used to detect stale tabs
 const _tabRendered={};       // {tabKey: _renderGen} — set only on SUCCESSFUL render
@@ -106,22 +106,22 @@ function _totalCdrFn(){return(state._cdrStats&&state._cdrStats.total_records)||s
 function _totalIpdrFn(){return(state._ipdrStats&&state._ipdrStats.total_records)||state.ipdr.length||0;}
 
 // ── Shared analytics caches ──────────────────────────────────────────────────
-// Keyed by entity name; invalidated automatically when allRows grows (background load).
+// Keyed by entity name; invalidated automatically when state.data.records grows (background load).
 const _rSess={},_rIdent={};let _cacheRowLen=-1;
 function _clearAnalyticsCaches(){
-  if(allRows.length===_cacheRowLen)return;
-  _cacheRowLen=allRows.length;
+  if(state.data.records.length===_cacheRowLen)return;
+  _cacheRowLen=state.data.records.length;
   Object.keys(_rSess).forEach(k=>delete _rSess[k]);
   Object.keys(_rIdent).forEach(k=>delete _rIdent[k]);
   _dashAgg=null;_dashAggLen=-1;  // also stale — recompute on next renderDashboard
 }
-// Single-pass dashboard aggregation cache — 7 allRows passes → 1
+// Single-pass dashboard aggregation cache — 7 state.data.records passes → 1
 let _dashAgg=null,_dashAggLen=-1;
 function _getDashAgg(){
-  if(_dashAggLen===allRows.length&&_dashAgg)return _dashAgg;
+  if(_dashAggLen===state.data.records.length&&_dashAgg)return _dashAgg;
   const contactCounts={},towerCounts={},svcCounts={},subDays=new Map();
   let totalEvents=0;
-  for(const r of allRows){
+  for(const r of state.data.records){
     if(r.cnt)contactCounts[r.cnt]=(contactCounts[r.cnt]||0)+1;
     if(r.tow)towerCounts[r.tow]=(towerCounts[r.tow]||0)+1;
     const sv=r.svc||'Unknown';svcCounts[sv]=(svcCounts[sv]||0)+1;
@@ -133,19 +133,19 @@ function _getDashAgg(){
   let totalBursts=0;
   subDays.forEach(days=>{const counts=[...days.values()];if(counts.length<3)return;const avg=counts.reduce((a,c)=>a+c,0)/counts.length,thr=Math.max(avg*3,20);days.forEach(c=>{if(c>=thr)totalBursts++;});});
   _dashAgg={contactCounts,towerCounts,svcCounts,totalEvents,totalSessions,totalBursts};
-  _dashAggLen=allRows.length;
+  _dashAggLen=state.data.records.length;
   return _dashAgg;
 }
 
 // Background loader: fetches ALL remaining records after the initial 500-row paint.
-// Once done, allRows has the full dataset and features like timeline/map/story/graph work accurately.
+// Once done, state.data.records has the full dataset and features like timeline/map/story/graph work accurately.
 let _bgLoadGen=0;
-// Hard cap on the in-browser allRows mirror. Beyond this, the client holds a bounded sample
+// Hard cap on the in-browser state.data.records mirror. Beyond this, the client holds a bounded sample
 // (newest-first) for live previews — timeline, correlation, mini-graph, geofence — while the
 // authoritative analytics (dashboard, analysis reports, inference, graph, search) are computed
 // server-side over the WHOLE case. This is what keeps a 1–5M-row case from OOM-ing / freezing
 // the browser; loadCaseData also seeds state.subjects from the server's full owned-subjects list,
-// so the dropdowns still list every subject even when allRows is sampled.
+// so the dropdowns still list every subject even when state.data.records is sampled.
 const MAX_CLIENT_ROWS=150000;
 
 async function _bgLoadAll(total,caseId,gen){
@@ -166,8 +166,8 @@ async function _bgLoadAll(total,caseId,gen){
     const page=await API.get('/records/page?'+qp.toString());
     if(gen!==_bgLoadGen)return;  // case changed while we were loading
     const more=(page.rows||[]).map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r));
-    // Merge into allRows (keep sorted by ts desc)
-    allRows=[...allRows,...more].sort((a,b)=>b.tsMs-a.tsMs);
+    // Merge into state.data.records (keep sorted by ts desc)
+    state.data.records=[...state.data.records,...more].sort((a,b)=>b.tsMs-a.tsMs);
     _rebuildRowIdx();
     // Expand subjects list
     more.forEach(r=>{if(r.sub)state.subjects.push(r.sub);if(r.cnt)state.subjects.push(r.cnt);});
@@ -176,16 +176,16 @@ async function _bgLoadAll(total,caseId,gen){
       if(sampled){banner.textContent='Showing a '+n(want)+'-record sample of '+n(total)+' — full analytics are server-side.';setTimeout(()=>{if(banner)banner.style.display='none';},6000);}
       else{banner.style.display='none';}
     }
-    // Pre-warm AI cache in background worker now that allRows is complete
+    // Pre-warm AI cache in background worker now that state.data.records is complete
     try{_prefetchAiCache();}catch(e){}
-    // Re-render live features that depend on allRows
+    // Re-render live features that depend on state.data.records
     try{renderTimeline&&renderTimeline();}catch(e){}
     try{renderDashboard();}catch(e){}
     try{if(state.tab==='graph')initGraphSubjects();}catch(e){}
     try{if(state.tab==='map'||state.tab==='geo')window.refreshGeoMap&&refreshGeoMap();}catch(e){}
   }catch(e){
     console.error('bgLoad:',e);
-    if(banner){banner.textContent='Warning: only '+n(allRows.length)+' of '+n(total)+' records loaded.';setTimeout(()=>{if(banner)banner.style.display='none';},5000);}
+    if(banner){banner.textContent='Warning: only '+n(state.data.records.length)+' of '+n(total)+' records loaded.';setTimeout(()=>{if(banner)banner.style.display='none';},5000);}
   }
 }
 const API={async req(p,o){const r=await fetch(p,{credentials:'same-origin',...o,headers:{...((o&&o.headers)||{})}});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||r.status);return r.status===204?null:r.json()},get(p){return this.req(p)},post(p,b){return this.req(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},put(p,b){return this.req(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},del(p){return this.req(p,{method:'DELETE'})},async upload(p,f){const fd=new FormData();fd.append('file',f);const r=await fetch(p,{credentials:'same-origin',method:'POST',body:fd});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||'Upload failed');return r.json()}};
@@ -330,19 +330,17 @@ function saveProfileTag(sub){
   }).catch(e=>{try{toast('Could not save tag');}catch(_){} });
 }
 // ====== DATA LOADING ======
-let allRows=[];
-// Subject row index: rebuilt whenever allRows changes. Makes rowsFor/ownedRowsFor O(1)
-// instead of O(n) allRows.filter() scans. For 50k rows and 10 subjects this eliminates
+// Subject row index: rebuilt whenever state.data.records changes. Makes rowsFor/ownedRowsFor O(1)
+// instead of O(n) state.data.records.filter() scans. For 50k rows and 10 subjects this eliminates
 // ~500k iterations per AI render pass.
-let _rowIdx=new Map(),_ownedRowIdx=new Map();
 function _rebuildRowIdx(){
-  _rowIdx=new Map();_ownedRowIdx=new Map();
-  for(const r of allRows){
-    if(r.sub){if(!_rowIdx.has(r.sub))_rowIdx.set(r.sub,[]);_rowIdx.get(r.sub).push(r);}
-    if(r.cnt&&r.cnt!==r.sub){if(!_rowIdx.has(r.cnt))_rowIdx.set(r.cnt,[]);_rowIdx.get(r.cnt).push(r);}
-    if(r.msisdn&&r.msisdn!==r.sub&&r.msisdn!==r.cnt){if(!_rowIdx.has(r.msisdn))_rowIdx.set(r.msisdn,[]);_rowIdx.get(r.msisdn).push(r);}
+  state.data.rowIdx=new Map();state.data.ownedRowIdx=new Map();
+  for(const r of state.data.records){
+    if(r.sub){if(!state.data.rowIdx.has(r.sub))state.data.rowIdx.set(r.sub,[]);state.data.rowIdx.get(r.sub).push(r);}
+    if(r.cnt&&r.cnt!==r.sub){if(!state.data.rowIdx.has(r.cnt))state.data.rowIdx.set(r.cnt,[]);state.data.rowIdx.get(r.cnt).push(r);}
+    if(r.msisdn&&r.msisdn!==r.sub&&r.msisdn!==r.cnt){if(!state.data.rowIdx.has(r.msisdn))state.data.rowIdx.set(r.msisdn,[]);state.data.rowIdx.get(r.msisdn).push(r);}
     const ok=r.msisdn||r.sub;
-    if(ok){if(!_ownedRowIdx.has(ok))_ownedRowIdx.set(ok,[]);_ownedRowIdx.get(ok).push(r);}
+    if(ok){if(!state.data.ownedRowIdx.has(ok))state.data.ownedRowIdx.set(ok,[]);state.data.ownedRowIdx.get(ok).push(r);}
   }
 }
 // Persist the chosen case across page refreshes (state.data.caseId is otherwise in-memory only,
@@ -378,16 +376,16 @@ async function loadCaseData(){
     {const _os=ownedSubjects||{};
      state._ownedSubjects=Array.isArray(_os)?_os
        :[...new Set([...(_os.cdr||[]),...(_os.ipdr||[])])].sort();}
-    // allRows = bounded 500-record sample for timeline, comparison, mini-graph, map, geofence
+    // state.data.records = bounded 500-record sample for timeline, comparison, mini-graph, map, geofence
     const rows=page1.rows||[];
     const cdrRows=rows.filter(r=>r.rtype==='CDR');
     const ipdrRows=rows.filter(r=>r.rtype==='IPDR');
     state.cdr=cdrRows;state.ipdr=ipdrRows;
-    allRows=rows.map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r)).sort((a,b)=>b.tsMs-a.tsMs);
+    state.data.records=rows.map(r=>r.rtype==='CDR'?nCdr(r):nIpdr(r)).sort((a,b)=>b.tsMs-a.tsMs);
     _rebuildRowIdx();
     // state.subjects = all parties from sample (for timeline, graph, comparison dropdowns)
     const subs=new Set();
-    allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
+    state.data.records.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
     state.subjects=[...subs].sort();
     if(page1.total>500){
       // Also seed subjects with the owned subjects list so analysis tabs work on large cases
@@ -400,7 +398,7 @@ async function loadCaseData(){
     // Kick off background full-load BEFORE rendering charts so all features get complete data
     const curGen=_renderGen;
     _bgLoadGen=curGen;
-    if(page1.total>allRows.length)_bgLoadAll(page1.total,state.data.caseId||'',curGen);
+    if(page1.total>state.data.records.length)_bgLoadAll(page1.total,state.data.caseId||'',curGen);
     renderCharts();    // async, server-side; will retry on tab switch if it fails
     initGraphSubjects();
     if(state.tab&&!['dashboard','charts','records'].includes(state.tab))switchTab(state.tab);
@@ -549,16 +547,16 @@ function buildIdentityProfile(sub){
 }
 // -- Dataset Quality Metrics --
 function computeQualityMetrics(){
-  if(!allRows.length)return{score:100,missingTower:0,missingCoord:0,missingDur:0,badTs:0,unknownProto:0,total:0,penalties:[]};
+  if(!state.data.records.length)return{score:100,missingTower:0,missingCoord:0,missingDur:0,badTs:0,unknownProto:0,total:0,penalties:[]};
   let missingTower=0,missingCoord=0,missingDur=0,badTs=0,unknownProto=0;
-  allRows.forEach(r=>{
+  state.data.records.forEach(r=>{
     if(!r.tow)missingTower++;
     if(r.lat==null||r.lng==null)missingCoord++;
     if(!r.dur&&r.dur!==0)missingDur++;
     if(r.ts){const d=new Date(r.ts);if(isNaN(d.getTime()))badTs++}else badTs++;
     if(r.type==='IPDR'&&(!r.prot||r.prot==='Unknown'))unknownProto++;
   });
-  const total=allRows.length;
+  const total=state.data.records.length;
   const pcts={};const penalties=[];
   const addPenalty=(label,count,perRecord)=>{
     const pct=total?Math.round(count/total*100):0;
@@ -1126,7 +1124,7 @@ function reconstructSessions(entity){
   // data sessions of its own. Match the entity only as a source/destination IP; do NOT join
   // via msisdn (that pulled a subscriber's IPDR data into their CDR-phone timeline and showed
   // IPDR services where only voice should appear, and double-counted sessions).
-  const ipdrs=((_rowIdx.get(entity)||[])).filter(r=>r.type==='IPDR').sort((a,b)=>a.tsMs-b.tsMs);
+  const ipdrs=((state.data.rowIdx.get(entity)||[])).filter(r=>r.type==='IPDR').sort((a,b)=>a.tsMs-b.tsMs);
   if(!ipdrs.length)return[];
   const open={};const sessions=[];
   const flush=k=>{const o=open[k];if(o&&o.recs.length){const cls=classifySession(o.recs);if(cls)sessions.push(cls)}delete open[k]};
@@ -1192,8 +1190,8 @@ function buildNarrative(subject){
   narrative.sort((a,b)=>a.time-b.time);
   return narrative.slice(0,50);
 }
-function rowsFor(sub){if(!sub)return allRows;return _rowIdx.get(sub)||[];}
-function ownedRowsFor(sub){if(!sub)return allRows;return _ownedRowIdx.get(sub)||[];}
+function rowsFor(sub){if(!sub)return state.data.records;return state.data.rowIdx.get(sub)||[];}
+function ownedRowsFor(sub){if(!sub)return state.data.records;return state.data.ownedRowIdx.get(sub)||[];}
 
 // ====== TAB SWITCHING ======
 function switchTab(tab){
@@ -1436,7 +1434,7 @@ function renderDashboard(){
   }
   const total=_totalCdrFn()+_totalIpdrFn();
   const totalCdr=_totalCdrFn(),totalIpdr=_totalIpdrFn();
-  // Single-pass aggregation (cached; rebuilds when allRows grows after background load)
+  // Single-pass aggregation (cached; rebuilds when state.data.records grows after background load)
   const{contactCounts,towerCounts,svcCounts,totalEvents,totalSessions,totalBursts}=_getDashAgg();
   // Server stats for accurate totals; sample for top-N approximations
   const uniqueContactsCount=(state._cdrStats&&state._cdrStats.unique_b_party)||Object.keys(contactCounts).length;
@@ -1453,7 +1451,7 @@ function renderDashboard(){
     const dr=state._cdrStats&&state._cdrStats.date_range;
     let span='';
     if(dr&&dr.min&&dr.max){span=new Date(dr.min).toLocaleDateString()+' – '+new Date(dr.max).toLocaleDateString();}
-    else{let _mn=Infinity,_mx=-Infinity;allRows.forEach(r=>{if(r.tsMs){if(r.tsMs<_mn)_mn=r.tsMs;if(r.tsMs>_mx)_mx=r.tsMs;}});if(_mx>-Infinity)span=new Date(_mn).toLocaleDateString()+' – '+new Date(_mx).toLocaleDateString();}
+    else{let _mn=Infinity,_mx=-Infinity;state.data.records.forEach(r=>{if(r.tsMs){if(r.tsMs<_mn)_mn=r.tsMs;if(r.tsMs>_mx)_mx=r.tsMs;}});if(_mx>-Infinity)span=new Date(_mn).toLocaleDateString()+' – '+new Date(_mx).toLocaleDateString();}
     _hs.textContent=n(total)+' records · '+n(uniqueSubjectsCount)+' subjects · '+n(uniqueContactsCount)+' contacts'+(span?' · '+span:'');}
 
   D.dashCards.innerHTML=[
@@ -1493,7 +1491,7 @@ function renderDashboard(){
       if(!D.cpStartA.value){D.cpStartA.value=minT.toISOString().slice(0,10);D.cpEndA.value=mid.toISOString().slice(0,10)}
       if(!D.cpStartB.value){D.cpStartB.value=mid.toISOString().slice(0,10);D.cpEndB.value=maxT.toISOString().slice(0,10)}
     }else{
-      const times=allRows.filter(r=>r.ts).map(r=>new Date(r.ts));
+      const times=state.data.records.filter(r=>r.ts).map(r=>new Date(r.ts));
       if(times.length>1){const mn=new Date(Math.min(...times)),mx=new Date(Math.max(...times));const mid=new Date((mn.getTime()+mx.getTime())/2);if(!D.cpStartA.value){D.cpStartA.value=mn.toISOString().slice(0,10);D.cpEndA.value=mid.toISOString().slice(0,10)}if(!D.cpStartB.value){D.cpStartB.value=mid.toISOString().slice(0,10);D.cpEndB.value=mx.toISOString().slice(0,10)}}
     }
   }
@@ -1508,7 +1506,7 @@ function renderDashboard(){
 // ---- Dashboard Graph (mini D3) ----
 function renderDashGraph(){
   if(typeof d3==='undefined'){D.dashGraph.innerHTML='<p style="color:var(--danger);font-size:0.75rem">D3.js not loaded</p>';return}
-  const sampled=allRows.filter(r=>r.sub&&r.cnt).slice(0,200);
+  const sampled=state.data.records.filter(r=>r.sub&&r.cnt).slice(0,200);
   if(!sampled.length){D.dashGraph.innerHTML='<p style="color:var(--muted);font-size:0.82rem;text-align:center;padding:40px 0">No connections to display</p>';return}
   const rect=D.dashGraph.getBoundingClientRect();
   const w=rect.width||D.dashGraph.clientWidth||400,h=rect.height||D.dashGraph.clientHeight||240;
@@ -1541,7 +1539,7 @@ function renderDashHeatmap(){
   if(typeof Chart==='undefined')return;
   const hours=Array(24).fill(0);const days=Array(7).fill(0);
   const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  allRows.forEach(r=>{if(r.tsMs){const d=new Date(r.tsMs);hours[d.getHours()]++;days[d.getDay()]++}});
+  state.data.records.forEach(r=>{if(r.tsMs){const d=new Date(r.tsMs);hours[d.getHours()]++;days[d.getDay()]++}});
   if(window.dashHeatChart){try{window.dashHeatChart.destroy()}catch(e){}window.dashHeatChart=null}
   if(!D.dashHeat)return;
   window.dashHeatChart=new Chart(D.dashHeat,{type:'bar',data:{labels:dayNames,datasets:[{label:'Activity',data:days,backgroundColor:days.map(d=>d>Math.max(...days)*0.7?'#b94a48':d>Math.max(...days)*0.4?'#d4a017':'#3a7d5a'),borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false}});
@@ -1594,8 +1592,8 @@ window._aiCachePromise=null;
  * Result lands in _aiCachePartial; getAiCache() picks it up synchronously.
  */
 function _prefetchAiCache(){
-  if(window._aiCachePartial||window._aiCachePromise||!allRows.length)return;
-  window._aiCachePromise=_W.computeAi(allRows,_wl||[]).then(result=>{
+  if(window._aiCachePartial||window._aiCachePromise||!state.data.records.length)return;
+  window._aiCachePromise=_W.computeAi(state.data.records,_wl||[]).then(result=>{
     window._aiCachePartial=result;
     window._aiCachePromise=null;
   }).catch(()=>{window._aiCachePromise=null;});
@@ -1605,7 +1603,7 @@ function getAiCache(){
   if(window._aiCache)return window._aiCache;
   const c={};
   c.subCount=state.subjects.length;
-  c.totalRows=allRows.length;
+  c.totalRows=state.data.records.length;
 
   // Use pre-warmed worker result when available (avoids blocking the main thread)
   const partial=window._aiCachePartial;
@@ -1620,9 +1618,9 @@ function getAiCache(){
     c.allMeetings=partial.allMeetings||[];
   }else{
     // Inline fallback (worker not ready or not supported)
-    c.pairCounts={};allRows.forEach(r=>{if(r.sub&&r.cnt){const k=[r.sub,r.cnt].sort().join('|');c.pairCounts[k]=(c.pairCounts[k]||0)+1}});
-    c.subDays=new Map();allRows.forEach(r=>{if(!r.tsMs||!r.sub)return;const d=new Date(r.tsMs).toLocaleDateString();if(!c.subDays.has(r.sub))c.subDays.set(r.sub,new Map());c.subDays.get(r.sub).set(d,(c.subDays.get(r.sub).get(d)||0)+1)});
-    c.svcCounts={};allRows.forEach(r=>{const s=r.svc||'Unknown';c.svcCounts[s]=(c.svcCounts[s]||0)+1});
+    c.pairCounts={};state.data.records.forEach(r=>{if(r.sub&&r.cnt){const k=[r.sub,r.cnt].sort().join('|');c.pairCounts[k]=(c.pairCounts[k]||0)+1}});
+    c.subDays=new Map();state.data.records.forEach(r=>{if(!r.tsMs||!r.sub)return;const d=new Date(r.tsMs).toLocaleDateString();if(!c.subDays.has(r.sub))c.subDays.set(r.sub,new Map());c.subDays.get(r.sub).set(d,(c.subDays.get(r.sub).get(d)||0)+1)});
+    c.svcCounts={};state.data.records.forEach(r=>{const s=r.svc||'Unknown';c.svcCounts[s]=(c.svcCounts[s]||0)+1});
     c.allMeetings=detectMeetings({allPairs:true});
   }
 
@@ -1690,32 +1688,32 @@ function detectMeetings(opts){
 
 // ====== INVESTIGATION SUMMARY ======
 function renderCaseSummary(){
-  if(!allRows.length){D.csGrid.innerHTML='<div style="font-size:0.75rem;color:var(--muted);grid-column:1/-1">Load data to generate case summary.</div>';D.csMeta.textContent='';return}
+  if(!state.data.records.length){D.csGrid.innerHTML='<div style="font-size:0.75rem;color:var(--muted);grid-column:1/-1">Load data to generate case summary.</div>';D.csMeta.textContent='';return}
   // Gather stats
   const totalSubjects=state.subjects.length;
   const totalCdr=_totalCdrFn(),totalIpdr=_totalIpdrFn();
   const towerCount=state.towers.length;
   // Most active subject
-  const subCounts={};allRows.forEach(r=>{if(r.sub)subCounts[r.sub]=(subCounts[r.sub]||0)+1});
+  const subCounts={};state.data.records.forEach(r=>{if(r.sub)subCounts[r.sub]=(subCounts[r.sub]||0)+1});
   const topSub=Object.entries(subCounts).sort((a,b)=>b[1]-a[1])[0];
   // Most used service (attributed)
-  const svcCounts={};allRows.forEach(r=>{const s=recordSvcAttr(r)||r.svc||'Unknown';svcCounts[s]=(svcCounts[s]||0)+1});
+  const svcCounts={};state.data.records.forEach(r=>{const s=recordSvcAttr(r)||r.svc||'Unknown';svcCounts[s]=(svcCounts[s]||0)+1});
   const topSvc=Object.entries(svcCounts).sort((a,b)=>b[1]-a[1])[0];
   // Most common tower
-  const towCounts={};allRows.forEach(r=>{if(r.tow)towCounts[r.tow]=(towCounts[r.tow]||0)+1});
+  const towCounts={};state.data.records.forEach(r=>{if(r.tow)towCounts[r.tow]=(towCounts[r.tow]||0)+1});
   const topTow=Object.entries(towCounts).sort((a,b)=>b[1]-a[1])[0];
   // Contacts
-  const allCnts=new Set(allRows.map(r=>r.cnt).filter(Boolean));
+  const allCnts=new Set(state.data.records.map(r=>r.cnt).filter(Boolean));
   // Time span
-  let _spanMin=Infinity,_spanMax=-Infinity;allRows.forEach(r=>{if(r.tsMs){if(r.tsMs<_spanMin)_spanMin=r.tsMs;if(r.tsMs>_spanMax)_spanMax=r.tsMs;}});
+  let _spanMin=Infinity,_spanMax=-Infinity;state.data.records.forEach(r=>{if(r.tsMs){if(r.tsMs<_spanMin)_spanMin=r.tsMs;if(r.tsMs>_spanMax)_spanMax=r.tsMs;}});
   const span=_spanMax>-Infinity?Math.round((_spanMax-_spanMin)/86400000)+' days':'n/a';
   // Meetings: counted server-side (exact, full-coverage) and filled in async below — the old
   // client scan only sampled the top-30 subjects, undercounting on real cases.
   // Communication direction
-  const dirCounts={mo:0,mt:0};allRows.forEach(r=>{if(r.dir==='MO'||r.dir==='mo')dirCounts.mo++;else if(r.dir==='MT'||r.dir==='mt')dirCounts.mt++});
+  const dirCounts={mo:0,mt:0};state.data.records.forEach(r=>{if(r.dir==='MO'||r.dir==='mo')dirCounts.mo++;else if(r.dir==='MT'||r.dir==='mt')dirCounts.mt++});
   // Burst count
   const subDays=new Map();
-  allRows.forEach(r=>{if(!r.tsMs||!r.sub)return;const d=new Date(r.tsMs).toLocaleDateString();if(!subDays.has(r.sub))subDays.set(r.sub,new Map());subDays.get(r.sub).set(d,(subDays.get(r.sub).get(d)||0)+1)});
+  state.data.records.forEach(r=>{if(!r.tsMs||!r.sub)return;const d=new Date(r.tsMs).toLocaleDateString();if(!subDays.has(r.sub))subDays.set(r.sub,new Map());subDays.get(r.sub).set(d,(subDays.get(r.sub).get(d)||0)+1)});
   let bursts=0;
   subDays.forEach((days,sub)=>{const counts=[...days.values()];if(counts.length<3)return;const avg=counts.reduce((a,c)=>a+c,0)/counts.length;days.forEach((c,d)=>{if(c>=Math.max(avg*3,10))bursts++})});
 
@@ -1752,8 +1750,8 @@ function runComparePeriods(){
   if(!sA||!eA||!sB||!eB){D.cpStatus.textContent='Select both date ranges.';return}
   const tMinA=new Date(sA).getTime(),tMaxA=new Date(eA).getTime()+86400000;
   const tMinB=new Date(sB).getTime(),tMaxB=new Date(eB).getTime()+86400000;
-  const rowsA=allRows.filter(r=>r.tsMs&&r.tsMs>=tMinA&&r.tsMs<tMaxA);
-  const rowsB=allRows.filter(r=>r.tsMs&&r.tsMs>=tMinB&&r.tsMs<tMaxB);
+  const rowsA=state.data.records.filter(r=>r.tsMs&&r.tsMs>=tMinA&&r.tsMs<tMaxA);
+  const rowsB=state.data.records.filter(r=>r.tsMs&&r.tsMs>=tMinB&&r.tsMs<tMaxB);
   if(!rowsA.length&&!rowsB.length){D.cpResults.innerHTML='<div style="color:var(--muted)">No records in either selected range.</div>';D.cpResults.style.display='block';return}
   // Contacts per period
   const cntsA=new Set(rowsA.map(r=>r.cnt).filter(Boolean));
@@ -2409,7 +2407,7 @@ async function buildCaseEvents(subject){
   const ev=[];
   const xrep=await getStoryXcase();
   if(subject&&subject!=='__all__'){
-    const owned=allRows.filter(r=>r.ts&&(r.sub===subject||r.msisdn===subject));
+    const owned=state.data.records.filter(r=>r.ts&&(r.sub===subject||r.msisdn===subject));
     const any=rowsFor(subject).filter(r=>r.ts).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
     if(any.length){const f=any[0];ev.push({ts:new Date(f.ts),kind:'first',title:subject+' first appears in this case',detail:'via '+(f.type==='IPDR'?'data session':(f.cll||'call'))+(f.tow?' at tower '+f.tow:''),sub:subject});}
     // First contact with each top contact (CDR)
@@ -2465,7 +2463,7 @@ async function getStoryXcase(){
 function buildStoryNarrative(subject,events){
   if(subject==='__all__'){
     const meetings=events.filter(e=>e.kind==='meeting').length,ids=events.filter(e=>e.kind==='identity').length,xc=events.filter(e=>e.kind==='crosscase').length,ai=events.filter(e=>e.kind==='ai').length;
-    let p='This case spans <b>'+n(state.subjects.length)+'</b> subjects and <b>'+n(allRows.length)+'</b> records. ';
+    let p='This case spans <b>'+n(state.subjects.length)+'</b> subjects and <b>'+n(state.data.records.length)+'</b> records. ';
     if(events.length){const f=events[0],l=events[events.length-1];p+='Notable activity runs from <b>'+_fmtDT(f.ts)+'</b> to <b>'+_fmtDT(l.ts)+'</b>. ';}
     p+='The engine surfaced '+meetings+' co-location meeting'+(meetings===1?'':'s')+', '+ids+' identity change'+(ids===1?'':'s')+', '+xc+' cross-case link'+(xc===1?'':'s')+', and '+ai+' AI finding'+(ai===1?'':'s')+'. ';
     p+='Select a subject above to read their individual story.';
@@ -2494,7 +2492,7 @@ function buildStoryNarrative(subject,events){
 
 async function renderStory(){
   if(!D.storyTimeline)return;
-  if(!allRows.length){D.storyNarrative.innerHTML='';D.storyTimeline.innerHTML='<div class="story-muted" style="padding:40px;text-align:center">Load a case to reconstruct its story.</div>';populateStorySubjects();updateEvidenceCount();return;}
+  if(!state.data.records.length){D.storyNarrative.innerHTML='';D.storyTimeline.innerHTML='<div class="story-muted" style="padding:40px;text-align:center">Load a case to reconstruct its story.</div>';populateStorySubjects();updateEvidenceCount();return;}
   populateStorySubjects();
   const subject=D.storySubject.value||'__all__';
   D.storyTimeline.innerHTML='<div class="story-muted" style="padding:30px;text-align:center">Reconstructing the investigation…</div>';
@@ -2510,7 +2508,7 @@ async function renderStory(){
 function populateStorySubjects(){
   const sel=D.storySubject;if(!sel)return;const cur=sel.value;
   // Count once (O(records)) instead of re-filtering per comparison.
-  const cnt={};allRows.forEach(r=>{if(r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
+  const cnt={};state.data.records.forEach(r=>{if(r.sub)cnt[r.sub]=(cnt[r.sub]||0)+1;});
   const subs=(state.subjects||[]).slice().sort((a,b)=>(cnt[b]||0)-(cnt[a]||0));
   sel.innerHTML='<option value="__all__">All subjects (case overview)</option>'+subs.slice(0,500).map(s=>'<option value="'+esc(s)+'">'+esc(subjLabelTxt(s))+'</option>').join('');
   if(cur&&[...sel.options].some(o=>o.value===cur))sel.value=cur;else if(subs.length)sel.value=subs[0];
@@ -3351,14 +3349,14 @@ const _tlOpenEntities=new Set();  // persist open state across re-renders
 const TL_PAGE=80;                  // entities rendered per page
 
 function renderTimeline(){
-  if(!allRows.length)return;
+  if(!state.data.records.length)return;
   // Populate compare dropdown
   const curVal=D.tlCompare.value;
   D.tlCompare.innerHTML='<option value="">Compare with...</option>'+state.subjects.map(s=>`<option value="${esc(s)}"${s===curVal?' selected':''}>${esc(s)}</option>`).join('');
   const compare=D.tlCompare.value;
   const type=D.tlType.value;
   const q=D.tlSearch.value.trim().toLowerCase();
-  let rows=allRows;
+  let rows=state.data.records;
   if(type)rows=rows.filter(r=>r.type===type);
   const entityMap={};
   for(const r of rows){
@@ -3432,9 +3430,9 @@ function _tlEntityHeader(e,i){
 function _tlLoadMore(btn,offset){
   const entities=Object.values(window._tlEntityStore||{});
   // _tlEntityStore only holds the first page; need the full list from the DOM context
-  // Re-render remaining entities by rebuilding from allRows filtered to current query
+  // Re-render remaining entities by rebuilding from state.data.records filtered to current query
   const type=D.tlType.value,q=D.tlSearch.value.trim().toLowerCase();
-  let rows=allRows;if(type)rows=rows.filter(r=>r.type===type);
+  let rows=state.data.records;if(type)rows=rows.filter(r=>r.type===type);
   const entityMap={};
   for(const r of rows){
     const ents=[];if(r.sub)ents.push(r.sub);if(r.cnt&&r.cnt!==r.sub)ents.push(r.cnt);
@@ -3821,9 +3819,9 @@ function loadAnnotations(){
     renderRecTable();
   }).catch(()=>{});
 }
-// Build an evidence item mirroring a flagged record, looked up from allRows for a meaningful blurb.
+// Build an evidence item mirroring a flagged record, looked up from state.data.records for a meaningful blurb.
 function _recordEvidence(r,numId){
-  const row=allRows.find(x=>x.id===r.id)||{};
+  const row=state.data.records.find(x=>x.id===r.id)||{};
   const parts=[];
   if(row.ts)parts.push(fmt(row.ts));
   if(row.cnt)parts.push((r.type==='CDR'?'with ':'→ ')+row.cnt);
@@ -3942,12 +3940,12 @@ function _renderRecPagination(){
     <button class="btn-sm" onclick="_recNext()" ${cur>=total?'disabled':''}>Next &#8594;</button>`;
 }
 function _recExport(){
-  // Export all matching records (from allRows, not just the current page).
+  // Export all matching records (from state.data.records, not just the current page).
   // Apply the same search/type/service filters the table is currently showing.
   const q=(D.recSearch.value||'').trim().toLowerCase();
   const t=D.recType.value;
   const svc=D.recService.value;
-  let src=allRows;
+  let src=state.data.records;
   if(state.data.caseId)src=src.filter(r=>!r.case_id||r.case_id===state.data.caseId);
   if(t)src=src.filter(r=>r.type===t);
   if(svc)src=src.filter(r=>(r.svc||'')===svc);
@@ -3956,7 +3954,7 @@ function _recExport(){
   const data=src.map(r=>{const cdr=r.type==='CDR';return [fmt(r.ts),r.type,subjLabelTxt(r.sub||''),subjLabelTxt(r.cnt||''),r.dur!=null?r.dur:'',cdr?(r.cll||''):(r.prot||''),cdr?(r.dir||''):(r.apn||''),r.svc||'',cdr?'':(r.sport!=null?r.sport:''),cdr?'':(r.dport!=null?r.dport:''),r.tow||'',r.cell||'',r.lac||'',r.imsi||'',r.imei||'',r.msisdn||'',r.lat||'',r.lng||'',r.case_id||''];});
   return {headers,rows:data};
 }
-// Server-side export: pulls all matching rows from the DB (not allRows) so the download
+// Server-side export: pulls all matching rows from the DB (not state.data.records) so the download
 // always matches every page of the paginated table, regardless of background load state.
 async function _recServerExport(fmt){
   const q=(D.recSearch.value||'').trim();
@@ -4194,31 +4192,31 @@ function positionGanttTip(el){
 // ====== AI INSIGHTS ======
 
 function buildDataPackage(){
-  if(!allRows.length)return'No records loaded.';
+  if(!state.data.records.length)return'No records loaded.';
   const lines=[];
-  const subs=new Set();allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
-  const ts=allRows.filter(r=>r.ts).map(r=>+new Date(r.ts));
+  const subs=new Set();state.data.records.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
+  const ts=state.data.records.filter(r=>r.ts).map(r=>+new Date(r.ts));
   lines.push('Records: '+(_totalCdrFn()+_totalIpdrFn())+' ('+_totalCdrFn()+' CDR, '+_totalIpdrFn()+' IPDR)');
   lines.push('Period: '+(ts.length?new Date(Math.min(...ts)).toISOString().slice(0,10)+' -> '+new Date(Math.max(...ts)).toISOString().slice(0,10):'?'));
   lines.push('Entities: '+subs.size);
-  const svcC={};allRows.forEach(r=>{const s=r.svc||'?';svcC[s]=(svcC[s]||0)+1});
+  const svcC={};state.data.records.forEach(r=>{const s=r.svc||'?';svcC[s]=(svcC[s]||0)+1});
   lines.push('Services: '+Object.entries(svcC).sort((a,b)=>b[1]-a[1]).slice(0,8).map(s=>s[0]+'('+s[1]+')').join(', '));
-  const cntC={};allRows.forEach(r=>{if(r.cnt)cntC[r.cnt]=(cntC[r.cnt]||0)+1});
+  const cntC={};state.data.records.forEach(r=>{if(r.cnt)cntC[r.cnt]=(cntC[r.cnt]||0)+1});
   lines.push('Top contacts: '+Object.entries(cntC).sort((a,b)=>b[1]-a[1]).slice(0,8).map(c=>c[0]+'('+c[1]+')').join(', '));
-  const towC={};allRows.forEach(r=>{if(r.tow)towC[r.tow]=(towC[r.tow]||0)+1});
+  const towC={};state.data.records.forEach(r=>{if(r.tow)towC[r.tow]=(towC[r.tow]||0)+1});
   lines.push('Top towers: '+Object.entries(towC).sort((a,b)=>b[1]-a[1]).slice(0,6).map(t=>t[0]+'('+t[1]+')').join(', '));
-  const edg={};allRows.forEach(r=>{if(r.sub&&r.cnt){const k=[r.sub,r.cnt].sort().join('|');edg[k]=(edg[k]||0)+1}});
+  const edg={};state.data.records.forEach(r=>{if(r.sub&&r.cnt){const k=[r.sub,r.cnt].sort().join('|');edg[k]=(edg[k]||0)+1}});
   lines.push('Top links: '+Object.entries(edg).sort((a,b)=>b[1]-a[1]).slice(0,6).map(e=>e[0].replace('|','<->')+'x'+e[1]).join(', '));
-  const dirs={i:0,o:0};allRows.forEach(r=>{if(r.dir==='MT')dirs.i++;else if(r.dir==='MO')dirs.o++});
+  const dirs={i:0,o:0};state.data.records.forEach(r=>{if(r.dir==='MT')dirs.i++;else if(r.dir==='MO')dirs.o++});
   const dTot=dirs.i+dirs.o||1;lines.push('Direction: '+Math.round(dirs.i/dTot*100)+'% in / '+Math.round(dirs.o/dTot*100)+'% out');
-  const durs=allRows.filter(r=>r.dur!=null).map(r=>r.dur);
+  const durs=state.data.records.filter(r=>r.dur!=null).map(r=>r.dur);
   if(durs.length)lines.push('Duration: avg '+Math.round(durs.reduce((s,v)=>s+v,0)/durs.length)+'s, max '+Math.max(...durs)+'s');
-  const hrs=Array(24).fill(0);allRows.forEach(r=>{if(r.ts)hrs[new Date(r.ts).getHours()]++});
+  const hrs=Array(24).fill(0);state.data.records.forEach(r=>{if(r.ts)hrs[new Date(r.ts).getHours()]++});
   const peakIdx=hrs.indexOf(Math.max(...hrs));lines.push('Peak hour: '+peakIdx+':00 ('+Math.max(...hrs)+' records)');
   const night=hrs.slice(0,6).concat(hrs.slice(20)).reduce((s,v)=>s+v,0);
   const day=hrs.slice(6,20).reduce((s,v)=>s+v,0);const tot=night+day||1;
   lines.push('Night activity: '+Math.round(night/tot*100)+'%');
-  const protC={};allRows.filter(r=>r.type==='IPDR'&&r.prot).forEach(r=>{protC[r.prot]=(protC[r.prot]||0)+1});
+  const protC={};state.data.records.filter(r=>r.type==='IPDR'&&r.prot).forEach(r=>{protC[r.prot]=(protC[r.prot]||0)+1});
   const p=Object.entries(protC).sort((a,b)=>b[1]-a[1]);if(p.length)lines.push('Protocols: '+p.slice(0,5).map(x=>x[0]+'('+x[1]+')').join(', '));
 
   // Sessions
@@ -4235,9 +4233,9 @@ function buildDataPackage(){
 }
 
 function buildCsvDump(){
-  if(!allRows.length)return '';
-  const cdr=allRows.filter(r=>r.type==='CDR').slice(-500);
-  const ipdr=allRows.filter(r=>r.type==='IPDR').slice(-500);
+  if(!state.data.records.length)return '';
+  const cdr=state.data.records.filter(r=>r.type==='CDR').slice(-500);
+  const ipdr=state.data.records.filter(r=>r.type==='IPDR').slice(-500);
   const ts=(r)=>r.ts?Math.round(new Date(r.ts).getTime()/1000):'';
   const lines=['=== CDR ('+cdr.length+') ==='];
   lines.push('ts|sub|cnt|tow|dur|dir|svc');
@@ -4249,7 +4247,7 @@ function buildCsvDump(){
 }
 
 function renderAiInsights(){
-  if(!allRows.length){
+  if(!state.data.records.length){
     document.getElementById('aiBody')&&(document.getElementById('aiBody').innerHTML='<p style="color:var(--muted);text-align:center;padding:20px">No data loaded. Upload CDR/IPDR files first.</p>');
     return;
   }
@@ -4284,7 +4282,7 @@ function buildCaseSummary(){
   const topPair=Object.entries(c.pairCounts).sort((a,b)=>b[1]-a[1])[0];
   const highMeets=c.allMeetings.filter(m=>m.gapLevel==='high');
   let hubSub=null,maxDeg=0;
-  const degMap={};allRows.forEach(r=>{if(r.sub)degMap[r.sub]=(degMap[r.sub]||0)+1;if(r.cnt)degMap[r.cnt]=(degMap[r.cnt]||0)+1});
+  const degMap={};state.data.records.forEach(r=>{if(r.sub)degMap[r.sub]=(degMap[r.sub]||0)+1;if(r.cnt)degMap[r.cnt]=(degMap[r.cnt]||0)+1});
   Object.entries(degMap).forEach(([s,d])=>{if(d>maxDeg){maxDeg=d;hubSub=s}});
   const topPairParts=topPair?topPair[0].split('|'):null;
   let html='<h3 class="ai-section-title">Case Overview</h3><div class="ai-summary">';
@@ -4299,8 +4297,8 @@ function buildCaseSummary(){
 function buildCaseOverview(){
   const g=document.getElementById('aiOverviewGrid');if(!g)return;
   const total=_totalCdrFn()+_totalIpdrFn(),totalCdr=_totalCdrFn(),totalIpdr=_totalIpdrFn();
-  const subs=new Set();allRows.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
-  const ts=allRows.filter(r=>r.ts).map(r=>+new Date(r.ts));
+  const subs=new Set();state.data.records.forEach(r=>{if(r.sub)subs.add(r.sub);if(r.cnt)subs.add(r.cnt)});
+  const ts=state.data.records.filter(r=>r.ts).map(r=>+new Date(r.ts));
   const span=ts.length?Math.round((ts.reduce((a,b)=>a>b?a:b,-Infinity)-ts.reduce((a,b)=>a<b?a:b,Infinity))/86400000):0;
   let meetings=0;try{meetings=meetingTotals().total}catch(e){}
   const sessions=state.subjects.reduce((sum,s)=>sum+reconstructSessions(s).length,0);
@@ -4822,7 +4820,7 @@ function buildInvestigationLeads(){
 }
 function buildTimelineNarrative(){
   const body=document.getElementById('aiNarrativeBody');if(!body)return;
-  const subRank=state.subjects.map(s=>[s,allRows.filter(r=>r.sub===s||r.cnt===s).length]).sort((a,b)=>b[1]-a[1]);
+  const subRank=state.subjects.map(s=>[s,state.data.records.filter(r=>r.sub===s||r.cnt===s).length]).sort((a,b)=>b[1]-a[1]);
   if(!subRank.length){body.innerHTML='<p style="color:var(--muted);font-size:0.75rem">No subjects with activity data.</p>';return}
   const selected=state._aiNarrativeSub||subRank[0][0];
   const topSub=state.subjects.includes(selected)?selected:subRank[0][0];
@@ -4879,7 +4877,7 @@ function buildTimelineNarrative(){
   const days=Object.keys(dayGroups).sort((a,b)=>new Date(a)-new Date(b));
   const baseDate=days.length?new Date(days[0]):null;
   // Subject selector + narrative header
-  let html='<div class="ai-narr-head"><select class="ai-narr-select" onchange="switchNarrativeSubject(this.value)">'+subRank.slice(0,30).map(([s])=>'<option value="'+esc(s)+'"'+(s===topSub?' selected':'')+'>'+esc(s)+' ('+allRows.filter(r=>r.sub===s||r.cnt===s).length+' records)</option>').join('')+'</select></div>';
+  let html='<div class="ai-narr-head"><select class="ai-narr-select" onchange="switchNarrativeSubject(this.value)">'+subRank.slice(0,30).map(([s])=>'<option value="'+esc(s)+'"'+(s===topSub?' selected':'')+'>'+esc(s)+' ('+state.data.records.filter(r=>r.sub===s||r.cnt===s).length+' records)</option>').join('')+'</select></div>';
   html+='<div class="ai-narrative">'+days.slice(0,7).map(d=>{
     const dt=new Date(d);const rel=baseDate?'Day '+Math.round((dt-baseDate)/86400000+1):d;
     return `<div class="ai-narr-day">${rel} — ${d}</div>
@@ -4982,7 +4980,7 @@ async function chatWithContext(action){
   analyzeWithAI();
 }
 async function generateAiReport(type){
-  if(!allRows.length)return;
+  if(!state.data.records.length)return;
   const reportContent=document.getElementById('aiReportContent');
   if(!reportContent)return;
   reportContent.innerHTML='<em>Generating report...</em>';
@@ -5031,7 +5029,7 @@ async function generateAiReport(type){
   }
 }
 async function analyzeWithAI(){
-  if(!allRows.length)return;
+  if(!state.data.records.length)return;
 
   // TIFM Backend mode
   if(D.aiMode && D.aiMode.value==='tifm'){
@@ -5790,12 +5788,12 @@ D.exportBtn.addEventListener('click',async ()=>{
   report+='**Generated:** '+now+'  \n**User:** '+(state.auth.user?state.auth.user.username:'Unknown')+'  \n**Case:** '+caseName+'\n';
   if(analytics){report+='\n'+analytics+'\n\n---\n\n# Raw evidence & sessions\n';}
   report+='\n## Summary\n';
-  report+='Total Records: '+allRows.length+'\n';
+  report+='Total Records: '+state.data.records.length+'\n';
   report+='CDR: '+_totalCdrFn()+', IPDR: '+_totalIpdrFn()+'\n';
   report+='Towers: '+state.towers.length+'\n';
   report+='Subjects: '+state.subjects.length+'\n';
 
-  const timeSorted=allRows.filter(r=>r.ts).map(r=>new Date(r.ts).getTime());
+  const timeSorted=state.data.records.filter(r=>r.ts).map(r=>new Date(r.ts).getTime());
   if(timeSorted.length){
     report+='Date Range: '+new Date(Math.min(...timeSorted)).toLocaleString()+' to '+new Date(Math.max(...timeSorted)).toLocaleString()+'\n';
     const spanMs=Math.max(...timeSorted)-Math.min(...timeSorted);
@@ -5803,12 +5801,12 @@ D.exportBtn.addEventListener('click',async ()=>{
   }
 
   const allSvc=[],allProt=[],allCnter=[];
-  allRows.forEach(r=>{
+  state.data.records.forEach(r=>{
     if(r.svc)allSvc.push(r.svc);
     if(r.prot)allProt.push(r.prot);
     if(r.cnt)allCnter.push(r.cnt);
   });
-  const topSvc=Object.entries(allRows.reduce((a,r)=>{const s=recordSvcAttr(r)||r.svc||'Unknown';a[s]=(a[s]||0)+1;return a},{}))
+  const topSvc=Object.entries(state.data.records.reduce((a,r)=>{const s=recordSvcAttr(r)||r.svc||'Unknown';a[s]=(a[s]||0)+1;return a},{}))
     .sort((a,b)=>b[1]-a[1]).slice(0,10);
   if(topSvc.length){
     report+='\nTop Attributed Services:\n';
@@ -5829,7 +5827,7 @@ D.exportBtn.addEventListener('click',async ()=>{
   // ===== SUBJECT PROFILES =====
   report+='\n--- Subject Profiles ---\n';
   const subData=state.subjects.slice(0,50).map(sub=>{
-    const rows=allRows.filter(r=>r.sub===sub);
+    const rows=state.data.records.filter(r=>r.sub===sub);
     const contacts=[...new Set(rows.map(r=>r.cnt).filter(Boolean))];
     const svcs={};rows.forEach(r=>{const a=recordSvcAttr(r)||r.svc||'Unknown';svcs[a]=(svcs[a]||0)+1});
     const topS=Object.entries(svcs).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -5990,7 +5988,7 @@ function setAgencyDetails(){
 }
 
 async function renderDossier(){
-  if(!allRows.length){alert('Load a case first — there is nothing to put in a dossier yet.');return}
+  if(!state.data.records.length){alert('Load a case first — there is nothing to put in a dossier yet.');return}
   const prev=D.dossierBtn.textContent;D.dossierBtn.textContent='Building…';D.dossierBtn.disabled=true;
   try{
     const caseName=(D.caseSelector.options[D.caseSelector.selectedIndex]?.text||'None').replace(/\s*\(\d+\)\s*$/,'');
@@ -6011,18 +6009,18 @@ async function renderDossier(){
     try{await getInfReport();}catch(e){}
     const xrep=await getStoryXcase();
 
-    const ts=allRows.filter(r=>r.ts).map(r=>new Date(r.ts).getTime()).filter(t=>!isNaN(t));
+    const ts=state.data.records.filter(r=>r.ts).map(r=>new Date(r.ts).getTime()).filter(t=>!isNaN(t));
     const minD=ts.length?new Date(Math.min(...ts)):null,maxD=ts.length?new Date(Math.max(...ts)):null;
     const dr=ts.length?(minD.toLocaleString()+'  —  '+maxD.toLocaleString()):'—';
     const spanDays=ts.length?Math.max(1,Math.round((Math.max(...ts)-Math.min(...ts))/86400000)):0;
 
     // Per-subject rollup.
     const subStat={};
-    allRows.forEach(r=>{const s=r.sub;if(!s)return;const o=subStat[s]||(subStat[s]={n:0,c:new Set(),t:new Set(),type:r.type});o.n++;if(r.cnt&&r.cnt!==s)o.c.add(r.cnt);if(r.tow)o.t.add(r.tow);});
+    state.data.records.forEach(r=>{const s=r.sub;if(!s)return;const o=subStat[s]||(subStat[s]={n:0,c:new Set(),t:new Set(),type:r.type});o.n++;if(r.cnt&&r.cnt!==s)o.c.add(r.cnt);if(r.tow)o.t.add(r.tow);});
     const subjects=Object.entries(subStat).map(([s,o])=>({s,n:o.n,c:o.c.size,t:o.t.size,type:o.type})).sort((a,b)=>b.n-a.n);
     const topSub=subjects.length?subjects[0].s:null;
-    const caseTowerN=new Set(allRows.filter(r=>r.tow).map(r=>r.tow)).size; // towers in THIS case (not the global repo)
-    const topCnt=Object.entries(allRows.reduce((a,r)=>{if(r.cnt&&r.cnt!==r.sub){a[r.cnt]=(a[r.cnt]||0)+1}return a},{})).sort((a,b)=>b[1]-a[1]).slice(0,15);
+    const caseTowerN=new Set(state.data.records.filter(r=>r.tow).map(r=>r.tow)).size; // towers in THIS case (not the global repo)
+    const topCnt=Object.entries(state.data.records.reduce((a,r)=>{if(r.cnt&&r.cnt!==r.sub){a[r.cnt]=(a[r.cnt]||0)+1}return a},{})).sort((a,b)=>b[1]-a[1]).slice(0,15);
 
     const mt=(typeof meetingTotals==='function')?meetingTotals():{total:0};
     const xcount=(xrep&&xrep.subjects)?xrep.subjects.length:0;
@@ -6061,7 +6059,7 @@ async function renderDossier(){
     // Persons of interest: risk-ranked, falling back to activity.
     const poiList=subjects.slice().sort((a,b)=>((riskMap[b.s]?riskMap[b.s].score:0)-(riskMap[a.s]?riskMap[a.s].score:0))||(b.n-a.n)).slice(0,8);
     // Case-only towers (distinct tower_ids appearing in THIS case's records) with activity counts.
-    const tm=towerMeta();const towCount={};allRows.forEach(r=>{if(r.tow)towCount[r.tow]=(towCount[r.tow]||0)+1;});
+    const tm=towerMeta();const towCount={};state.data.records.forEach(r=>{if(r.tow)towCount[r.tow]=(towCount[r.tow]||0)+1;});
     const caseTowers=Object.entries(towCount).map(([tw,c])=>({tw,c,city:(tm[tw]||{}).city,state:(tm[tw]||{}).state})).sort((a,b)=>b.c-a.c);
     // Identity changes across subjects (SIM / handset swaps).
     const idChanges=[];(state.subjects||[]).slice(0,400).forEach(s=>{try{(buildIdentityProfile(s).changes||[]).forEach(c=>idChanges.push({sub:s,time:c.time,detail:c.detail,from:c.from,to:c.to,confidence:c.confidence}))}catch(e){}});
@@ -6114,7 +6112,7 @@ async function renderDossier(){
     if(poiList.length){
       poiList.forEach((p,i)=>{
         const sub=p.s;const rk=riskMap[sub];
-        const owned=allRows.filter(r=>r.ts&&(r.sub===sub||r.msisdn===sub));
+        const owned=state.data.records.filter(r=>r.ts&&(r.sub===sub||r.msisdn===sub));
         const tms=rowsFor(sub).filter(r=>r.ts).map(r=>new Date(r.ts).getTime());
         const fs=tms.length?new Date(Math.min(...tms)):null,ls=tms.length?new Date(Math.max(...tms)):null;
         let idents=[],changes=[];try{const ip=buildIdentityProfile(sub);idents=ip.identities||[];changes=ip.changes||[];}catch(e){}
@@ -6254,10 +6252,10 @@ async function fillDossierXcase(){
 // ====== SERVICE ATTRIBUTION TAB ======
 let svcCorrData=null;
 function renderServicesTab(){
-  if(!allRows.length){D.svcCardGrid.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">No data loaded.</div>';D.svcBursts.innerHTML='';D.svcCount.textContent='0 services';return}
+  if(!state.data.records.length){D.svcCardGrid.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">No data loaded.</div>';D.svcBursts.innerHTML='';D.svcCount.textContent='0 services';return}
   // Build service data from sessions
   const svcMap=new Map();// serviceName -> {sessions, subjects, contacts, totalDur, confidences, subjectsSet, contactsSet}
-  const allSubjects=[...new Set(allRows.map(r=>r.sub).filter(Boolean))];
+  const allSubjects=[...new Set(state.data.records.map(r=>r.sub).filter(Boolean))];
   allSubjects.forEach(sub=>{
     const sessions=reconstructSessions(sub);
     sessions.forEach(s=>{
@@ -6307,7 +6305,7 @@ function renderServiceBursts(){
   // Burst detection: per-subject daily activity vs rolling average
   const bursts=[];
   const subDays=new Map();// subject -> {date:count}
-  allRows.forEach(r=>{
+  state.data.records.forEach(r=>{
     if(!r.ts||!r.sub)return;
     const d=new Date(r.ts).toLocaleDateString();
     if(!subDays.has(r.sub))subDays.set(r.sub,new Map());
@@ -6321,7 +6319,7 @@ function renderServiceBursts(){
     const threshold=Math.max(avg*3,10);
     days.forEach((count,date)=>{
       if(count>=threshold){
-        const sessionsToday=allRows.filter(r=>r.sub===sub&&r.ts&&new Date(r.ts).toLocaleDateString()===date);
+        const sessionsToday=state.data.records.filter(r=>r.sub===sub&&r.ts&&new Date(r.ts).toLocaleDateString()===date);
         bursts.push({subject:sub,date,count,avg:Math.round(avg),sessions:sessionsToday.length});
       }
     });
@@ -6455,7 +6453,7 @@ function runCorrelation(){
   const a=D.corrSubA.value,b=D.corrSubB.value;
   if(!a||!b){D.corrResults.innerHTML='<div class="corr-empty">Select two subjects and click Compare.</div>';return}
   if(a===b){D.corrResults.innerHTML='<div class="corr-empty">Pick two different subjects.</div>';return}
-  const rowsA=allRows.filter(r=>r.sub===a),rowsB=allRows.filter(r=>r.sub===b);
+  const rowsA=state.data.records.filter(r=>r.sub===a),rowsB=state.data.records.filter(r=>r.sub===b);
   if(!rowsA.length||!rowsB.length){D.corrResults.innerHTML='<div class="corr-empty">One or both subjects have no records.</div>';return}
   // Common towers
   const towsA=new Set(rowsA.map(r=>r.tow).filter(Boolean));
