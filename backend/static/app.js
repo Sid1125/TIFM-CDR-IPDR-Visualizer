@@ -2001,30 +2001,31 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
     }
     ctx.restore();
   }
+  // Coalesce sim-tick redraws to one per animation frame. On a big graph the force sim ticks faster
+  // than the canvas can paint, and drawing on every tick is what made large layouts crawl.
+  let _drawQueued=false;
+  function scheduleDraw(){if(_drawQueued)return;_drawQueued=true;requestAnimationFrame(()=>{_drawQueued=false;draw();});}
   // Pick the node under a canvas point (screen coords), accounting for the current zoom/pan.
   const nodeAt=(mx,my)=>{
     const x=(mx-transform.x)/transform.k,y=(my-transform.y)/transform.k;let best=null,bd=1e18;
     for(const d of nodes){const dx=d.x-x,dy=d.y-y,dist=dx*dx+dy*dy,r=nodeR(d)+4;if(dist<r*r&&dist<bd){bd=dist;best=d;}}
     return best;
   };
-  // Server-computed layout (Phase 2): if the nodes arrived with x/y, scale them into the viewport
-  // and SEED the simulation with them — but do NOT pin (fx/fy) or stop the sim. The seed is already
-  // a good near-final layout, so a gentle cool-down barely moves it, yet the graph stays fully
-  // interactive: nodes can be dragged and neighbours follow, like the client-side canvas did before.
-  const _serverPos=nodes.length&&nodes[0].x!=null&&nodes[0].y!=null;
-  if(_serverPos){
-    const pad=50;
-    nodes.forEach(d=>{d.x=pad+(d.x/1000)*(w-2*pad);d.y=pad+(d.y/1000)*(h-2*pad);});
-  }
+  // Pure client-side canvas layout — the browser runs the force simulation and draws to canvas
+  // (the pre-server-layout rendition). Server-side layout was dropped: it recomputed a Python
+  // Fruchterman-Reingold pass over every node on each request and simply never returned for the
+  // "All links" case on large cases. Here the forces are tuned to stay responsive at scale: on a
+  // big graph repulsion range is capped (distanceMax) with a coarser Barnes-Hut theta, collision is
+  // skipped, and the cooldown is faster, so even tens of thousands of nodes settle and stay draggable.
+  const N=nodes.length, BIG=N>2500;
   const sim=d3.forceSimulation(nodes)
-    .force('link',d3.forceLink(links).id(d=>d.id).distance(60))
-    .force('charge',d3.forceManyBody().strength(-90))
-    .force('center',_serverPos?null:d3.forceCenter(w/2,h/2))
-    .force('collision',_serverPos?null:d3.forceCollide(8))
-    .on('tick',draw);
-  // Seeded start: low alpha so it settles from the server layout in a beat, then rests (d3 stops
-  // ticking once alpha < alphaMin, so idle CPU is zero). A drag reheats it. Cold start otherwise.
-  if(_serverPos)sim.alpha(0.15).alphaDecay(0.06);
+    .force('link',d3.forceLink(links).id(d=>d.id).distance(BIG?40:60))
+    .force('charge',d3.forceManyBody().strength(BIG?-45:-90).theta(0.9).distanceMax(BIG?350:Infinity))
+    .force('center',d3.forceCenter(w/2,h/2))
+    .force('collision',BIG?null:d3.forceCollide(8))
+    .velocityDecay(0.45)
+    .alphaDecay(BIG?0.045:0.0228)
+    .on('tick',scheduleDraw);
   curGraphNodes=nodes;curGraphLinks=links;curGraphSim=sim;
   const zoom=d3.zoom().scaleExtent([0.05,8])
     // A press that lands on a node starts a node-drag; empty-space press + wheel still pan/zoom.
@@ -2082,9 +2083,9 @@ async function renderGraph(){
   // Max links to draw: user-selectable (0 = all). The browser force-layout gets sluggish past
   // a couple thousand nodes, so the picker tops out at 2000 with an explicit "All" escape hatch.
   const limit=D.graphLimit?parseInt(D.graphLimit.value):(subject?500:150);
-  // Fetch the bounded subgraph server-side (top-N heaviest edges) so the browser never builds
-  // a graph from the whole case. Node weights returned are the node's TRUE total over all
-  // edges, so the view is trimmed but the weights/degrees stay full-coverage.
+  // Fetch a bounded subgraph server-side (top-N heaviest edges) so the browser normally renders a
+  // trimmed view; "All" (0) is the explicit escape hatch that pulls every edge. Node weights are the
+  // node's TRUE total over all edges, so the view is trimmed but the weights/degrees stay full.
   if(limit===0){
     const ok=confirm('Rendering all links may freeze the browser for large cases. Continue?');
     if(!ok){if(D.graphLimit)D.graphLimit.value='300';return;}
@@ -2095,15 +2096,12 @@ async function renderGraph(){
     if(activeCaseId)p.set('case_id',activeCaseId);
     if(subject)p.set('subject',subject);
     p.set('limit',limit);
-    // For large graphs (the canvas path) ask the server to precompute + cache node positions so
-    // the browser just draws them instead of running its own force simulation.
-    if(limit===0||limit>=GRAPH_CANVAS_MIN)p.set('layout','1');
     payload=await API.get('/graph/?'+p.toString());
   }catch(e){console.error('graph load',e);D.graphStats.textContent='Failed to load graph.';return;}
   D.graphSvg.innerHTML='<svg width="100%" height="100%"></svg>';
   const svg=d3.select(D.graphSvg).select('svg'),w=D.graphSvg.clientWidth||800,h=D.graphSvg.clientHeight||500;
   const links=(payload.edges||[]).map(e=>({key:e.source+'|'+e.target,source:e.source,target:e.target,weight:e.weight}));
-  const nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight,kind:n.kind||'cdr',x:n.x,y:n.y}));
+  const nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight,kind:n.kind||'cdr'}));
   if(!nodes.length){D.graphStats.textContent='No connections'+(subject?' for this subject':'')+'.';return;}
   const moreEdges=(payload.total_edges||links.length)-(payload.shown_edges||links.length);
   D.graphStats.textContent=`${nodes.length} nodes, ${links.length} links`+(moreEdges>0?` (top ${links.length} of ${payload.total_edges})`:'')+(payload.total_nodes?` · ${payload.total_nodes} nodes total`:'');
