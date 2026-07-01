@@ -3,6 +3,7 @@ import { SERVICE_DB, IP_RANGES, ISP_PROVIDERS, KNOWN_IP_HINTS, HOSTING_PROVIDERS
 import { $, D } from './core/dom.js';
 import { state } from './core/state.js';
 import { API } from './core/api.js';
+import { wireDelegation } from './core/events.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -7225,5 +7226,6 @@ Object.assign(window, {
   _recGoto, showGanttTip, scheduleHideGanttTip,
 });
 
+wireDelegation();  // central data-act delegation (dormant until features register actions)
 if(!D.loginUser.value)D.loginUser.value='admin';
 checkAuth();
