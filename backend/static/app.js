@@ -2067,9 +2067,12 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
   const onMove=ev=>{
     if(!dragNode)return;
     const rc=canvas.getBoundingClientRect();
-    dragNode.fx=(ev.clientX-rc.left-transform.x)/transform.k;
-    dragNode.fy=(ev.clientY-rc.top-transform.y)/transform.k;
-    dragNode._moved=true;draw();
+    const nx=(ev.clientX-rc.left-transform.x)/transform.k, ny=(ev.clientY-rc.top-transform.y)/transform.k;
+    // Set x/y directly (not just fx/fy): draw() reads x, and fx only propagates to x on a sim tick —
+    // so once the sim settles and stops ticking, fx alone wouldn't move the node. Setting both makes
+    // the grabbed node follow the cursor immediately whether or not the sim is currently running.
+    dragNode.fx=dragNode.x=nx; dragNode.fy=dragNode.y=ny;
+    dragNode._moved=true; draw();
   };
   const onUp=()=>{
     if(!dragNode)return;
