@@ -2008,7 +2008,7 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
   // Pick the node under a canvas point (screen coords), accounting for the current zoom/pan.
   const nodeAt=(mx,my)=>{
     const x=(mx-transform.x)/transform.k,y=(my-transform.y)/transform.k;let best=null,bd=1e18;
-    for(const d of nodes){const dx=d.x-x,dy=d.y-y,dist=dx*dx+dy*dy,r=nodeR(d)+4;if(dist<r*r&&dist<bd){bd=dist;best=d;}}
+    for(const d of nodes){const dx=d.x-x,dy=d.y-y,dist=dx*dx+dy*dy,r=nodeR(d)+6/transform.k;if(dist<r*r&&dist<bd){bd=dist;best=d;}}
     return best;
   };
   // Pure client-side canvas layout — the browser runs the force simulation and draws to canvas
@@ -2018,6 +2018,10 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
   // big graph repulsion range is capped (distanceMax) with a coarser Barnes-Hut theta, collision is
   // skipped, and the cooldown is faster, so even tens of thousands of nodes settle and stay draggable.
   const N=nodes.length, BIG=N>2500;
+  let _userInteracted=false;  // gates the one-time fit-to-view (any user pan/zoom/drag disables it)
+  // Seed positions in a viewport-centred spiral so the layout starts already spread out — d3's
+  // default drops every node near the origin, which reads as "collapsed for a second then jumps".
+  nodes.forEach((d,i)=>{if(d.x==null){const a=i*2.399963,r=Math.sqrt((i+1)/N)*Math.min(w,h)*0.45;d.x=w/2+r*Math.cos(a);d.y=h/2+r*Math.sin(a);}});
   const sim=d3.forceSimulation(nodes)
     .force('link',d3.forceLink(links).id(d=>d.id).distance(BIG?40:60))
     .force('charge',d3.forceManyBody().strength(BIG?-45:-90).theta(0.9).distanceMax(BIG?350:Infinity))
@@ -2033,8 +2037,20 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
       if(ev.type==='mousedown'){const rc=canvas.getBoundingClientRect();return !nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);}
       return !ev.button;
     })
+    .on('start',e=>{if(e.sourceEvent)_userInteracted=true;})  // a real user gesture cancels auto-fit
     .on('zoom',e=>{transform=e.transform;draw();});
   d3.select(canvas).call(zoom);
+  // Frame the whole graph in the viewport once it settles (unless the user already moved the view),
+  // so "fully rendered" means neatly fit — not a hairball parked off-centre at k=1.
+  function fitView(){
+    if(!nodes.length)return;
+    let a=Infinity,b=Infinity,c=-Infinity,e=-Infinity;
+    for(const d of nodes){if(d.x<a)a=d.x;if(d.y<b)b=d.y;if(d.x>c)c=d.x;if(d.y>e)e=d.y;}
+    const gw=Math.max(1,c-a),gh=Math.max(1,e-b),pad=40;
+    const k=Math.min(8,Math.max(0.05,Math.min((w-2*pad)/gw,(h-2*pad)/gh)));
+    d3.select(canvas).call(zoom.transform,d3.zoomIdentity.translate(w/2-k*(a+c)/2,h/2-k*(b+e)/2).scale(k));
+  }
+  sim.on('end',()=>{if(!_userInteracted)fitView();});
   // Hand-rolled per-node drag: pick with nodeAt, move via fx/fy while the sim is reheated so
   // neighbours trail along, then release on mouseup. Window-level move/up handlers are torn down on
   // every render (via _gCanvasDragCleanup) so they never accumulate across graph reloads.
@@ -2043,8 +2059,9 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
   const onDown=ev=>{
     const rc=canvas.getBoundingClientRect();const d=nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);
     if(!d)return;
-    dragNode=d;d._moved=false;
-    sim.alphaTarget(0.25).restart();
+    dragNode=d;d._moved=false;_userInteracted=true;
+    // reheat assertively so neighbours visibly follow — a weak reheat makes the graph feel frozen
+    sim.alpha(Math.max(sim.alpha(),0.5)).alphaTarget(0.3).restart();
     d.fx=d.x;d.fy=d.y;canvas.style.cursor='grabbing';ev.preventDefault();
   };
   const onMove=ev=>{
