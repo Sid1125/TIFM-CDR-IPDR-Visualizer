@@ -1,0 +1,6 @@
+// core/api.js — the base HTTP client for the FastAPI backend: same-origin fetch, 401 -> AuthError,
+// and JSON get/post/put/del/upload helpers. Extracted verbatim from app.js (step 5 of the frontend
+// modularization). Domain-specific wrappers (GraphAPI, RecordAPI, AnalysisAPI, …) will be added
+// here and adopted at call sites as each feature module is extracted. No behavior change.
+
+export const API={async req(p,o){const r=await fetch(p,{credentials:'same-origin',...o,headers:{...((o&&o.headers)||{})}});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||r.status);return r.status===204?null:r.json()},get(p){return this.req(p)},post(p,b){return this.req(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},put(p,b){return this.req(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},del(p){return this.req(p,{method:'DELETE'})},async upload(p,f){const fd=new FormData();fd.append('file',f);const r=await fetch(p,{credentials:'same-origin',method:'POST',body:fd});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||'Upload failed');return r.json()}};

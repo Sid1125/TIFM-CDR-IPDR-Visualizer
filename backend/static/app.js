@@ -2,6 +2,7 @@ import { esc, fmt, fmts, fmtd, fmtBytes, colWidth, n, debounce, renderMd } from 
 import { SERVICE_DB, IP_RANGES, ISP_PROVIDERS, KNOWN_IP_HINTS, HOSTING_PROVIDERS, PRIVATE_LABEL, DISTINCTIVE_INDICATORS, EPHEMERAL_MIN, PORT_SVC, PORT_FAMILY, FAMILY_GAP } from './core/constants.js';
 import { $, D } from './core/dom.js';
 import { state } from './core/state.js';
+import { API } from './core/api.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -188,7 +189,7 @@ async function _bgLoadAll(total,caseId,gen){
     if(banner){banner.textContent='Warning: only '+n(state.data.records.length)+' of '+n(total)+' records loaded.';setTimeout(()=>{if(banner)banner.style.display='none';},5000);}
   }
 }
-const API={async req(p,o){const r=await fetch(p,{credentials:'same-origin',...o,headers:{...((o&&o.headers)||{})}});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||r.status);return r.status===204?null:r.json()},get(p){return this.req(p)},post(p,b){return this.req(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},put(p,b){return this.req(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})},del(p){return this.req(p,{method:'DELETE'})},async upload(p,f){const fd=new FormData();fd.append('file',f);const r=await fetch(p,{credentials:'same-origin',method:'POST',body:fd});if(r.status===401){const e=new Error(await r.text()||'Auth required');e.name='AuthError';throw e}if(!r.ok)throw new Error(await r.text()||'Upload failed');return r.json()}};
+// API client now lives in core/api.js (imported above)
 
 // ====== DOM REFS ====== ($ and D now live in core/dom.js, imported above)
 
