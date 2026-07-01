@@ -56,6 +56,28 @@ from app.models import hypothesis  # noqa: F401
 
 from fastapi.middleware.gzip import GZipMiddleware
 
+import asyncio
+import logging
+
+
+class _SuppressShutdownCancellation(logging.Filter):
+    """Silence uvicorn's 'Exception in ASGI application' tracebacks that are really just in-flight
+    requests being cancelled during a normal server shutdown (Ctrl+C / auto-reload). On Python 3.14
+    the asyncio/anyio cancellation chain is logged in full for every aborted request, so a clean exit
+    prints a wall of red. A genuine handler error (KeyError, ValueError, ...) is unaffected — only
+    records whose exception chain is purely a CancelledError / KeyboardInterrupt are dropped."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Only drop records whose *primary* exception is a cancellation/interrupt — that's the
+        # shutdown noise. A real handler error keeps its record even if a CancelledError happens to
+        # sit in its __context__ (e.g. an error raised while a request was being cancelled).
+        info = record.exc_info
+        exc = info[1] if isinstance(info, tuple) and len(info) > 1 else None
+        return not isinstance(exc, (asyncio.CancelledError, KeyboardInterrupt))
+
+
+logging.getLogger("uvicorn.error").addFilter(_SuppressShutdownCancellation())
+
 app = FastAPI(title=settings.APP_NAME)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
