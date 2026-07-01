@@ -12,4 +12,7 @@ export const state={
 
   // grouped namespaces for folded-in loose globals (populated in steps 4.1+)
   data:{caseId:null,records:[],rowIdx:new Map(),ownedRowIdx:new Map(),geoRecords:[],geoSubjects:[]},
+  // tab render tracking (was _renderGen/_tabRendered): gen bumps per case load; a tab re-renders
+  // only when its recorded gen is stale.
+  render:{gen:0,rendered:{}},
 };

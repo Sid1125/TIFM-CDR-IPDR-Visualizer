@@ -4,6 +4,7 @@ import { $, D } from './core/dom.js';
 import { state } from './core/state.js';
 import { API } from './core/api.js';
 import { wireDelegation } from './core/events.js';
+import { switchTab, registerTab, tabNeedsRender, tabMarkRendered } from './core/router.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -97,12 +98,8 @@ const _W = {
 // _cd: chart data fetched lazily from /analysis/chart-data
 // _totalCdr/_totalIpdr: true record counts (not bounded by the 500-row state.data.records sample)
 
-let _renderGen=0;            // increments on every loadCaseData; used to detect stale tabs
-const _tabRendered={};       // {tabKey: _renderGen} — set only on SUCCESSFUL render
-// Returns true if this tab needs a (re)render for the current case load.
-// Unlike the old _tabDirty, this does NOT pre-mark: callers set _tabRendered[tab]=_renderGen on success.
-function _tabNeedsRender(tab){return _tabRendered[tab]!==_renderGen;}
-function _tabMarkRendered(tab){_tabRendered[tab]=_renderGen;}
+// tab render tracking + switchTab now live in core/router.js (imported above); the gen/rendered
+// counters are on state.render.
 // Helper: true CDR/IPDR totals (server stats when available, fallback to sample length)
 function _totalCdrFn(){return(state._cdrStats&&state._cdrStats.total_records)||state.cdr.length||0;}
 function _totalIpdrFn(){return(state._ipdrStats&&state._ipdrStats.total_records)||state.ipdr.length||0;}
@@ -353,7 +350,7 @@ function setActiveCase(id){
 }
 async function loadCaseData(){
   // Bump render generation: tabs will know their cached render is stale.
-  _renderGen++;Object.keys(_tabRendered).forEach(k=>delete _tabRendered[k]);
+  state.render.gen++;Object.keys(state.render.rendered).forEach(k=>delete state.render.rendered[k]);
   state._cd=null;  // chart data needs re-fetch
   invalidateAiCache();state.state.data.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
   try{
@@ -398,7 +395,7 @@ async function loadCaseData(){
     renderDashboard();
     renderRecords();
     // Kick off background full-load BEFORE rendering charts so all features get complete data
-    const curGen=_renderGen;
+    const curGen=state.render.gen;
     _bgLoadGen=curGen;
     if(page1.total>state.data.records.length)_bgLoadAll(page1.total,state.data.caseId||'',curGen);
     renderCharts();    // async, server-side; will retry on tab switch if it fails
@@ -1196,33 +1193,28 @@ function rowsFor(sub){if(!sub)return state.data.records;return state.data.rowIdx
 function ownedRowsFor(sub){if(!sub)return state.data.records;return state.data.ownedRowIdx.get(sub)||[];}
 
 // ====== TAB SWITCHING ======
-function switchTab(tab){
-  state.tab=tab;
-  document.querySelectorAll('.topbar-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  document.querySelectorAll('.tab-content').forEach(s=>s.classList.toggle('active',s.id==='tab-'+tab));
-  // Reflect the active tab onto its parent dropdown group, and close any open menus.
-  document.querySelectorAll('.nav-group').forEach(g=>{g.classList.toggle('group-active',[...g.querySelectorAll('.topbar-tab')].some(b=>b.dataset.tab===tab));g.classList.remove('open');});
-  document.querySelectorAll('.user-menu.open').forEach(m=>m.classList.remove('open'));
-  if(tab==='dashboard')renderDashboard();
-  if(tab==='graph')renderGraph();
-  if(tab==='map')initMap();
-  if(tab==='timeline')renderTimeline();
-  if(tab==='charts')renderCharts();
-  if(tab==='services')renderServicesTab();
-  if(tab==='correlation')renderCorrelationTab();
-  if(tab==='story')renderStory();
-  if(tab==='evidence')renderEvidenceTab();
-  if(tab==='crosscase'){xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();}
-  if(tab==='inferences')renderInferences();
-  if(tab==='records')renderRecords();
-  if(tab==='analysisreports')renderAnalysisReports();
-  if(tab==='groupcompare')renderGroupCompare();
-  if(tab==='towerdump')renderTowerDump();
-  if(tab==='laws')renderLaws();
-  if(tab==='towerrepo')renderTowerRepo();
-  if(tab==='ai')renderAiInsights();
-  if(tab==='admin')renderAdmin();
-}
+// Register each tab's render fn with the router (switchTab dispatches through this). As features
+// move to their own modules, each registration moves with them. Function decls are hoisted, so
+// referencing them here (before their definitions below) is fine.
+registerTab('dashboard',renderDashboard);
+registerTab('graph',renderGraph);
+registerTab('map',initMap);
+registerTab('timeline',renderTimeline);
+registerTab('charts',renderCharts);
+registerTab('services',renderServicesTab);
+registerTab('correlation',renderCorrelationTab);
+registerTab('story',renderStory);
+registerTab('evidence',renderEvidenceTab);
+registerTab('crosscase',()=>{xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();});
+registerTab('inferences',renderInferences);
+registerTab('records',renderRecords);
+registerTab('analysisreports',renderAnalysisReports);
+registerTab('groupcompare',renderGroupCompare);
+registerTab('towerdump',renderTowerDump);
+registerTab('laws',renderLaws);
+registerTab('towerrepo',renderTowerRepo);
+registerTab('ai',renderAiInsights);
+registerTab('admin',renderAdmin);
 document.querySelectorAll('.topbar-tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
 // Topbar dropdown menus (grouped nav + user menu): click to toggle, click-out to close.
@@ -3538,7 +3530,7 @@ D.tlCompare.addEventListener('change',renderTimeline);
 
 // ====== 5. CHARTS ======
 async function renderCharts(){
-  if(!_tabNeedsRender('charts'))return;
+  if(!tabNeedsRender('charts'))return;
   const qp=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';
   try{
     const mat=await API.get('/analytics/dashboard'+qp).catch(()=>null);
@@ -3565,7 +3557,7 @@ async function renderCharts(){
   try{renderChartGeoState()}catch(e){console.error('geoState',e)}
   try{renderChartTowerDiversity()}catch(e){console.error('towerDiversity',e)}
   try{installChartCaptureButtons()}catch(e){}
-  _tabMarkRendered('charts');  // only reached on success — failed renders stay retryable
+  tabMarkRendered('charts');  // only reached on success — failed renders stay retryable
 }
 
 // ===== Behavioural & investigative charts (server-side data from state._cd) =====
@@ -4252,10 +4244,10 @@ function renderAiInsights(){
     document.getElementById('aiBody')&&(document.getElementById('aiBody').innerHTML='<p style="color:var(--muted);text-align:center;padding:20px">No data loaded. Upload CDR/IPDR files first.</p>');
     return;
   }
-  if(!_tabNeedsRender('ai'))return;
+  if(!tabNeedsRender('ai'))return;
   state.scenario=document.getElementById('scenarioTag')?.value||'adhoc';
   // Do NOT call invalidateAiCache() here — cache is populated lazily and only cleared on
-  // case load (_renderGen change). Clearing on every tab switch re-scans 50k rows each time.
+  // case load (state.render.gen change). Clearing on every tab switch re-scans 50k rows each time.
   buildCaseSummary(); // SECTION A: Why This Case Matters
   buildCaseOverview();
   buildAIFindings();
@@ -4266,7 +4258,7 @@ function renderAiInsights(){
   initContextChips();
   switchAiTab('overview');
   initAiTabs();
-  _tabMarkRendered('ai');
+  tabMarkRendered('ai');
 }
 function switchAiTab(tab){
   document.querySelectorAll('.ai-tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.aiPanel===tab));
@@ -6994,16 +6986,16 @@ function _arRenderIpdr(ir,total,sub){
   ].join('');
   if(meta)meta.textContent=(total||0)+' IPDR records for this subject';
   _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
-  _tabMarkRendered('analysisreports');
+  tabMarkRendered('analysisreports');
 }
 
 async function renderAnalysisReports(){
-  if(!_tabNeedsRender('analysisreports'))return;
+  if(!tabNeedsRender('analysisreports'))return;
   const sel=document.getElementById('arSubject'),body=document.getElementById('arBody'),meta=document.getElementById('arMeta');
   if(!sel||!body)return;
   const subs=state._ownedSubjects.length?state._ownedSubjects:(state.subjects.filter(Boolean));
   if(!subs.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Load a case to run analysis reports.</span></div>';sel.innerHTML='';if(meta)meta.textContent='';return;}
-  if(!sel._wired){sel._wired=true;sel.addEventListener('change',()=>{delete _tabRendered['analysisreports'];renderAnalysisReports();});}
+  if(!sel._wired){sel._wired=true;sel.addEventListener('change',()=>{delete state.render.rendered['analysisreports'];renderAnalysisReports();});}
   // Build the (potentially huge) subject <select> ONCE per dataset, not on every render/change —
   // rebuilding it each time (with a tag lookup per option) was a big part of this tab's lag.
   const sig=subs.length+'|'+(subs[0]||'')+'|'+(subs[subs.length-1]||'');
@@ -7042,7 +7034,7 @@ async function renderAnalysisReports(){
       }
       body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No CDR or IPDR records found for <b>'+esc(sub)+'</b>.</span></div>';
       if(meta)meta.textContent='0 records';
-      _tabMarkRendered('analysisreports');
+      tabMarkRendered('analysisreports');
       return;
     }
     const reps=data.reports||{};
@@ -7063,7 +7055,7 @@ async function renderAnalysisReports(){
     ].join('');
     if(meta)meta.textContent=(data.total_records||0)+' records for this subject';
     _wireExports(body,_arReports,'ar-exp','ARGUS_'+sub);
-    _tabMarkRendered('analysisreports');  // only on success; subject change clears this
+    tabMarkRendered('analysisreports');  // only on success; subject change clears this
   }catch(e){
     console.error('renderAnalysisReports:',e);
     body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">✖</span><span class="ar-empty-txt">Failed to load analysis reports.</span></div>';
