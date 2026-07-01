@@ -1920,6 +1920,8 @@ D.cpCloseBtn.addEventListener('click',()=>{D.cpResults.style.display='none';D.cp
 
 // ====== 2. NETWORK GRAPH (D3) ======
 let curGraphNodes=null,curGraphLinks=null,curGraphSim=null,curCentrality=null;
+// Cleanup for the canvas graph's window-level drag listeners, so they never stack across reloads.
+let _gCanvasDragCleanup=null;
 // Network Intelligence sidebar panel — surfaces the server's full-graph centrality leaderboards
 // (PageRank, betweenness, degree, closeness) so the new metrics are visible, not just node weight.
 async function renderNetworkIntel(){
@@ -1956,8 +1958,8 @@ async function renderNetworkIntel(){
 // Phase 2c — Canvas force-graph for large networks. SVG (renderGraph below) gives nice per-node
 // interactions but bogs down past ~1-2k DOM nodes; above GRAPH_CANVAS_MIN we render to a single
 // <canvas> instead (D3 drives the layout, canvas draws), which scales to many thousands of nodes.
-// Zoom/pan, hover, click-to-profile and search-highlight are kept; per-node drag is dropped (it's
-// the costly part at scale and the least useful on a dense graph).
+// Zoom/pan, hover, click-to-profile, search-highlight AND per-node drag are all kept — the drag is
+// hand-rolled (canvas has no per-node DOM) so a dense graph stays interactive after it settles.
 const GRAPH_CANVAS_MIN=700;
 
 function _renderGraphCanvas(nodes,links,subject,w,h){
@@ -1999,12 +2001,20 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
     }
     ctx.restore();
   }
+  // Pick the node under a canvas point (screen coords), accounting for the current zoom/pan.
+  const nodeAt=(mx,my)=>{
+    const x=(mx-transform.x)/transform.k,y=(my-transform.y)/transform.k;let best=null,bd=1e18;
+    for(const d of nodes){const dx=d.x-x,dy=d.y-y,dist=dx*dx+dy*dy,r=nodeR(d)+4;if(dist<r*r&&dist<bd){bd=dist;best=d;}}
+    return best;
+  };
   // Server-computed layout (Phase 2): if the nodes arrived with x/y, scale them into the viewport
-  // and pin them (fx/fy) so the browser just draws the precomputed positions — no client force run.
+  // and SEED the simulation with them — but do NOT pin (fx/fy) or stop the sim. The seed is already
+  // a good near-final layout, so a gentle cool-down barely moves it, yet the graph stays fully
+  // interactive: nodes can be dragged and neighbours follow, like the client-side canvas did before.
   const _serverPos=nodes.length&&nodes[0].x!=null&&nodes[0].y!=null;
   if(_serverPos){
     const pad=50;
-    nodes.forEach(d=>{d.x=pad+(d.x/1000)*(w-2*pad);d.y=pad+(d.y/1000)*(h-2*pad);d.fx=d.x;d.fy=d.y;});
+    nodes.forEach(d=>{d.x=pad+(d.x/1000)*(w-2*pad);d.y=pad+(d.y/1000)*(h-2*pad);});
   }
   const sim=d3.forceSimulation(nodes)
     .force('link',d3.forceLink(links).id(d=>d.id).distance(60))
@@ -2012,22 +2022,54 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
     .force('center',_serverPos?null:d3.forceCenter(w/2,h/2))
     .force('collision',_serverPos?null:d3.forceCollide(8))
     .on('tick',draw);
-  if(_serverPos){sim.stop();draw();}  // static — positions are authoritative
+  // Seeded start: low alpha so it settles from the server layout in a beat, then rests (d3 stops
+  // ticking once alpha < alphaMin, so idle CPU is zero). A drag reheats it. Cold start otherwise.
+  if(_serverPos)sim.alpha(0.15).alphaDecay(0.06);
   curGraphNodes=nodes;curGraphLinks=links;curGraphSim=sim;
-  const zoom=d3.zoom().scaleExtent([0.05,8]).on('zoom',e=>{transform=e.transform;draw();});
+  const zoom=d3.zoom().scaleExtent([0.05,8])
+    // A press that lands on a node starts a node-drag; empty-space press + wheel still pan/zoom.
+    .filter(ev=>{
+      if(ev.type==='mousedown'){const rc=canvas.getBoundingClientRect();return !nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);}
+      return !ev.button;
+    })
+    .on('zoom',e=>{transform=e.transform;draw();});
   d3.select(canvas).call(zoom);
-  const nodeAt=(mx,my)=>{
-    const x=(mx-transform.x)/transform.k,y=(my-transform.y)/transform.k;let best=null,bd=1e18;
-    for(const d of nodes){const dx=d.x-x,dy=d.y-y,dist=dx*dx+dy*dy,r=nodeR(d)+4;if(dist<r*r&&dist<bd){bd=dist;best=d;}}
-    return best;
+  // Hand-rolled per-node drag: pick with nodeAt, move via fx/fy while the sim is reheated so
+  // neighbours trail along, then release on mouseup. Window-level move/up handlers are torn down on
+  // every render (via _gCanvasDragCleanup) so they never accumulate across graph reloads.
+  _gCanvasDragCleanup&&_gCanvasDragCleanup();
+  let dragNode=null;
+  const onDown=ev=>{
+    const rc=canvas.getBoundingClientRect();const d=nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);
+    if(!d)return;
+    dragNode=d;d._moved=false;
+    sim.alphaTarget(0.25).restart();
+    d.fx=d.x;d.fy=d.y;canvas.style.cursor='grabbing';ev.preventDefault();
   };
+  const onMove=ev=>{
+    if(!dragNode)return;
+    const rc=canvas.getBoundingClientRect();
+    dragNode.fx=(ev.clientX-rc.left-transform.x)/transform.k;
+    dragNode.fy=(ev.clientY-rc.top-transform.y)/transform.k;
+    dragNode._moved=true;draw();
+  };
+  const onUp=()=>{
+    if(!dragNode)return;
+    sim.alphaTarget(0);
+    // release the pin so forces relax around the dropped node; if it wasn't really moved, treat the
+    // gesture as a click and open the profile.
+    const d=dragNode;d.fx=null;d.fy=null;dragNode=null;canvas.style.cursor='grab';
+    if(!d._moved)showProfile(d.id);
+  };
+  canvas.addEventListener('mousedown',onDown);
+  window.addEventListener('mousemove',onMove);
+  window.addEventListener('mouseup',onUp);
+  _gCanvasDragCleanup=()=>{window.removeEventListener('mousemove',onMove);window.removeEventListener('mouseup',onUp);_gCanvasDragCleanup=null;};
   canvas.addEventListener('mousemove',ev=>{
+    if(dragNode)return;  // don't fight the drag cursor/hover while dragging
     const rc=canvas.getBoundingClientRect();const d=nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);
     canvas.style.cursor=d?'pointer':'grab';
     if(d)D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>Total weight: ${d.weight}<br><button class="btn btn-sm" onclick="showSubjectRecords('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">View Records</button>`;
-  });
-  canvas.addEventListener('click',ev=>{
-    const rc=canvas.getBoundingClientRect();const d=nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);if(d)showProfile(d.id);
   });
   D.graphSearch._handler&&D.graphSearch.removeEventListener('input',D.graphSearch._handler);
   D.graphSearch._handler=()=>{hl=D.graphSearch.value.trim().toLowerCase();draw();};
