@@ -5,6 +5,7 @@ import { state } from './core/state.js';
 import { API } from './core/api.js';
 import { wireDelegation } from './core/events.js';
 import { switchTab, registerTab, tabNeedsRender, tabMarkRendered } from './core/router.js';
+import { checkAuth, resetIdle, startHealthCheck, initAuth, onAuthenticated } from './core/auth.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -203,44 +204,9 @@ async function _bgLoadAll(total,caseId,gen){
   });
 })();
 
-// ====== AUTH ======
-async function checkAuth(){
-  try{const me=await API.get('/auth/me');state.auth.user=me.user;state.auth.session=me.session;state.auth.status='authenticated';renderAuth();bootstrap()}catch(e){state.auth.status='anonymous';renderAuth()}
-}
-function renderAuth(){
-  const ok=state.auth.status==='authenticated';
-  D.shell.style.display=ok?'block':'none';D.auth.style.display=ok?'none':'flex';
-  D.sessionUser.textContent=ok?state.auth.user.username+` (${state.auth.user.role})`:'Signed out';
-  {const av=document.getElementById('userAvatar');if(av)av.textContent=ok&&state.auth.user.username?state.auth.user.username[0]:'?';}
-  D.adminTabBtn.style.display=ok&&state.auth.user.role==='admin'?'':'none';
-  if(ok){resetIdle();D.sessionStatus.style.display=''}else{D.sessionStatus.style.display='none';idleTimer&&clearTimeout(idleTimer);idleWarnTimer&&clearTimeout(idleWarnTimer);healthTimer&&clearInterval(healthTimer)}
-}
-D.loginForm.addEventListener('submit',async e=>{e.preventDefault();try{const r=await API.post('/auth/login',{username:D.loginUser.value.trim(),password:D.loginPass.value});state.auth.user=r.user;state.auth.session=r.session;state.auth.status='authenticated';renderAuth();bootstrap()}catch(err){D.loginStatus.textContent='Invalid credentials'}});
-D.logoutBtn.addEventListener('click',async()=>{await doLogout()});
-
-// ====== SESSION & AFK MANAGEMENT ======
-let idleTimer=null,idleWarnTimer=null,idleWarnTimer2=null,healthTimer=null;
-const AFK_MS=10*60*1000,IDLE_MS=2*60*1000,WARN_MS=60*1000,HEALTH_MS=5*60*1000;
-
-function resetIdle(){
-  if(state.auth.status!=='authenticated')return;
-  if(idleTimer)clearTimeout(idleTimer);
-  if(idleWarnTimer)clearTimeout(idleWarnTimer);
-  if(idleWarnTimer2)clearTimeout(idleWarnTimer2);
-  D.sessionStatus.textContent='Active';D.sessionStatus.className='sess-active';
-  idleWarnTimer=setTimeout(()=>{if(state.auth.status==='authenticated'){D.sessionStatus.textContent='Idle';D.sessionStatus.className='sess-idle'}},IDLE_MS);
-  idleWarnTimer2=setTimeout(()=>{if(state.auth.status==='authenticated'){D.sessionStatus.textContent='Expiring soon';D.sessionStatus.className='sess-warn'}},AFK_MS-WARN_MS);
-  idleTimer=setTimeout(doLogout,AFK_MS);
-}
-
-async function doLogout(){
-  idleTimer&&clearTimeout(idleTimer);idleWarnTimer&&clearTimeout(idleWarnTimer);idleWarnTimer2&&clearTimeout(idleWarnTimer2);healthTimer&&clearInterval(healthTimer);
-  D.sessionStatus.textContent='Expired';D.sessionStatus.className='sess-expired';
-  try{await fetch('/auth/logout',{method:'POST',credentials:'same-origin'})}catch(e){}
-  state.auth={status:'anonymous',user:null,session:null};renderAuth();
-}
-
-['mousemove','mousedown','click','keydown','scroll','touchstart','touchmove','wheel'].forEach(e=>document.addEventListener(e,resetIdle,{passive:true}));
+// ====== AUTH ====== (checkAuth/renderAuth/resetIdle/doLogout + session/AFK mgmt -> core/auth.js)
+onAuthenticated(bootstrap);  // checkAuth/login run bootstrap on success (bootstrap is hoisted below)
+initAuth();                  // wire login form, logout button, and idle-activity listeners
 
 // ====== HELPERS ======
 function updateChartTheme(){
@@ -7190,7 +7156,7 @@ async function bootstrap(){
   D.loginPass.value='';
   resetIdle();
   D.importStatus.textContent='Data loaded from previous session. Use Reset Case to start fresh.';
-  healthTimer=setInterval(async()=>{try{await API.get('/auth/me')}catch(e){doLogout()}},HEALTH_MS);
+  startHealthCheck();
 }
 
 async function resetCase(){
