@@ -3467,11 +3467,10 @@ function renderChartDayOfWeek(){
 }
 
 // ====== 6. RECORDS TABLE ======
-let annotationsMap={};
 function loadAnnotations(){
   API.get('/annotations/').then(list=>{
-    annotationsMap={};
-    list.forEach(a=>{annotationsMap[a.record_type+'_'+a.record_id]=a});
+    state.data.annotations={};
+    list.forEach(a=>{state.data.annotations[a.record_type+'_'+a.record_id]=a});
     renderRecTable();
   }).catch(()=>{});
 }
@@ -3494,15 +3493,15 @@ function toggleAnnot(r){
   const key=r.type+'_'+numId;
   // Repaint just this row's star in place — re-rendering the whole table here would reset
   // the paged view back to the first page.
-  const paint=()=>{const cell=D.recBody.querySelector('.annot-cell[data-annot="'+key+'"]');if(cell)cell.innerHTML=annotationsMap[key]?'&#9733;':'&#9734;';};
-  if(annotationsMap[key]){
-    API.del('/annotations/'+annotationsMap[key].id).then(()=>{
-      delete annotationsMap[key];paint();
+  const paint=()=>{const cell=D.recBody.querySelector('.annot-cell[data-annot="'+key+'"]');if(cell)cell.innerHTML=state.data.annotations[key]?'&#9733;':'&#9734;';};
+  if(state.data.annotations[key]){
+    API.del('/annotations/'+state.data.annotations[key].id).then(()=>{
+      delete state.data.annotations[key];paint();
       unpinEvidenceBySig('record|'+r.type+'|'+numId);
     }).catch(()=>{});
   }else{
     API.post('/annotations/',{record_type:r.type,record_id:numId,tag:'flagged',note:''}).then(a=>{
-      annotationsMap[key]=a;paint();
+      state.data.annotations[key]=a;paint();
       pinEvidence(_recordEvidence(r,numId));
       try{toast('Record added to evidence.');}catch(e){}
     }).catch(e=>{console.error('annotation failed',e);});
@@ -3527,7 +3526,7 @@ function recRowHtml(r){
   const wSub=colWidth(r.sub),wCnt=colWidth(r.cnt);
   const svcAttr=cdr?'':esc(recordSvcAttr(r));
   return `<tr onclick="showProfile('${esc(r.sub)}')" style="cursor:pointer">
-      <td class="annot-cell" data-annot="${r.type+'_'+parseInt(r.id.slice(1))}" style="text-align:center;cursor:pointer;font-size:0.85rem" onclick="event.stopPropagation();toggleAnnot({id:'${r.id}',type:'${r.type}'})">${annotationsMap[r.type+'_'+parseInt(r.id.slice(1))]?'&#9733;':'&#9734;'}</td>
+      <td class="annot-cell" data-annot="${r.type+'_'+parseInt(r.id.slice(1))}" style="text-align:center;cursor:pointer;font-size:0.85rem" onclick="event.stopPropagation();toggleAnnot({id:'${r.id}',type:'${r.type}'})">${state.data.annotations[r.type+'_'+parseInt(r.id.slice(1))]?'&#9733;':'&#9734;'}</td>
       <td>${fmt(r.ts)}</td>
       <td><span class="tag${cdr?'':' tag-alt'}">${r.type}</span></td>
       <td style="min-width:${wSub}px;max-width:${wSub}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(subjLabelTxt(r.sub))}">${isSuspect(r.sub)?'<span class="susp-dot" title="In a suspect group">&#9678;</span> ':''}${r.sub?subjLabel(r.sub):''}</td>
