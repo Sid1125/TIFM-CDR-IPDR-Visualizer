@@ -6,6 +6,8 @@ import { API } from './core/api.js';
 import { wireDelegation } from './core/events.js';
 import { switchTab, registerTab, tabNeedsRender, tabMarkRendered } from './core/router.js';
 import { checkAuth, resetIdle, startHealthCheck, initAuth, onAuthenticated } from './core/auth.js';
+import { subjTag, subjLabel, subjLabelTxt, isSuspect } from './core/subjects.js';
+import { toast } from './ui/toast.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -219,9 +221,7 @@ function updateChartTheme(){
 // ====== SUBJECT INTEL TAGS ======
 // Global-by-identifier tags loaded into state.subjectTags={subject:tag}. These helpers append the
 // tag in brackets wherever a subject is shown, so outside intel follows the number/IP everywhere.
-function subjTag(sub){return (sub!=null&&state.subjectTags[sub])||''}
-function subjLabel(sub){const t=subjTag(sub);return esc(sub)+(t?' <span class="subj-tag">('+esc(t)+')</span>':'')}
-function subjLabelTxt(sub){const t=subjTag(sub);return String(sub)+(t?' ('+t+')':'')}
+// (subjTag/subjLabel/subjLabelTxt/isSuspect now in core/subjects.js, imported above)
 async function loadSubjectTags(){
   try{const rows=await API.get('/subject-tags/');const m={};(rows||[]).forEach(r=>{if(r.subject)m[r.subject]=r.tag});state.subjectTags=m;}
   catch(e){state.subjectTags=state.subjectTags||{};}
@@ -265,7 +265,6 @@ async function loadSuspects(){
     state.suspects=v||[];state.suspectSet=new Set((v||[]).map(x=>String(x.value)));state.suspectGroups=g||[];}
   catch(e){state.suspects=[];state.suspectSet=new Set();state.suspectGroups=[];}
 }
-function isSuspect(v){return !!(v!=null&&state.suspectSet&&state.suspectSet.has(String(v)));}
 window.addToSuspectGroup=async function(value,kind){
   value=String(value==null?'':value).trim();if(!value)return;
   const def=state._lastGroup||((state.suspectGroups||[])[0]||{}).group_name||'Default';
@@ -2538,7 +2537,7 @@ function renderEvidence(){
 }
 
 // ---- Snapshot capture → evidence ----
-function toast(msg){let t=document.getElementById('argusToast');if(!t){t=document.createElement('div');t.id='argusToast';t.className='argus-toast';document.body.appendChild(t);}t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
+// toast now in ui/toast.js (imported above)
 function _flashPinned(msg){updateEvidenceCount();renderEvidence();toast(msg||'Pinned to evidence.');}
 function captureCanvasToEvidence(cv,title){
   try{if(!cv||cv.tagName!=='CANVAS'){alert('No chart to capture.');return;}
