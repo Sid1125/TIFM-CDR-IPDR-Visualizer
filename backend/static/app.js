@@ -353,7 +353,7 @@ async function loadCaseData(){
   // Bump render generation: tabs will know their cached render is stale.
   _renderGen++;Object.keys(_tabRendered).forEach(k=>delete _tabRendered[k]);
   state._cd=null;  // chart data needs re-fetch
-  invalidateAiCache();state.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
+  invalidateAiCache();state.state.data.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
   try{
     const qp=new URLSearchParams({limit:500});
     if(state.data.caseId)qp.set('case_id',state.data.caseId);
@@ -1469,7 +1469,7 @@ function renderDashboard(){
       if(!coords.length)return null;
       const poly=turf.polygon([coords]);
       let inside=0;
-      (geoRecords||[]).forEach(r=>{
+      (state.data.geoRecords||[]).forEach(r=>{
         if(r.latitude!=null&&r.longitude!=null&&turf.booleanPointInPolygon(turf.point([r.longitude,r.latitude]),poly))inside++;
       });
       return {l:'Geo-fenced Records',v:n(inside),d:'Within drawn geofence',cat:'warn'};
@@ -2093,7 +2093,7 @@ function initGraphSubjects(){
 // ====== 3. TOWER MAP (Leaflet) ======
 let mapInstance=null,mapLayers=[],mapMarkers=[],mapPolyline=null,mapCircles=[],mapTimeData=[],mapTimePlaying=false,geofenceDrawn=null,_towerHi=null;
 async function initMap(){
-  if(!state.geoRecords)await loadGeoData();
+  if(!state.state.data.geoRecords)await loadGeoData();
   if(!mapInstance){
     mapInstance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
@@ -2118,7 +2118,7 @@ async function showTower(towerId){
   state.tab='map';
   document.querySelectorAll('.topbar-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='map'));
   document.querySelectorAll('.tab-content').forEach(s=>s.classList.toggle('active',s.id==='tab-map'));
-  if(!state.geoRecords)await loadGeoData();
+  if(!state.state.data.geoRecords)await loadGeoData();
   if(!mapInstance){
     mapInstance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
@@ -2792,18 +2792,17 @@ if(D.trImportFile)D.trImportFile.addEventListener('change',async function(){
   finally{this.value='';}
 });
 
-let geoRecords=[],geoSubjects=[];
 async function loadGeoData(){
   const cq=state.data.caseId?'?case_id='+state.data.caseId:'';
-  try{const[recs,subs]=await Promise.all([API.get('/geo/records'+cq),API.get('/geo/subjects'+cq)]);geoRecords=recs;geoSubjects=subs;state.geoRecords=recs;populateMapSubjects()}catch(e){console.error(e)}
+  try{const[recs,subs]=await Promise.all([API.get('/geo/records'+cq),API.get('/geo/subjects'+cq)]);state.data.geoRecords=recs;state.data.geoSubjects=subs;state.state.data.geoRecords=recs;populateMapSubjects()}catch(e){console.error(e)}
 }
 function populateMapSubjects(){
   const dl=document.getElementById('mapSubjectList');
-  if(dl)dl.innerHTML=geoSubjects.map(s=>`<option value="${esc(s)}"></option>`).join('');
+  if(dl)dl.innerHTML=state.data.geoSubjects.map(s=>`<option value="${esc(s)}"></option>`).join('');
   const sel=document.getElementById('mapSubjectSelect');
   if(sel){const cur=sel.value;
-    sel.innerHTML='<option value="">All subjects ('+geoSubjects.length+')</option>'+geoSubjects.map(s=>`<option value="${esc(s)}">${esc(subjLabelTxt(s))}</option>`).join('');
-    if(geoSubjects.includes(cur))sel.value=cur;}
+    sel.innerHTML='<option value="">All subjects ('+state.data.geoSubjects.length+')</option>'+state.data.geoSubjects.map(s=>`<option value="${esc(s)}">${esc(subjLabelTxt(s))}</option>`).join('');
+    if(state.data.geoSubjects.includes(cur))sel.value=cur;}
 }
 function clearMap(){
   mapLayers.forEach(l=>mapInstance.removeLayer(l));mapMarkers.forEach(m=>mapInstance.removeLayer(m));mapCircles.forEach(c=>mapInstance.removeLayer(c));
@@ -2811,7 +2810,7 @@ function clearMap(){
   if(_towerHi){try{mapInstance.removeLayer(_towerHi)}catch(e){}_towerHi=null}
   mapLayers=[];mapMarkers=[];mapCircles=[];
 }
-function geoSub(sub){if(!sub)return geoRecords;return geoRecords.filter(r=>r.subject===sub||r.counterpart===sub||r.msisdn===sub)}
+function geoSub(sub){if(!sub)return state.data.geoRecords;return state.data.geoRecords.filter(r=>r.subject===sub||r.counterpart===sub||r.msisdn===sub)}
 function popupHtml(r){
   let h='<div style="min-width:140px;line-height:1.5;font-size:0.8rem">';
   h+=`<b>${esc(r.type)}</b><br>`;if(r.subject)h+=`<b>Subject:</b> ${esc(r.subject)}<br>`;if(r.counterpart)h+=`<b>Counterpart:</b> ${esc(r.counterpart)}<br>`;
@@ -2842,12 +2841,12 @@ function runMapMode(){
   else if(mode==='meetings')showMapMeetings(sub);
 }
 // Tower id -> coordinates. Primary source: state.towers (the Tower master table, always
-// has coordinates when a tower file was uploaded). Secondary: geoRecords for any CDR/IPDR
+// has coordinates when a tower file was uploaded). Secondary: state.data.geoRecords for any CDR/IPDR
 // records with direct lat/lon that aren't in the master yet.
 function towerCoords(){
   const m={};
   (state.towers||[]).forEach(t=>{if(t.tower_id&&t.latitude!=null&&t.longitude!=null)m[t.tower_id]={lat:t.latitude,lng:t.longitude};});
-  geoRecords.forEach(r=>{if(r.tower_id&&r.latitude!=null&&r.longitude!=null&&!m[r.tower_id])m[r.tower_id]={lat:r.latitude,lng:r.longitude};});
+  state.data.geoRecords.forEach(r=>{if(r.tower_id&&r.latitude!=null&&r.longitude!=null&&!m[r.tower_id])m[r.tower_id]={lat:r.latitude,lng:r.longitude};});
   return m;
 }
 async function showMapImpossible(sub){
@@ -2924,10 +2923,10 @@ D.mapGo.addEventListener('click',runMapMode);
 D.mapMode.addEventListener('change',runMapMode);
 D.mapSubject.addEventListener('change',()=>{if(D.mapSubject.value)runMapMode()});
 // Run immediately when a complete subject is typed or picked from the suggestions.
-D.mapSubject.addEventListener('input',()=>{const sel=document.getElementById('mapSubjectSelect');if(sel)sel.value=geoSubjects.includes(D.mapSubject.value)?D.mapSubject.value:'';if(geoSubjects.includes(D.mapSubject.value))runMapMode()});
+D.mapSubject.addEventListener('input',()=>{const sel=document.getElementById('mapSubjectSelect');if(sel)sel.value=state.data.geoSubjects.includes(D.mapSubject.value)?D.mapSubject.value:'';if(state.data.geoSubjects.includes(D.mapSubject.value))runMapMode()});
 // Dropdown: pick a subject -> mirror into the search box and run.
 (function(){const sel=document.getElementById('mapSubjectSelect');if(sel)sel.addEventListener('change',()=>{D.mapSubject.value=sel.value;runMapMode();});})();
-D.mapFit.addEventListener('click',()=>{const pts=[];geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})});
+D.mapFit.addEventListener('click',()=>{const pts=[];state.data.geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})});
 
 // -- Geofence --
 let geoFenceLayer=null,geoFenceDrawn=false,geoFenceDrawing=false,geoFenceDrawHandler=null,geoFenceMarkers=[];
@@ -2980,7 +2979,7 @@ function analyzeGeofence(){
   const coords=ring.map(p=>[p.lng,p.lat]);
   coords.push(coords[0]); // close the ring for turf
   const poly=turf.polygon([coords]);
-  const inside=(geoRecords||[]).filter(r=>r.latitude!=null&&r.longitude!=null&&turf.booleanPointInPolygon(turf.point([r.longitude,r.latitude]),poly));
+  const inside=(state.data.geoRecords||[]).filter(r=>r.latitude!=null&&r.longitude!=null&&turf.booleanPointInPolygon(turf.point([r.longitude,r.latitude]),poly));
   if(!inside.length){D.mapAnalysis.innerHTML='<h4 style="margin:0 0 6px">Geofence</h4><p style="color:var(--muted)">No records inside the drawn area.</p>';return;}
   // Group by subject (phone number where available), collect towers + time span.
   const bySub={},towers=new Set();let tMin=null,tMax=null;
@@ -3064,7 +3063,7 @@ function showMapPath(sub){
   // Owned records only: a CDR locates the caller, so plotting records where the subject
   // is the called counterpart would place them at the other party's tower (and can
   // fabricate impossible "jumps"). Mirrors the backend, which keys movement by msisdn.
-  clearMap();const rows=geoRecords.filter(r=>(r.msisdn===sub||r.subject===sub)&&r.latitude!=null&&r.longitude!=null);
+  clearMap();const rows=state.data.geoRecords.filter(r=>(r.msisdn===sub||r.subject===sub)&&r.latitude!=null&&r.longitude!=null);
   rows.sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   if(!rows.length){D.mapAnalysis.innerHTML='No geo records.';return}
   const coords=rows.map(r=>[r.latitude,r.longitude]);
@@ -3204,7 +3203,7 @@ function showMapZones(sub){
   D.mapAnalysis.innerHTML=h;
 }
 function showMapColocation(sub){
-  clearMap();const rows=geoRecords.filter(r=>r.latitude!=null&&r.longitude!=null);
+  clearMap();const rows=state.data.geoRecords.filter(r=>r.latitude!=null&&r.longitude!=null);
   if(!rows.length){D.mapAnalysis.innerHTML='No data.';return}
   const twrs={};rows.forEach(r=>{const k=r.tower_id||('p-'+r.latitude);if(!twrs[k])twrs[k]={lat:r.latitude,lng:r.longitude,subjects:new Set(),records:[]};twrs[k].subjects.add(r.subject);twrs[k].records.push(r)});
   const shared=Object.entries(twrs).filter(([k,v])=>v.subjects.size>1&&v.records.some(r=>r.subject===sub)).sort((a,b)=>b[1].records.length-a[1].records.length);
@@ -3333,7 +3332,7 @@ async function showMapMeetings(sub){
   else{h+='<h4 style="margin:8px 0 4px">Closest encounters</h4>';ms.slice(0,12).forEach(m=>{const c=m.gap_min<5?'#b94a48':m.gap_min<15?'#d4a017':'#2c6f79';h+=`<div class="evt" style="border-left-color:${c}" onclick="mapInstance.setView([${m.latitude},${m.longitude}],15)"><span class="evt-time">${fmt(m.time_a)}</span><span class="evt-loc">${esc(m.subject_a)} & ${esc(m.subject_b)} (${esc(m.confidence)})</span></div>`})}
   D.mapAnalysis.innerHTML=h;
 }
-function fitAllGeo(){const pts=[];geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})}
+function fitAllGeo(){const pts=[];state.data.geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})}
 function setupMapTime(rows){mapTimeData=rows;D.mapTimeSlider.max=Math.max(0,rows.length-1);D.mapTimeSlider.value=0;updateMapTime()}
 function updateMapTime(){if(!mapTimeData.length)return;const idx=Math.min(parseInt(D.mapTimeSlider.value),mapTimeData.length-1);const r=mapTimeData[idx];if(!r)return;D.mapTimeLabel.textContent=fmt(r.start_time);mapInstance.setView([r.latitude,r.longitude],15);mapMarkers.forEach(m=>{if(m.setStyle)m.setStyle({radius:5,opacity:0.4})});if(mapMarkers[idx]&&mapMarkers[idx].setStyle)mapMarkers[idx].setStyle({radius:10,color:'#b94a48',weight:3})}
 D.mapTimeSlider.addEventListener('input',updateMapTime);
