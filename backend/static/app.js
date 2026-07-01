@@ -1,6 +1,7 @@
 import { esc, fmt, fmts, fmtd, fmtBytes, colWidth, n, debounce, renderMd } from './core/utils.js';
 import { SERVICE_DB, IP_RANGES, ISP_PROVIDERS, KNOWN_IP_HINTS, HOSTING_PROVIDERS, PRIVATE_LABEL, DISTINCTIVE_INDICATORS, EPHEMERAL_MIN, PORT_SVC, PORT_FAMILY, FAMILY_GAP } from './core/constants.js';
 import { $, D } from './core/dom.js';
+import { state } from './core/state.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -87,7 +88,7 @@ const _W = {
 };
 
 // ====== STATE ======
-const state={auth:{status:'checking',user:null,session:null},cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{},subjectTags:{},_ownedSubjects:[],_cdrStats:null,_ipdrStats:null,_cd:null,_totalCdr:0,_totalIpdr:0};
+// state now lives in core/state.js (imported above)
 // _ownedSubjects: the case's real subjects from server — CDR a-parties + IPDR source IPs (NOT
 // counterparts/destination IPs). Drives the analysis / correlation / group-compare subject pickers.
 // _cdrStats/_ipdrStats: server-side aggregated totals (accurate even for large cases)
