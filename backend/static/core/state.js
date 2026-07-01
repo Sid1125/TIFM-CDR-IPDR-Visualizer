@@ -15,4 +15,9 @@ export const state={
   // tab render tracking (was _renderGen/_tabRendered): gen bumps per case load; a tab re-renders
   // only when its recorded gen is stale.
   render:{gen:0,rendered:{}},
+
+  // Leaflet map view state (was the loose mapInstance/map*/geoFence* globals).
+  map:{instance:null,layers:[],markers:[],polyline:null,circles:[],timeData:[],timePlaying:false,
+       geofenceDrawn:null,towerHi:null,
+       fenceLayer:null,fenceDrawn:false,fenceDrawing:false,fenceDrawHandler:null,fenceMarkers:[]},
 };

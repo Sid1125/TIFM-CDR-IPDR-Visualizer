@@ -1124,8 +1124,8 @@ function renderDashboard(){
     {l:'Most Active Tower',v:topTower?esc(topTower[0]):'n/a',d:topTower?topTower[1]+' visits':'No data'},
     {l:'Unique Contacts',v:n(uniqueContactsCount),d:n(uniqueSubjectsCount)+' unique subjects'},
     {l:'Unique Subjects',v:n(uniqueSubjectsCount),d:'Network of '+n(uniqueContactsCount)+' contacts'},
-    geoFenceDrawn&&geoFenceLayer?(()=>{
-      const fencePts=geoFenceLayer.getLatLngs();
+    state.map.fenceDrawn&&state.map.fenceLayer?(()=>{
+      const fencePts=state.map.fenceLayer.getLatLngs();
       const coords=Array.isArray(fencePts[0])?fencePts[0].map(p=>[p.lng,p.lat]):fencePts.map(p=>[p.lng,p.lat]);
       if(!coords.length)return null;
       const poly=turf.polygon([coords]);
@@ -1752,13 +1752,13 @@ function initGraphSubjects(){
 }
 
 // ====== 3. TOWER MAP (Leaflet) ======
-let mapInstance=null,mapLayers=[],mapMarkers=[],mapPolyline=null,mapCircles=[],mapTimeData=[],mapTimePlaying=false,geofenceDrawn=null,_towerHi=null;
+// map view state -> state.map (core/state.js)
 async function initMap(){
   if(!state.data.geoRecords)await loadGeoData();
-  if(!mapInstance){
-    mapInstance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
-    setTimeout(()=>mapInstance.invalidateSize(),100);
+  if(!state.map.instance){
+    state.map.instance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(state.map.instance);
+    setTimeout(()=>state.map.instance.invalidateSize(),100);
     initGeofenceListeners();
   }
   runMapMode();
@@ -1780,18 +1780,18 @@ async function showTower(towerId){
   document.querySelectorAll('.topbar-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab==='map'));
   document.querySelectorAll('.tab-content').forEach(s=>s.classList.toggle('active',s.id==='tab-map'));
   if(!state.data.geoRecords)await loadGeoData();
-  if(!mapInstance){
-    mapInstance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(mapInstance);
+  if(!state.map.instance){
+    state.map.instance=L.map(D.mapStage,{zoomControl:true,preferCanvas:true}).setView([20.5937,78.9629],5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap',maxZoom:18}).addTo(state.map.instance);
     initGeofenceListeners();
   }
-  setTimeout(()=>mapInstance.invalidateSize(),50);
+  setTimeout(()=>state.map.instance.invalidateSize(),50);
   const pt=towerLocate(towerId);
   if(!pt){D.mapAnalysis&&(D.mapAnalysis.innerHTML='<p style="color:var(--muted);font-size:0.85rem">No location on file for tower <b>'+esc(towerId)+'</b>.</p>');return;}
-  if(_towerHi){try{mapInstance.removeLayer(_towerHi)}catch(e){}}
-  _towerHi=L.circleMarker([pt.lat,pt.lng],{radius:12,color:'#fff',weight:3,fillColor:'#b94a48',fillOpacity:0.95}).addTo(mapInstance);
-  _towerHi.bindPopup('<b>'+esc(towerId)+'</b><br>Tower location').openPopup();
-  mapInstance.setView([pt.lat,pt.lng],15,{animate:true});
+  if(state.map.towerHi){try{state.map.instance.removeLayer(state.map.towerHi)}catch(e){}}
+  state.map.towerHi=L.circleMarker([pt.lat,pt.lng],{radius:12,color:'#fff',weight:3,fillColor:'#b94a48',fillOpacity:0.95}).addTo(state.map.instance);
+  state.map.towerHi.bindPopup('<b>'+esc(towerId)+'</b><br>Tower location').openPopup();
+  state.map.instance.setView([pt.lat,pt.lng],15,{animate:true});
 }
 // Render a tower id as a clickable chip (stops row clicks; reads the id from a data attr so
 // nothing is injected into the handler string).
@@ -2462,10 +2462,10 @@ function populateMapSubjects(){
     if(state.data.geoSubjects.includes(cur))sel.value=cur;}
 }
 function clearMap(){
-  mapLayers.forEach(l=>mapInstance.removeLayer(l));mapMarkers.forEach(m=>mapInstance.removeLayer(m));mapCircles.forEach(c=>mapInstance.removeLayer(c));
-  if(mapPolyline){mapInstance.removeLayer(mapPolyline);mapPolyline=null}
-  if(_towerHi){try{mapInstance.removeLayer(_towerHi)}catch(e){}_towerHi=null}
-  mapLayers=[];mapMarkers=[];mapCircles=[];
+  state.map.layers.forEach(l=>state.map.instance.removeLayer(l));state.map.markers.forEach(m=>state.map.instance.removeLayer(m));state.map.circles.forEach(c=>state.map.instance.removeLayer(c));
+  if(state.map.polyline){state.map.instance.removeLayer(state.map.polyline);state.map.polyline=null}
+  if(state.map.towerHi){try{state.map.instance.removeLayer(state.map.towerHi)}catch(e){}state.map.towerHi=null}
+  state.map.layers=[];state.map.markers=[];state.map.circles=[];
 }
 function geoSub(sub){if(!sub)return state.data.geoRecords;return state.data.geoRecords.filter(r=>r.subject===sub||r.counterpart===sub||r.msisdn===sub)}
 function popupHtml(r){
@@ -2517,12 +2517,12 @@ async function showMapImpossible(sub){
   const bounds=[];
   legs.forEach(l=>{
     const a=tc[l.from_tower],b=tc[l.to_tower];if(!a||!b)return;
-    const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:'#b94a48',weight:3,opacity:0.85,dashArray:'7,6'}).addTo(mapInstance);
+    const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:'#b94a48',weight:3,opacity:0.85,dashArray:'7,6'}).addTo(state.map.instance);
     line.bindPopup('<b>Impossible travel</b><br>'+esc(l.subject)+'<br><b>'+(l.speed_kmh!=null?Math.round(l.speed_kmh)+' km/h':'same minute (∞)')+'</b><br>'+l.distance_km+' km in '+l.dt_minutes+' min'+(l.from_imei!==l.to_imei?'<br>IMEI changed':'')+(cloneBy[l.subject]?'<br>⚠ '+esc(cloneBy[l.subject].verdict):''));
-    mapLayers.push(line);
-    [[a,l.from_tower],[b,l.to_tower]].forEach(p=>{const mk=L.circleMarker([p[0].lat,p[0].lng],{radius:7,color:'#fff',weight:2,fillColor:'#b94a48',fillOpacity:0.9}).addTo(mapInstance);mk.bindTooltip(esc(p[1]),{direction:'top'});mapMarkers.push(mk);bounds.push([p[0].lat,p[0].lng]);});
+    state.map.layers.push(line);
+    [[a,l.from_tower],[b,l.to_tower]].forEach(p=>{const mk=L.circleMarker([p[0].lat,p[0].lng],{radius:7,color:'#fff',weight:2,fillColor:'#b94a48',fillOpacity:0.9}).addTo(state.map.instance);mk.bindTooltip(esc(p[1]),{direction:'top'});state.map.markers.push(mk);bounds.push([p[0].lat,p[0].lng]);});
   });
-  if(bounds.length)mapInstance.fitBounds(bounds,{padding:[60,60]});
+  if(bounds.length)state.map.instance.fitBounds(bounds,{padding:[60,60]});
   let h='<h4 style="margin:0 0 6px;color:var(--danger)">Impossible Travel</h4><div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px">Red dashed legs exceed human travel speed (likely clone / spoofed record).</div>';
   legs.forEach(l=>{h+='<div class="evt" onclick="showProfile(\''+esc(l.subject)+'\')"><span class="evt-time">'+esc(l.subject)+'</span><span class="evt-loc" style="color:var(--danger)">'+(l.speed_kmh!=null?Math.round(l.speed_kmh)+' km/h':'∞')+'</span></div>';});
   D.mapAnalysis.innerHTML=h;
@@ -2539,12 +2539,12 @@ async function showMapCopresence(sub){
     const col=c.hidden_link?'#b94a48':'#d4a017';
     (c.towers||[]).forEach(tw=>{
       const base=String(tw).split('~')[0];const pt=tc[base];if(!pt)return;
-      const mk=L.circleMarker([pt.lat,pt.lng],{radius:9,color:'#fff',weight:2,fillColor:col,fillOpacity:0.85}).addTo(mapInstance);
+      const mk=L.circleMarker([pt.lat,pt.lng],{radius:9,color:'#fff',weight:2,fillColor:col,fillOpacity:0.85}).addTo(state.map.instance);
       mk.bindPopup('<b>'+(c.hidden_link?'Hidden link (met, never called)':'Convoy')+'</b><br>'+esc(c.subject_a)+' &amp; '+esc(c.subject_b)+'<br>'+c.occurrences+'× over '+c.distinct_days+' day(s)<br>'+(c.ever_called?'they also call each other':'never call each other')+'<br>Tower '+esc(base));
-      mapMarkers.push(mk);bounds.push([pt.lat,pt.lng]);
+      state.map.markers.push(mk);bounds.push([pt.lat,pt.lng]);
     });
   });
-  if(bounds.length)mapInstance.fitBounds(bounds,{padding:[60,60]});
+  if(bounds.length)state.map.instance.fitBounds(bounds,{padding:[60,60]});
   let h='<h4 style="margin:0 0 6px;color:var(--warn)">Co-presence</h4><div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px">Amber = convoy (repeated co-location). Red = hidden link (co-located but never call).</div>';
   pairs.forEach(c=>{h+='<div class="evt"><span class="evt-time">'+esc(c.subject_a)+' &amp; '+esc(c.subject_b)+'</span><span class="evt-loc" style="color:'+(c.hidden_link?'var(--danger)':'var(--warn)')+'">'+(c.hidden_link?'hidden':'convoy')+' ('+c.distinct_days+'d)</span></div>';});
   D.mapAnalysis.innerHTML=h;
@@ -2558,16 +2558,16 @@ async function showMapAnchors(sub){
   const MAP_PT_CAP=2000;
   const pts=geoSub(sub).filter(r=>r.latitude!=null&&r.longitude!=null);
   const capped=pts.length>MAP_PT_CAP;
-  pts.slice(0,MAP_PT_CAP).forEach(r=>{const mk=L.circleMarker([r.latitude,r.longitude],{radius:3,color:'#888',weight:1,fillColor:'#888',fillOpacity:0.35}).addTo(mapInstance);mapMarkers.push(mk);bounds.push([r.latitude,r.longitude]);});
+  pts.slice(0,MAP_PT_CAP).forEach(r=>{const mk=L.circleMarker([r.latitude,r.longitude],{radius:3,color:'#888',weight:1,fillColor:'#888',fillOpacity:0.35}).addTo(state.map.instance);state.map.markers.push(mk);bounds.push([r.latitude,r.longitude]);});
   const place=(anchor,label,color)=>{
     if(!anchor||anchor.latitude==null)return;
-    const mk=L.circleMarker([anchor.latitude,anchor.longitude],{radius:12,color:'#fff',weight:3,fillColor:color,fillOpacity:0.92}).addTo(mapInstance);
+    const mk=L.circleMarker([anchor.latitude,anchor.longitude],{radius:12,color:'#fff',weight:3,fillColor:color,fillOpacity:0.92}).addTo(state.map.instance);
     mk.bindPopup('<b>'+label+'</b><br>'+esc(sub)+'<br>Tower '+esc(anchor.tower_id)+'<br>'+anchor.events+' events');
-    mk.bindTooltip(label,{permanent:true,direction:'top'});mapMarkers.push(mk);bounds.push([anchor.latitude,anchor.longitude]);
+    mk.bindTooltip(label,{permanent:true,direction:'top'});state.map.markers.push(mk);bounds.push([anchor.latitude,anchor.longitude]);
   };
   place(mv.anchors.home,'Home','#2c6f79');
   place(mv.anchors.work,'Work','#2d7d46');
-  if(bounds.length)mapInstance.fitBounds(bounds,{padding:[50,50]});
+  if(bounds.length)state.map.instance.fitBounds(bounds,{padding:[50,50]});
   let h='<h4 style="margin:0 0 6px">Anchors — '+esc(sub)+'</h4>'+(capped?`<p style="color:var(--warn);font-size:0.72rem;margin:0 0 6px">Showing first ${n(MAP_PT_CAP)} of ${n(pts.length)} positions (canvas renderer active)</p>`:'');
   h+='<div class="stat-row"><span class="label">Home tower</span><span class="value">'+(mv.anchors.home?twr(mv.anchors.home.tower_id):'?')+'</span></div>';
   h+='<div class="stat-row"><span class="label">Work tower</span><span class="value">'+(mv.anchors.work?twr(mv.anchors.work.tower_id):'?')+'</span></div>';
@@ -2583,54 +2583,54 @@ D.mapSubject.addEventListener('change',()=>{if(D.mapSubject.value)runMapMode()})
 D.mapSubject.addEventListener('input',()=>{const sel=document.getElementById('mapSubjectSelect');if(sel)sel.value=state.data.geoSubjects.includes(D.mapSubject.value)?D.mapSubject.value:'';if(state.data.geoSubjects.includes(D.mapSubject.value))runMapMode()});
 // Dropdown: pick a subject -> mirror into the search box and run.
 (function(){const sel=document.getElementById('mapSubjectSelect');if(sel)sel.addEventListener('change',()=>{D.mapSubject.value=sel.value;runMapMode();});})();
-D.mapFit.addEventListener('click',()=>{const pts=[];state.data.geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})});
+D.mapFit.addEventListener('click',()=>{const pts=[];state.data.geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)state.map.instance.fitBounds(pts,{padding:[30,30]})});
 
 // -- Geofence --
-let geoFenceLayer=null,geoFenceDrawn=false,geoFenceDrawing=false,geoFenceDrawHandler=null,geoFenceMarkers=[];
+// geofence view state -> state.map (core/state.js)
 D.geoFenceBtn.addEventListener('click',()=>{
-  if(!mapInstance)return;
-  if(geoFenceDrawn){
-    mapInstance.removeLayer(geoFenceLayer);geoFenceLayer=null;geoFenceDrawn=false;
+  if(!state.map.instance)return;
+  if(state.map.fenceDrawn){
+    state.map.instance.removeLayer(state.map.fenceLayer);state.map.fenceLayer=null;state.map.fenceDrawn=false;
     clearGeofenceHighlights();
     D.mapAnalysis.innerHTML='<p style="color:var(--muted);font-size:0.85rem">Geofence cleared.</p>';
     D.geoFenceBtn.textContent='Geofence';D.geoFenceBtn.style.borderColor='var(--danger)';D.geoFenceBtn.style.color='var(--danger)';
     return;
   }
-  if(geoFenceDrawing){
-    if(geoFenceDrawHandler)geoFenceDrawHandler.disable();
-    geoFenceDrawing=false;
+  if(state.map.fenceDrawing){
+    if(state.map.fenceDrawHandler)state.map.fenceDrawHandler.disable();
+    state.map.fenceDrawing=false;
     D.geoFenceBtn.textContent='Geofence';D.geoFenceBtn.style.borderColor='var(--danger)';D.geoFenceBtn.style.color='var(--danger)';
     return;
   }
-  geoFenceDrawHandler=new L.Draw.Polygon(mapInstance,{shapeOptions:{color:'#b94a48',weight:2},allowIntersection:false,showArea:true,metric:true});
-  geoFenceDrawHandler.enable();
-  geoFenceDrawing=true;
+  state.map.fenceDrawHandler=new L.Draw.Polygon(state.map.instance,{shapeOptions:{color:'#b94a48',weight:2},allowIntersection:false,showArea:true,metric:true});
+  state.map.fenceDrawHandler.enable();
+  state.map.fenceDrawing=true;
   D.geoFenceBtn.textContent='Cancel';D.geoFenceBtn.style.borderColor='var(--warn)';D.geoFenceBtn.style.color='var(--warn)';
 });
 function initGeofenceListeners(){
-  mapInstance.off('draw:created');
-  mapInstance.on('draw:created',function(e){
-    if(geoFenceDrawing){
-      if(geoFenceDrawHandler)geoFenceDrawHandler.disable();
-      geoFenceDrawing=false;
+  state.map.instance.off('draw:created');
+  state.map.instance.on('draw:created',function(e){
+    if(state.map.fenceDrawing){
+      if(state.map.fenceDrawHandler)state.map.fenceDrawHandler.disable();
+      state.map.fenceDrawing=false;
     }
-    if(geoFenceLayer)mapInstance.removeLayer(geoFenceLayer);
-    geoFenceLayer=e.layer;geoFenceDrawn=true;
-    mapInstance.addLayer(geoFenceLayer);
+    if(state.map.fenceLayer)state.map.instance.removeLayer(state.map.fenceLayer);
+    state.map.fenceLayer=e.layer;state.map.fenceDrawn=true;
+    state.map.instance.addLayer(state.map.fenceLayer);
     D.geoFenceBtn.textContent='Clear Fence';D.geoFenceBtn.style.borderColor='var(--success)';D.geoFenceBtn.style.color='var(--success)';
     analyzeGeofence();
   });
 }
 function clearGeofenceHighlights(){
-  geoFenceMarkers.forEach(m=>{try{mapInstance.removeLayer(m)}catch(e){}});
-  geoFenceMarkers=[];
+  state.map.fenceMarkers.forEach(m=>{try{state.map.instance.removeLayer(m)}catch(e){}});
+  state.map.fenceMarkers=[];
 }
 // Find every loaded geo record inside the drawn polygon, summarise the subjects/towers
 // present, and highlight the points on the map.
 function analyzeGeofence(){
-  if(!geoFenceLayer){return;}
+  if(!state.map.fenceLayer){return;}
   clearGeofenceHighlights();
-  const fencePts=geoFenceLayer.getLatLngs();
+  const fencePts=state.map.fenceLayer.getLatLngs();
   const ring=Array.isArray(fencePts[0])?fencePts[0]:fencePts;
   if(!ring||ring.length<3){D.mapAnalysis.innerHTML='<p style="color:var(--muted)">Draw a closed area.</p>';return;}
   const coords=ring.map(p=>[p.lng,p.lat]);
@@ -2648,8 +2648,8 @@ function analyzeGeofence(){
     if(r.tower_id)towers.add(r.tower_id);
     if(r.start_time){if(!tMin||r.start_time<tMin)tMin=r.start_time;if(!tMax||r.start_time>tMax)tMax=r.start_time;}
     const col=r.type==='IPDR'?'#2d7d46':'#b94a48';
-    const mk=L.circleMarker([r.latitude,r.longitude],{radius:5,color:'#fff',weight:1,fillColor:col,fillOpacity:0.85}).addTo(mapInstance);
-    mk.bindPopup(popupHtml(r));geoFenceMarkers.push(mk);
+    const mk=L.circleMarker([r.latitude,r.longitude],{radius:5,color:'#fff',weight:1,fillColor:col,fillOpacity:0.85}).addTo(state.map.instance);
+    mk.bindPopup(popupHtml(r));state.map.fenceMarkers.push(mk);
   });
   const subs=Object.entries(bySub).sort((a,b)=>b[1].count-a[1].count);
   let h='<h4 style="margin:0 0 6px">Geofence — '+subs.length+' subject'+(subs.length>1?'s':'')+'</h4>';
@@ -2728,7 +2728,7 @@ function showMapPath(sub){
   let dist=0,flagged=0,fastest=0;const usedModes=new Set();const legs=[];
   for(let i=1;i<rows.length;i++){
     const a=rows[i-1],b=rows[i];
-    const km=mapInstance.distance([a.latitude,a.longitude],[b.latitude,b.longitude])/1000;
+    const km=state.map.instance.distance([a.latitude,a.longitude],[b.latitude,b.longitude])/1000;
     dist+=km;
     const seg=segMetrics(a,b,km);usedModes.add(seg.mode);legs.push({a,b,seg,i});
     if(seg.impossible)flagged++;
@@ -2738,12 +2738,12 @@ function showMapPath(sub){
     line.bindTooltip(seg.tip,{sticky:true,direction:'top',opacity:0.97});
     line.on('mouseover',function(){this.setStyle({weight:seg.weight+3,opacity:1})});
     line.on('mouseout',function(){this.setStyle({weight:seg.weight,opacity:0.85})});
-    line.addTo(mapInstance);mapLayers.push(line);
+    line.addTo(state.map.instance);state.map.layers.push(line);
     if(!seg.dwell&&km>=0.25){ // direction arrow at the leg midpoint (real moves only)
       const ang=bearing(a.latitude,a.longitude,b.latitude,b.longitude);
       const arrow=L.marker([(a.latitude+b.latitude)/2,(a.longitude+b.longitude)/2],{interactive:false,
         icon:L.divIcon({className:'',html:'<div style="transform:rotate('+ang+'deg);color:'+seg.color+';font-size:13px;line-height:1;text-shadow:0 0 2px #fff">&#9650;</div>',iconSize:[13,13],iconAnchor:[7,7]})});
-      arrow.addTo(mapInstance);mapMarkers.push(arrow);
+      arrow.addTo(state.map.instance);state.map.markers.push(arrow);
     }
   }
   // Stop markers; first = start (green), last = end (red), with sequence numbers.
@@ -2755,9 +2755,9 @@ function showMapPath(sub){
       html:'<div style="background:'+col+';color:#fff;border:2px solid #fff;border-radius:50%;width:'+((isStart||isEnd)?20:16)+'px;height:'+((isStart||isEnd)?20:16)+'px;display:flex;align-items:center;justify-content:center;font-size:'+((isStart||isEnd)?10:8)+'px;font-weight:700;box-shadow:0 0 3px rgba(0,0,0,.4)">'+lbl+'</div>',
       iconSize:[(isStart||isEnd)?20:16,(isStart||isEnd)?20:16],iconAnchor:[(isStart||isEnd)?10:8,(isStart||isEnd)?10:8]})});
     m.bindPopup(popupHtml(r));m.bindTooltip('#'+(i+1)+' · '+fmt(r.start_time),{direction:'top'});
-    m.addTo(mapInstance);mapMarkers.push(m);
+    m.addTo(state.map.instance);state.map.markers.push(m);
   });
-  if(coords.length>1)mapInstance.fitBounds(L.latLngBounds(coords),{padding:[40,40]});else mapInstance.setView(coords[0],14);
+  if(coords.length>1)state.map.instance.fitBounds(L.latLngBounds(coords),{padding:[40,40]});else state.map.instance.setView(coords[0],14);
   // Sidebar
   let h='<h4 style="margin:0 0 4px">Movement Path <span style="font-size:0.66rem;font-weight:400;color:var(--warn)">(tower-based estimate)</span></h4>';
   h+='<div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px">Legs graded by speed; arrows show direction. Hover a leg for distance, time gap, speed &amp; mode.</div>';
@@ -2771,7 +2771,7 @@ function showMapPath(sub){
   h+='<h4 style="margin:10px 0 4px">Travel Legs (latest first)</h4>';
   legs.slice(-20).reverse().forEach(L2=>{
     const s=L2.seg;const speed=s.kmh!=null?Math.round(s.kmh)+' km/h':(s.dwell?'dwell':'n/a');
-    h+='<div class="evt" title="Zoom to this leg" onclick="mapInstance.fitBounds([['+L2.a.latitude+','+L2.a.longitude+'],['+L2.b.latitude+','+L2.b.longitude+']],{padding:[80,80]})">'
+    h+='<div class="evt" title="Zoom to this leg" onclick="state.map.instance.fitBounds([['+L2.a.latitude+','+L2.a.longitude+'],['+L2.b.latitude+','+L2.b.longitude+']],{padding:[80,80]})">'
       +'<span class="evt-time"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+s.color+';margin-right:5px"></span>'+fmt(L2.b.start_time)+'</span>'
       +'<span class="evt-loc" style="color:'+(s.impossible?'var(--danger)':'inherit')+'">'+s.km.toFixed(1)+' km · '+speed+'</span></div>';
   });
@@ -2784,9 +2784,9 @@ function showMapHeat(sub,_retry){
   // leaflet-heat draws via getImageData(width,height); if the map container isn't laid out yet
   // (0×0) that throws IndexSizeError. Make sure the map has a real size first — invalidate and
   // retry a few times — before drawing.
-  const _sz=mapInstance&&mapInstance.getSize?mapInstance.getSize():{x:0,y:0};
+  const _sz=state.map.instance&&state.map.instance.getSize?state.map.instance.getSize():{x:0,y:0};
   if((_sz.x===0||_sz.y===0)&&(_retry||0)<10){
-    if(mapInstance&&mapInstance.invalidateSize)mapInstance.invalidateSize();
+    if(state.map.instance&&state.map.instance.invalidateSize)state.map.instance.invalidateSize();
     setTimeout(()=>showMapHeat(sub,(_retry||0)+1),120);
     return;
   }
@@ -2816,13 +2816,13 @@ function showMapHeat(sub,_retry){
       const heatPts=[];
       towers.forEach(t=>{for(let i=0;i<t.count;i++)heatPts.push([t.lat,t.lng,1]);});
       const heat=L.heatLayer(heatPts,
-        {radius:30,blur:20,maxZoom:16,minOpacity:0.5,gradient:grad}).addTo(mapInstance);
-      mapLayers.push(heat);
+        {radius:30,blur:20,maxZoom:16,minOpacity:0.5,gradient:grad}).addTo(state.map.instance);
+      state.map.layers.push(heat);
       // tiny clickable dots keep every location inspectable on top of the gradient
       towers.forEach(t=>{
         const m=L.circleMarker([t.lat,t.lng],{radius:3,color:'#fff',weight:1,opacity:0.5,fillColor:'#222',fillOpacity:0.45});
         m.bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`);
-        m.addTo(mapInstance);mapMarkers.push(m);
+        m.addTo(state.map.instance);state.map.markers.push(m);
       });
       heatOk=true;
     }catch(e){console.warn('heatmap draw failed — falling back to bubbles',e);clearMap();}
@@ -2830,9 +2830,9 @@ function showMapHeat(sub,_retry){
   if(!heatOk){
     // fallback: graduated bubbles if the heat plugin failed/unavailable or the map wasn't sized
     towers.forEach(t=>{const p=t.count/maxC;const c=p>0.7?'#b71c1c':p>0.4?'#ef6c00':'#7b2d8e';
-      mapCircles.push(L.circleMarker([t.lat,t.lng],{radius:5+15*p,color:c,fillColor:c,fillOpacity:0.25+0.55*p,weight:1,opacity:0.6}).bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`).addTo(mapInstance))});
+      state.map.circles.push(L.circleMarker([t.lat,t.lng],{radius:5+15*p,color:c,fillColor:c,fillOpacity:0.25+0.55*p,weight:1,opacity:0.6}).bindPopup(`<strong>${esc(t.id||t.lat.toFixed(4)+', '+t.lng.toFixed(4))}</strong><br>${t.count} visits`).addTo(state.map.instance))});
   }
-  const pts=towers.map(t=>[t.lat,t.lng]);if(pts.length)mapInstance.fitBounds(pts,{padding:[40,40]});else fitAllGeo();
+  const pts=towers.map(t=>[t.lat,t.lng]);if(pts.length)state.map.instance.fitBounds(pts,{padding:[40,40]});else fitAllGeo();
   const sorted=towers.sort((a,b)=>b.count-a.count);
   let h='<h4 style="margin:0 0 6px">Activity Heatmap</h4>'
     +`<div class="stat-row"><span class="label">Records</span><span class="value">${rows.length}</span></div>`
@@ -2844,7 +2844,7 @@ function showMapHeat(sub,_retry){
     const p=t.count/maxC;
     const c=p>0.7?'#b71c1c':p>0.4?'#ef6c00':'#7b2d8e';
     const loc=t.id||(t.lat.toFixed(4)+','+t.lng.toFixed(4));
-    h+=`<div class="evt" style="border-left-color:${c}" onclick="mapInstance.setView([${t.lat},${t.lng}],15)"><span class="evt-loc">${esc(loc)}</span><span class="evt-time">${t.count} visits</span></div>`;
+    h+=`<div class="evt" style="border-left-color:${c}" onclick="state.map.instance.setView([${t.lat},${t.lng}],15)"><span class="evt-loc">${esc(loc)}</span><span class="evt-time">${t.count} visits</span></div>`;
   });
   D.mapAnalysis.innerHTML=h;
 }
@@ -2853,7 +2853,7 @@ function showMapZones(sub){
   if(!rows.length){D.mapAnalysis.innerHTML='No data.';return}
   const t={};rows.forEach(r=>{const k=r.tower_id||('p-'+r.latitude);if(!t[k])t[k]={lat:r.latitude,lng:r.longitude,count:0};t[k].count++});
   const sorted=Object.entries(t).sort((a,b)=>b[1].count-a[1].count);
-  sorted.forEach(([id,td])=>{const rad=Math.min(60,10+Math.sqrt(td.count)*4);mapCircles.push(L.circle([td.lat,td.lng],{radius:rad*1000,color:'#2c6f79',fillColor:'#2c6f79',fillOpacity:0.1+Math.min(0.4,td.count/100),weight:2}).addTo(mapInstance));mapMarkers.push(L.marker([td.lat,td.lng]).bindPopup(`<strong>${esc(id)}</strong><br>${td.count} visits`).addTo(mapInstance))});
+  sorted.forEach(([id,td])=>{const rad=Math.min(60,10+Math.sqrt(td.count)*4);state.map.circles.push(L.circle([td.lat,td.lng],{radius:rad*1000,color:'#2c6f79',fillColor:'#2c6f79',fillOpacity:0.1+Math.min(0.4,td.count/100),weight:2}).addTo(state.map.instance));state.map.markers.push(L.marker([td.lat,td.lng]).bindPopup(`<strong>${esc(id)}</strong><br>${td.count} visits`).addTo(state.map.instance))});
   fitAllGeo();
   let h='<h4>Operational Zones</h4>'+`<div class="stat-row"><span class="label">Zones</span><span class="value">${sorted.length}</span></div>`+`<div class="stat-row"><span class="label">Primary</span><span class="value">${esc(sorted[0][0])} (${((sorted[0][1].count/rows.length)*100).toFixed(0)}%)</span></div>`;
   h+='<h4 style="margin:8px 0 4px">Breakdown</h4>';sorted.slice(0,8).forEach(([id,td])=>{h+=`<div class="evt"><span class="evt-loc">${esc(id)}</span><span class="evt-time">${td.count} (${((td.count/rows.length)*100).toFixed(0)}%)</span></div>`});
@@ -2864,8 +2864,8 @@ function showMapColocation(sub){
   if(!rows.length){D.mapAnalysis.innerHTML='No data.';return}
   const twrs={};rows.forEach(r=>{const k=r.tower_id||('p-'+r.latitude);if(!twrs[k])twrs[k]={lat:r.latitude,lng:r.longitude,subjects:new Set(),records:[]};twrs[k].subjects.add(r.subject);twrs[k].records.push(r)});
   const shared=Object.entries(twrs).filter(([k,v])=>v.subjects.size>1&&v.records.some(r=>r.subject===sub)).sort((a,b)=>b[1].records.length-a[1].records.length);
-  shared.slice(0,20).forEach(([id,td])=>{mapMarkers.push(L.marker([td.lat,td.lng]).bindPopup(`<strong>${esc(id)}</strong><br>Subjects: ${[...td.subjects].slice(0,5).join(', ')}`).addTo(mapInstance));td.records.filter(r=>r.subject===sub).forEach(r=>{const cm=L.circleMarker([r.latitude,r.longitude],{radius:5,color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.6}).bindPopup(popupHtml(r));cm.addTo(mapInstance);mapMarkers.push(cm)})});
-  const locs=mapMarkers.filter(m=>m.getLatLng).map(m=>m.getLatLng());if(locs.length)mapInstance.fitBounds(locs,{padding:[40,40]});else fitAllGeo();
+  shared.slice(0,20).forEach(([id,td])=>{state.map.markers.push(L.marker([td.lat,td.lng]).bindPopup(`<strong>${esc(id)}</strong><br>Subjects: ${[...td.subjects].slice(0,5).join(', ')}`).addTo(state.map.instance));td.records.filter(r=>r.subject===sub).forEach(r=>{const cm=L.circleMarker([r.latitude,r.longitude],{radius:5,color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.6}).bindPopup(popupHtml(r));cm.addTo(state.map.instance);state.map.markers.push(cm)})});
+  const locs=state.map.markers.filter(m=>m.getLatLng).map(m=>m.getLatLng());if(locs.length)state.map.instance.fitBounds(locs,{padding:[40,40]});else fitAllGeo();
   let h='<h4>Co-location</h4>'+`<div class="stat-row"><span class="label">Shared Towers</span><span class="value">${shared.length}</span></div>`+`<div class="stat-row"><span class="label">Co-located With</span><span class="value">${new Set(shared.flatMap(([k,v])=>[...v.subjects].filter(s=>s!==sub))).size}</span></div>`;
   h+='<h4 style="margin:8px 0 4px">Details</h4>';shared.slice(0,8).forEach(([id,td])=>{const others=[...td.subjects].filter(s=>s!==sub).join(', ');h+=`<div class="evt"><span class="evt-loc">${esc(id)}</span><span class="evt-time">With: ${esc(others)}</span></div>`});
   D.mapAnalysis.innerHTML=h;
@@ -2914,12 +2914,12 @@ function showMapTriangulation(sub){
   towerIds.forEach(id=>{
     const loc=towerLocs[id];const cnt=towerTotals[id]||0;
     const rad=covRadius(rows.find(r=>r.tower_id===id)||{});
-    const c=L.circle([loc.lat,loc.lng],{radius:rad,color:densColor(cnt),fillColor:densColor(cnt),fillOpacity:0.12,weight:1.5,opacity:0.5}).addTo(mapInstance);
-    mapCircles.push(c);
+    const c=L.circle([loc.lat,loc.lng],{radius:rad,color:densColor(cnt),fillColor:densColor(cnt),fillOpacity:0.12,weight:1.5,opacity:0.5}).addTo(state.map.instance);
+    state.map.circles.push(c);
     const m=L.circleMarker([loc.lat,loc.lng],{radius:6,color:'#fff',weight:2,fillColor:densColor(cnt),fillOpacity:0.9});
     m.bindTooltip(id,{direction:'top'});
     m.bindPopup(`<strong>${esc(id)}</strong><br>Records: ${cnt}<br>Coverage: ${(rad/1000).toFixed(1)} km`);
-    m.addTo(mapInstance);mapMarkers.push(m);
+    m.addTo(state.map.instance);state.map.markers.push(m);
   });
   const fixes=[];
   usedClusters.forEach((c,ci)=>{
@@ -2934,20 +2934,20 @@ function showMapTriangulation(sub){
     const est={lat:la/sw,lng:lo/sw};
     const unc=Math.min(...tw.map(t=>t.rad)); // tightest constraining cell bounds the precision
     // Geometry lines from the estimate to each contributing tower.
-    tw.forEach(t=>{const ln=L.polyline([[est.lat,est.lng],[t.lat,t.lng]],{color:'#7a8aa0',weight:1,opacity:0.45,dashArray:'2 4'}).addTo(mapInstance);mapLayers.push(ln)});
+    tw.forEach(t=>{const ln=L.polyline([[est.lat,est.lng],[t.lat,t.lng]],{color:'#7a8aa0',weight:1,opacity:0.45,dashArray:'2 4'}).addTo(state.map.instance);state.map.layers.push(ln)});
     // Rigorous overlap region (best-effort; skips non-overlapping cells instead of aborting).
     const overlap=triangulateOverlap(tw);
-    if(overlap){const coords=overlap.geometry.coordinates[0].map(p=>[p[1],p[0]]);const poly=L.polygon(coords,{color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.22,weight:1.5,dashArray:'4 4'}).addTo(mapInstance);mapLayers.push(poly)}
+    if(overlap){const coords=overlap.geometry.coordinates[0].map(p=>[p[1],p[0]]);const poly=L.polygon(coords,{color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.22,weight:1.5,dashArray:'4 4'}).addTo(state.map.instance);state.map.layers.push(poly)}
     // Uncertainty circle + estimated-position marker (crosshair).
-    const uc=L.circle([est.lat,est.lng],{radius:unc,color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.05,weight:1,opacity:0.4,dashArray:'2 6'}).addTo(mapInstance);mapCircles.push(uc);
+    const uc=L.circle([est.lat,est.lng],{radius:unc,color:'#b94a48',fillColor:'#b94a48',fillOpacity:0.05,weight:1,opacity:0.4,dashArray:'2 6'}).addTo(state.map.instance);state.map.circles.push(uc);
     const em=L.marker([est.lat,est.lng],{icon:L.divIcon({className:'',html:'<div style="width:16px;height:16px;border:2px solid #b94a48;border-radius:50%;box-shadow:0 0 0 2px #fff;position:relative"><div style="position:absolute;left:50%;top:50%;width:6px;height:6px;background:#b94a48;border-radius:50%;transform:translate(-50%,-50%)"></div></div>',iconSize:[16,16],iconAnchor:[8,8]})});
     em.bindTooltip('Estimated position',{direction:'top'});
     em.bindPopup(`<strong>Estimated position</strong><br>Cluster ${ci+1} · ${tw.length} towers${overlap?' · overlap fix':''}<br>Confidence ±${(unc/1000).toFixed(1)} km<br>${fmt(c[0].start_time)}`);
-    em.addTo(mapInstance);mapMarkers.push(em);
+    em.addTo(state.map.instance);state.map.markers.push(em);
     fixes.push({ci,est,unc,n:tw.length,overlap:!!overlap,time:c[0].start_time});
   });
   const allPts=towerIds.map(id=>[towerLocs[id].lat,towerLocs[id].lng]).concat(fixes.map(f=>[f.est.lat,f.est.lng]));
-  if(allPts.length)mapInstance.fitBounds(allPts,{padding:[40,40]});
+  if(allPts.length)state.map.instance.fitBounds(allPts,{padding:[40,40]});
   fixes.sort((a,b)=>a.unc-b.unc);
   let h='<h4 style="margin:0 0 6px">Triangulation</h4>';
   h+=`<div class="stat-row"><span class="label">Towers</span><span class="value">${towerIds.length}</span></div>`;
@@ -2956,11 +2956,11 @@ function showMapTriangulation(sub){
   if(fixes.length)h+=`<div class="stat-row"><span class="label">Best Precision</span><span class="value">±${(fixes[0].unc/1000).toFixed(1)} km</span></div>`;
   if(fixes.length){
     h+='<h4 style="margin:8px 0 4px">Estimated Positions</h4>';
-    fixes.slice(0,8).forEach(f=>{h+=`<div class="evt" onclick="mapInstance.setView([${f.est.lat},${f.est.lng}],15)"><span class="evt-time">${fmt(f.time)}</span><span class="evt-loc">${f.n} towers · ±${(f.unc/1000).toFixed(1)} km${f.overlap?' · overlap':''}</span></div>`});
+    fixes.slice(0,8).forEach(f=>{h+=`<div class="evt" onclick="state.map.instance.setView([${f.est.lat},${f.est.lng}],15)"><span class="evt-time">${fmt(f.time)}</span><span class="evt-loc">${f.n} towers · ±${(f.unc/1000).toFixed(1)} km${f.overlap?' · overlap':''}</span></div>`});
   }
   h+='<h4 style="margin:8px 0 4px">Tower Usage</h4>';
   const sortedTowers=Object.entries(towerTotals).sort((a,b)=>b[1]-a[1]);
-  sortedTowers.slice(0,6).forEach(([id,cnt])=>{const loc=towerLocs[id]||{};h+=`<div class="evt" onclick="mapInstance.setView([${loc.lat},${loc.lng}],14)"><span class="evt-loc">${esc(id)}</span><span class="evt-time">${cnt} records</span></div>`});
+  sortedTowers.slice(0,6).forEach(([id,cnt])=>{const loc=towerLocs[id]||{};h+=`<div class="evt" onclick="state.map.instance.setView([${loc.lat},${loc.lng}],14)"><span class="evt-loc">${esc(id)}</span><span class="evt-time">${cnt} records</span></div>`});
   h+='<div style="margin-top:10px;padding:8px;background:var(--card-bg);border-radius:6px;font-size:0.72rem;color:var(--muted)"><b>How it works:</b> Each burst of tower hand-offs inside a 30-min window is one fix. Coverage cells are sized by radio technology (1–15 km); the crosshair is the inverse-variance weighted centre of those towers (tighter cells weigh more), the red dashed polygon is the rigorous cell-overlap region when one exists, and the faint circle marks the ±precision bound.</div>';
   D.mapAnalysis.innerHTML=h;
 }
@@ -2978,23 +2978,23 @@ async function showMapMeetings(sub){
   }catch(e){console.error('meetings',e);D.mapAnalysis.innerHTML='<p style="color:var(--danger)">Failed to detect meetings.</p>';return;}
   const ms=(res.meetings||[]).filter(m=>m.latitude!=null&&m.longitude!=null);
   ms.slice(0,40).forEach(m=>{const col=m.gap_min<5?'#b94a48':m.gap_min<15?'#d4a017':'#2c6f79';
-    mapMarkers.push(L.circleMarker([m.latitude,m.longitude],{radius:8,color:col,fillColor:col,fillOpacity:0.4,weight:2}).bindPopup(`<strong>Possible Meeting</strong><br>${esc(m.subject_a)} & ${esc(m.subject_b)}<br>Tower ${esc(m.tower_id)}<br>Gap: ${m.gap_min.toFixed(0)} min`).addTo(mapInstance))});
-  if(ms.length){const pts=mapMarkers.filter(m=>m.getLatLng).map(m=>m.getLatLng());if(pts.length)mapInstance.fitBounds(pts,{padding:[40,40]})}else fitAllGeo();
+    state.map.markers.push(L.circleMarker([m.latitude,m.longitude],{radius:8,color:col,fillColor:col,fillOpacity:0.4,weight:2}).bindPopup(`<strong>Possible Meeting</strong><br>${esc(m.subject_a)} & ${esc(m.subject_b)}<br>Tower ${esc(m.tower_id)}<br>Gap: ${m.gap_min.toFixed(0)} min`).addTo(state.map.instance))});
+  if(ms.length){const pts=state.map.markers.filter(m=>m.getLatLng).map(m=>m.getLatLng());if(pts.length)state.map.instance.fitBounds(pts,{padding:[40,40]})}else fitAllGeo();
   const withSet=new Set(ms.map(m=>m.subject_a===sub?m.subject_b:m.subject_a));
   let h='<h4>Meeting Detection</h4>'
     +`<div class="stat-row"><span class="label">Meetings</span><span class="value">${res.total||ms.length}</span></div>`
     +`<div class="stat-row"><span class="label">Distinct pairs</span><span class="value">${res.distinct_pairs||0}</span></div>`
     +(sub?`<div class="stat-row"><span class="label">With</span><span class="value">${withSet.size}</span></div>`:'');
   if(!ms.length)h+='<p style="color:var(--muted);font-size:0.8rem">No meetings detected.</p>';
-  else{h+='<h4 style="margin:8px 0 4px">Closest encounters</h4>';ms.slice(0,12).forEach(m=>{const c=m.gap_min<5?'#b94a48':m.gap_min<15?'#d4a017':'#2c6f79';h+=`<div class="evt" style="border-left-color:${c}" onclick="mapInstance.setView([${m.latitude},${m.longitude}],15)"><span class="evt-time">${fmt(m.time_a)}</span><span class="evt-loc">${esc(m.subject_a)} & ${esc(m.subject_b)} (${esc(m.confidence)})</span></div>`})}
+  else{h+='<h4 style="margin:8px 0 4px">Closest encounters</h4>';ms.slice(0,12).forEach(m=>{const c=m.gap_min<5?'#b94a48':m.gap_min<15?'#d4a017':'#2c6f79';h+=`<div class="evt" style="border-left-color:${c}" onclick="state.map.instance.setView([${m.latitude},${m.longitude}],15)"><span class="evt-time">${fmt(m.time_a)}</span><span class="evt-loc">${esc(m.subject_a)} & ${esc(m.subject_b)} (${esc(m.confidence)})</span></div>`})}
   D.mapAnalysis.innerHTML=h;
 }
-function fitAllGeo(){const pts=[];state.data.geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)mapInstance.fitBounds(pts,{padding:[30,30]})}
-function setupMapTime(rows){mapTimeData=rows;D.mapTimeSlider.max=Math.max(0,rows.length-1);D.mapTimeSlider.value=0;updateMapTime()}
-function updateMapTime(){if(!mapTimeData.length)return;const idx=Math.min(parseInt(D.mapTimeSlider.value),mapTimeData.length-1);const r=mapTimeData[idx];if(!r)return;D.mapTimeLabel.textContent=fmt(r.start_time);mapInstance.setView([r.latitude,r.longitude],15);mapMarkers.forEach(m=>{if(m.setStyle)m.setStyle({radius:5,opacity:0.4})});if(mapMarkers[idx]&&mapMarkers[idx].setStyle)mapMarkers[idx].setStyle({radius:10,color:'#b94a48',weight:3})}
+function fitAllGeo(){const pts=[];state.data.geoRecords.forEach(r=>{if(r.latitude!=null&&r.longitude!=null)pts.push([r.latitude,r.longitude])});if(pts.length)state.map.instance.fitBounds(pts,{padding:[30,30]})}
+function setupMapTime(rows){state.map.timeData=rows;D.mapTimeSlider.max=Math.max(0,rows.length-1);D.mapTimeSlider.value=0;updateMapTime()}
+function updateMapTime(){if(!state.map.timeData.length)return;const idx=Math.min(parseInt(D.mapTimeSlider.value),state.map.timeData.length-1);const r=state.map.timeData[idx];if(!r)return;D.mapTimeLabel.textContent=fmt(r.start_time);state.map.instance.setView([r.latitude,r.longitude],15);state.map.markers.forEach(m=>{if(m.setStyle)m.setStyle({radius:5,opacity:0.4})});if(state.map.markers[idx]&&state.map.markers[idx].setStyle)state.map.markers[idx].setStyle({radius:10,color:'#b94a48',weight:3})}
 D.mapTimeSlider.addEventListener('input',updateMapTime);
-D.mapTimePlay.addEventListener('click',()=>{mapTimePlaying=!mapTimePlaying;D.mapTimePlay.textContent=mapTimePlaying?'Stop':'Play';if(mapTimePlaying)playMapTimeFn()});
-function playMapTimeFn(){if(!mapTimePlaying||!mapTimeData.length)return;D.mapTimeSlider.value=Math.min(parseInt(D.mapTimeSlider.value)+1,mapTimeData.length-1);updateMapTime();if(parseInt(D.mapTimeSlider.value)<mapTimeData.length-1)setTimeout(playMapTimeFn,1000);else{mapTimePlaying=false;D.mapTimePlay.textContent='Play'}}
+D.mapTimePlay.addEventListener('click',()=>{state.map.timePlaying=!state.map.timePlaying;D.mapTimePlay.textContent=state.map.timePlaying?'Stop':'Play';if(state.map.timePlaying)playMapTimeFn()});
+function playMapTimeFn(){if(!state.map.timePlaying||!state.map.timeData.length)return;D.mapTimeSlider.value=Math.min(parseInt(D.mapTimeSlider.value)+1,state.map.timeData.length-1);updateMapTime();if(parseInt(D.mapTimeSlider.value)<state.map.timeData.length-1)setTimeout(playMapTimeFn,1000);else{state.map.timePlaying=false;D.mapTimePlay.textContent='Play'}}
 
 // ====== 4. ENTITY TIMELINE ======
 const SVC_COLORS={WhatsApp:'#25D366',Telegram:'#0088cc',Signal:'#3A76F0',Instagram:'#E4405F','Facebook/Messenger':'#1877F2',Threads:'#000000',Discord:'#5865F2',YouTube:'#FF0000',Zoom:'#2D8CFF','MS Teams':'#6264A7',Skype:'#00AFF0',Outlook:'#0078D4',OneDrive:'#0078D4','Xbox Live':'#107C10',LinkedIn:'#0A66C2',Webex:'#00BFFF',Slack:'#4A154B',Snapchat:'#FFFC00','X (Twitter)':'#1DA1F2',Reddit:'#FF4500',Netflix:'#E50914',Spotify:'#1DB954',Steam:'#171A21','Riot Games':'#EB0029','Epic Games':'#313131','Battle.net':'#148EFF','PlayStation Network':'#003087',GitHub:'#181717',GitLab:'#FCA121','Docker Hub':'#2496ED',ChatGPT:'#10A37F','OpenAI API':'#10A37F',Claude:'#D97757',Perplexity:'#1F8EF1',ProtonVPN:'#8B5CF6','Proton Mail':'#8B5CF6',NordVPN:'#4687FF',ExpressVPN:'#DA2020',Mullvad:'#1E1E1E',Surfshark:'#00AC4E','Quad9 DNS':'#F8C630',OpenDNS:'#FF6B00','Yahoo Mail':'#6001D1',Dropbox:'#0061FF',Mega:'#D90007',PayPal:'#00457C',PhonePe:'#5F259F',Paytm:'#00BAF2',Flipkart:'#2874F0',Myntra:'#E50046','Disney+':'#113CCF',Tor:'#7B4F9C','Google Search':'#4285F4',Gmail:'#4285F4','Google Meet':'#4285F4','Google Drive':'#4285F4','Google DNS':'#4285F4','Google Pay':'#4285F4',Gemini:'#4285F4',iMessage:'#34C759',FaceTime:'#34C759',iCloud:'#A2AAAD','Apple Push':'#A2AAAD','Amazon AWS':'#FF9900','Amazon.com':'#FF9900','Prime Video':'#FF9900','Amazon Pay':'#FF9900','Cloudflare CDN':'#F38040','Akamai CDN':'#0099CC','Fastly CDN':'#FF282D','Oracle Cloud':'#F80000',DigitalOcean:'#0080FF',OVH:'#1230F0',CDR:'#2c6f79',IPDR:'#b94a48'};
@@ -3340,7 +3340,7 @@ function showProfile(sub){
       return narr.length?narr.map(nn=>`<div style="padding:1px 0;display:flex;gap:4px"><span style="color:${nn.type==='call'?'var(--danger)':nn.type==='movement'?'var(--warn)':nn.type==='meeting'?'var(--accent)':'var(--muted)'};flex-shrink:0">&#x2022;</span><span>${esc(nn.text)}</span></div>`).join(''):'<span style="color:var(--muted)">Insufficient data for narrative</span>';
     })()}</div></div>
     <div class="prof-section"><h4>Recent activity</h4>
-      ${rows.slice(-10).reverse().map(r=>`<div class="evt" onclick="mapInstance&&mapInstance.setView([${r.lat||0},${r.lng||0}],13)"><span class="evt-time">${fmt(r.ts)}</span> <span class="evt-loc">${esc(r.type)} ${esc(r.cnt||'')} ${r.cll||''}</span></div>`).join('')}</div>
+      ${rows.slice(-10).reverse().map(r=>`<div class="evt" onclick="state.map.instance&&state.map.instance.setView([${r.lat||0},${r.lng||0}],13)"><span class="evt-time">${fmt(r.ts)}</span> <span class="evt-loc">${esc(r.type)} ${esc(r.cnt||'')} ${r.cll||''}</span></div>`).join('')}</div>
   `;
   D.profile.style.display='flex';
   fillProfileCrossCase(sub);
@@ -5066,8 +5066,8 @@ D.exportBtn.addEventListener('click',async ()=>{
   }
 
   // Geofence
-  if(geoFenceDrawn&&geoFenceLayer){
-    const fencePts=geoFenceLayer.getLatLngs();const coords=Array.isArray(fencePts[0])?fencePts[0]:fencePts;
+  if(state.map.fenceDrawn&&state.map.fenceLayer){
+    const fencePts=state.map.fenceLayer.getLatLngs();const coords=Array.isArray(fencePts[0])?fencePts[0]:fencePts;
     report+='\n--- Geofence ---\n';
     coords.forEach(p=>report+='  '+p.lat.toFixed(4)+', '+p.lng.toFixed(4)+'\n');
   }
