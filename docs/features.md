@@ -1105,3 +1105,49 @@ Closing the bread-and-butter gaps vs the commercial i9 CDR Analyzer, in 8 phases
 ### Investigation Validation Checklist
 - **Description:** `tests/VALIDATION_CHECKLIST.md` provides step-by-step validation guidance: identity resolution tests, meeting detection expectations, subject assessment verification, lead scoring sanity checks, AI findings false-positive tracking table, activity spike detection expectations, and a pre-demo checklist (19 items).
 - **Tech:** Markdown checklist with per-dataset expected/actual columns, FP rate target <20%
+
+---
+
+## 22. Scale & Architecture Overhaul (air-gapped, 1–5M+ records)
+
+A cross-cutting pass to make ARGUS handle very large CDR/IPDR datasets on a single air-gapped workstation. The guiding rule: everything runs **fully self-contained** (FastAPI + PostgreSQL, SQLite fallback) with **no external services required**; optional accelerators (Redis, Celery/RQ, Postgres `pg_trgm`, SQLite FTS5) are **detected and used opportunistically** when present and never mandatory.
+
+### Capability Layer (optional accelerators, offline by default)
+- **Description:** At startup ARGUS probes for optional accelerators and records them in a `CAPS` singleton (DB backend, Redis, job-queue type, `pg_trgm`, SQLite FTS5). Everything degrades to a self-contained path when a service is absent or unreachable — the probe is best-effort and never fatal. `GET /health` reports the active mode of each capability (`self_contained_offline: true` confirms the air-gapped guarantee); admin `GET /metrics` adds row counts + audit-chain status.
+- **Tech:** `app/core/capabilities.py` (`detect()`/`CAPS`), `app/core/cache.py` (`Cache` adapter: `DBCache` default + optional `RedisCache`), `app/core/jobs.py` (`JobQueue`: self-contained `ThreadJobQueue` with id/status tracking, Celery/RQ-ready), config flags `REDIS_URL`/`CELERY_BROKER_URL`/`ANALYTICS_CACHE_TTL`/`BACKUP_DIR`.
+
+### In-Process Event Bus
+- **Description:** Decouples "records changed" from the work it triggers. Upload publishes `CASE_IMPORTED` (replace) / `RECORDS_APPENDED` (append); reset/delete publish `CASE_RESET` / `CASE_DELETED`. Subscribers — analytics (re)materialisation, FTS index sync, and the optional Redis-tier invalidation — react without the uploader knowing about them. Handlers are failure-isolated; heavy work is enqueued onto the JobQueue rather than blocking the request.
+- **Tech:** `app/core/events.py` (`publish`/`subscribe`/`register_default_handlers`), wired from `api/upload.py`, `api/records.py`, `api/cases.py`.
+
+### Incremental Analytics (materialised, versioned)
+- **Description:** Analytics are materialised into an `analytics_cache` table (dashboard charts, subject lists, AI overview, per-subject reports) instead of recomputed on every request. **Appends update only what the new rows touch**: a per-table max-id watermark finds exactly the new rows, and `incremental_update` recomputes the case-wide aggregates but syncs only the *touched* subjects' report cache (recompute changed/newly-in-cap subjects, keep untouched, drop those pushed out of the top-N) — byte-identical to a full recompute, parity-tested. Every cache row carries a `schema_version`; a stale version is treated as a miss so a code update can never serve analytics in an old shape (`record_count`/`build_ms` telemetry too).
+- **Tech:** `services/analytics_materialize_service.py` (`materialize_case`, `incremental_update`, `_sync_reports`, watermark `_agg_meta`, `SCHEMA_VERSION`, `read_through`); `models/analytics.py` versioning columns; triggered via the event bus + JobQueue. Tests: `test_incremental_analytics.py` (parity + touched-only), `test_analytics_versioning.py`.
+
+### Optional Redis Cache Tier
+- **Description:** `read_through(db, case_id, key, compute)` serves analytics with an optional Redis tier **in front of** the DB cache: Redis (only when active) → DB cache → compute+persist. When Redis is off it is byte-for-byte the previous behaviour (DB cache on the request session), so the offline deployment is unchanged; when on, it fronts the DB cache for faster case reopen and a path to cross-investigator sharing. The event bus clears the Redis tier on any record change, keeping it in sync with the DB cache.
+- **Tech:** `core/cache.py` `RedisCache` (injectable client, `invalidate`/`invalidate_all`), `read_through` in the materialize service, `_on_data_changed_redis` handler. Tested with a dependency-free fake redis client (`test_redis_cache.py`).
+
+### Trigram / FTS-Accelerated Search
+- **Description:** The records free-text (substring) search is centralised and made index-backed when an accelerator is present, with an ILIKE fallback so the air-gapped default keeps working. **Postgres + `pg_trgm`**: GIN trigram indexes make the existing `ILIKE '%x%'` queries index-backed with no query change (verified live — `EXPLAIN` shows a Bitmap Index Scan). **SQLite + FTS5 (trigram tokenizer)**: per-table `cdr_fts`/`ipdr_fts` indexes; search becomes `id IN (SELECT rowid FROM …_fts WHERE …_fts MATCH :q)`, kept in sync by `fts_sync` (pure-SQL prune + insert-missing, no per-row triggers), wired to the event bus. Sub-trigram (<3 char) terms fall back to ILIKE.
+- **Tech:** `services/search_service.py` (`cdr_search_clause`/`ipdr_search_clause`, `ensure_pg_trgm_indexes`, `ensure_fts_tables`, `fts_sync`, `fts_active`), used by `records_service.py`. Tests: `test_search.py` (FTS-vs-ILIKE parity, append/prune sync, short-term fallback).
+
+### Optional Postgres Partitioning (opt-in migration)
+- **Description:** An operator script recreates `cdr_records`/`ipdr_records` as **HASH-partitioned-by-`case_id`** tables (default 16 partitions) for partition pruning on case-scoped queries at multi-million-row scale — the app/ORM need no change (queries still key on the surrogate `id`). Because uncased records legitimately have NULL `case_id` (which a composite PK would forbid), the partitioned table carries **no PK**; a plain `id` index keeps lookups fast and the sequence guarantees uniqueness. Dry-run by default; `--self-test` validates the whole mechanism (incl. NULL handling + pruning) on a scratch table. Validated live on Postgres.
+- **Tech:** `scripts/pg_partition.py` (`--dry-run`/`--execute`/`--self-test`). SQLite = no-op.
+
+### Job Status API
+- **Description:** Surfaces the async work the event bus enqueues (materialise/incremental, FTS sync) so a big-case import's progress is visible instead of silent. `GET /jobs` lists newest-first with state (queued/running/done/error) + timings; `GET /jobs/{id}` fetches one. Backed by the self-contained thread queue (Celery/RQ when a broker is configured).
+- **Tech:** `api/jobs.py`, `core/jobs.py` `ThreadJobQueue.recent()`.
+
+### Browser Memory & Rendering
+- **Description:** Several changes keep the browser responsive on million-row cases. (1) The in-browser `allRows` mirror is **capped** (`MAX_CLIENT_ROWS=150000`): beyond it the client holds a bounded newest-first sample for live previews while the authoritative analytics stay server-side — prevents OOM/freeze; typical cases (<150k) load fully. (2) **Virtual scrolling** for large report tables (analysis, group-compare, tower-dump): a table over ~150 rows renders only the visible window + buffer with sized spacer rows, so a 50k-row report is a few dozen `<tr>` in the DOM. (3) **Canvas force-graph**: above ~700 nodes the network graph renders to a `<canvas>` (D3 drives the layout, canvas draws) instead of SVG, scaling to thousands of nodes while keeping zoom/pan, hover, click-to-profile and search; small graphs keep the richer SVG path. (4) The **subject pickers** (analysis, correlation, graph) now list the case's real subjects (a-parties + source IPs from `/analytics/subjects`) instead of tens of thousands of counterparts/destination IPs. (5) A **jump-to-page** input on the Records pager.
+- **Tech:** `_bgLoadAll` cap, `_repTableHtml`/`_vTbody`/`_wireVirtualTables`, `_renderGraphCanvas`/`GRAPH_CANVAS_MIN`, `_ownedSubjects` from `/analytics/subjects`, `_recGoto` — all in `static/app.js`.
+
+### Evidentiary & Operational Hardening
+- **Description:** (1) **Tamper-evident audit log**: each `audit_logs` row stores `entry_hash = sha256(content + prev_hash)`, chaining to the prior row; altering/removing/inserting a row breaks every hash after it, and `GET /audit/verify` (admin) recomputes the chain and reports the first break. The hash uses an absolute UTC epoch so a row verifies identically across SQLite (naive) and Postgres (tz-aware). (2) **Case archiving**: an `archived` flag drops a case out of the active list (reachable via `?include_archived=true`), reversible via `PUT /cases/{id}`. (3) **Portable cross-DB backup/restore**: `scripts/backup.py` + admin `POST/GET /backup` snapshot the whole DB into a single portable SQLite file (works on Postgres and SQLite, no `pg_dump`), streamed in chunks; restore is CLI-only (`--restore … --replace`). Validated live (54k rows exported from Postgres).
+- **Tech:** `services/audit_service.py` (`_entry_hash`, `verify_audit_chain`), `models/case.py` `archived`, `services/backup_service.py` + `scripts/backup.py` + `api/backup.py`. Tests: `test_audit_chain.py`, `test_case_archiving.py`, `test_backup.py`.
+
+### Tier-5 Analytics Gaps Filled
+- **Description:** The investigation-analytics suite gains **PageRank** (pure-Python power iteration — no SciPy, keeps the air-gapped build dependency-free), **closeness centrality** (size-guarded like betweenness), and **Jaccard + resource-allocation** link-prediction indices alongside the existing Adamic-Adar. A **Network Intelligence** sidebar panel surfaces the centrality leaderboards (incl. the newly-exposed PageRank & closeness) with click-to-profile.
+- **Tech:** `graph_service.py` (`_pagerank_py`, closeness in `get_graph_metrics`), `inference_service.py` link prediction, `renderNetworkIntel()`. Tests: `test_graph_metrics.py`.
