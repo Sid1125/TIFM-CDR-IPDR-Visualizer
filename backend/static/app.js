@@ -2672,10 +2672,59 @@ if(D.evidenceToggleBtn)D.evidenceToggleBtn.addEventListener('click',()=>{const p
 if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();refreshCapButtons();renderStoryTimeline();renderEvidenceTab();}});
 
 // ---- Dedicated Evidence tab (full view of everything saved) ----
+async function renderHypotheses(el){
+  if(!el)return;
+  let list=[];
+  try{list=await API.get('/hypotheses/'+(activeCaseId?'?case_id='+encodeURIComponent(activeCaseId):''));}
+  catch(e){el.innerHTML='';return;}
+  const col=s=>s==='supported'?'var(--success)':s==='refuted'?'var(--danger)':'var(--accent)';
+  const badge=s=>'<span style="font-size:0.6rem;padding:1px 6px;border-radius:8px;background:'+col(s)+';color:#fff">'+esc(s)+'</span>';
+  const inS='padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);font-size:0.8rem';
+  let h='<div class="evt-bar"><b>Hypotheses</b> <span style="opacity:0.6;font-size:0.75rem">theory of the case</span><div style="flex:1"></div>'
+    +'<input id="hypNew" placeholder="New hypothesis title…" style="'+inS+';flex:0 0 260px" onkeydown="if(event.key===\'Enter\')_hypAdd()">'
+    +'<button class="btn-sm" id="hypAddBtn">+ Add</button></div>';
+  if(!list.length)h+='<div class="evt-empty" style="padding:10px">No hypotheses yet — capture your working theory of the case.</div>';
+  else h+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'+list.map(hy=>
+    '<div class="evt-card" style="--ec:'+col(hy.status)+'"><div class="evt-card-h"><b>'+esc(hy.title)+'</b> '+badge(hy.status)+'<div style="flex:1"></div>'
+    +'<select class="hypStatus" data-id="'+hy.id+'" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--text)">'
+    +['open','supported','refuted'].map(s=>'<option value="'+s+'"'+(s===hy.status?' selected':'')+'>'+s+'</option>').join('')+'</select>'
+    +'<button class="evidence-rm hypDel" data-id="'+hy.id+'" title="Delete">&times;</button></div>'
+    +(hy.body?'<div class="evt-detail">'+esc(hy.body)+'</div>':'')
+    +(hy.subjects&&hy.subjects.length?'<div class="evidence-meta">Subjects: '+hy.subjects.map(s=>esc(s)).join(', ')+'</div>':'')
+    +'<div class="evidence-meta">'+(hy.created_by?esc(hy.created_by)+' · ':'')+(hy.updated_at?_fmtDT(hy.updated_at):'')+'</div></div>').join('')+'</div>';
+  el.innerHTML=h;
+  el.querySelectorAll('.hypStatus').forEach(s=>s.onchange=async()=>{try{await API.put('/hypotheses/'+s.dataset.id,{status:s.value});renderHypotheses(el);}catch(e){try{toast('Update failed')}catch(_){}}});
+  el.querySelectorAll('.hypDel').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this hypothesis?'))return;try{await API.del('/hypotheses/'+b.dataset.id);renderHypotheses(el);}catch(e){}});
+  const ab=el.querySelector('#hypAddBtn');if(ab)ab.onclick=_hypAdd;
+}
+async function _hypAdd(){
+  const inp=document.getElementById('hypNew');if(!inp)return;const t=(inp.value||'').trim();if(!t)return;
+  try{await API.post('/hypotheses/',{case_id:activeCaseId||null,title:t});inp.value='';renderHypotheses(document.getElementById('hypPanel'));}
+  catch(e){try{toast('Add failed: '+e.message)}catch(_){}}
+}
+async function renderRelationships(el){
+  if(!el)return;
+  let list=[];try{list=await API.get('/relationships/');}catch(e){el.innerHTML='';return;}
+  const inS='padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);font-size:0.8rem';
+  let h='<div class="evt-bar"><b>Relationship labels</b> <span style="opacity:0.6;font-size:0.75rem">links between subjects</span><div style="flex:1"></div>'
+    +'<input id="relA" placeholder="Subject A" style="'+inS+';flex:0 0 130px"><input id="relB" placeholder="Subject B" style="'+inS+';flex:0 0 130px">'
+    +'<input id="relL" placeholder="label (e.g. brothers)" style="'+inS+';flex:0 0 150px"><button class="btn-sm" id="relAddBtn">+ Add</button></div>';
+  if(list.length)h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">'+list.map(r=>
+    '<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid var(--line);border-radius:14px;font-size:0.74rem">'
+    +esc(r.subject_a)+' — <b>'+esc(r.label)+'</b> — '+esc(r.subject_b)
+    +' <button class="relDel" data-a="'+esc(r.subject_a)+'" data-b="'+esc(r.subject_b)+'" title="Remove" style="border:0;background:none;cursor:pointer;color:var(--danger)">&times;</button></span>').join('')+'</div>';
+  else h+='<div class="evt-empty" style="padding:8px">No relationship labels yet.</div>';
+  el.innerHTML=h;
+  const add=el.querySelector('#relAddBtn');
+  if(add)add.onclick=async()=>{const a=el.querySelector('#relA').value.trim(),b=el.querySelector('#relB').value.trim(),l=el.querySelector('#relL').value.trim();if(!a||!b||!l)return;try{await API.put('/relationships/',{subject_a:a,subject_b:b,label:l});renderRelationships(el);}catch(e){try{toast('Add failed: '+e.message)}catch(_){}}};
+  el.querySelectorAll('.relDel').forEach(bn=>bn.onclick=async()=>{try{await API.put('/relationships/',{subject_a:bn.dataset.a,subject_b:bn.dataset.b,label:''});renderRelationships(el);}catch(e){}});
+}
 function renderEvidenceTab(){
   const box=D.evidenceTab;if(!box)return;updateEvidenceCount();
   const list=evLoad();
-  const head='<div class="evt-bar"><div><b>'+n(list.length)+'</b> saved item'+(list.length===1?'':'s')+(activeCaseId?' · case '+esc(activeCaseId):'')+'</div>'
+  const head='<div id="hypPanel" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)"></div>'
+    +'<div id="relPanel" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)"></div>'
+    +'<div class="evt-bar"><div><b>'+n(list.length)+'</b> saved item'+(list.length===1?'':'s')+(activeCaseId?' · case '+esc(activeCaseId):'')+'</div>'
     +'<div style="flex:1"></div>'
     +'<button class="btn-sm" id="evtDossierBtn">Open dossier</button>'
     +'<button class="btn-sm" id="evtExportBtn">Export (.json)</button>'
@@ -2694,6 +2743,8 @@ function renderEvidenceTab(){
   const cb=box.querySelector('#evtClearBtn');if(cb)cb.onclick=()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();refreshCapButtons();renderEvidenceTab();renderStoryTimeline&&renderStoryTimeline();}};
   const db=box.querySelector('#evtDossierBtn');if(db)db.onclick=()=>renderDossier();
   const xb=box.querySelector('#evtExportBtn');if(xb)xb.onclick=()=>{const blob=new Blob([JSON.stringify(evLoad(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ARGUS_evidence_'+(activeCaseId||'case')+'.json';a.click();URL.revokeObjectURL(a.href);};
+  renderHypotheses(document.getElementById('hypPanel'));   // investigation workspace: theory of the case
+  renderRelationships(document.getElementById('relPanel')); // + labelled links between subjects
 }
 
 // ---- Tower Repository tab (permanent, case-independent master of all towers) ----
