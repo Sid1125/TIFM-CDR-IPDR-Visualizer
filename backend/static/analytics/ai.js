@@ -17,7 +17,7 @@ import { recordSvcAttr } from '../services/attribution.js';
 import { reconstructSessions } from '../services/sessions.js';
 import { detectMeetings, meetingTotals } from '../services/meetings.js';
 import { buildIdentityProfile } from '../services/identity.js';
-import { registerTab } from '../core/router.js';
+import { registerTab, tabNeedsRender, tabMarkRendered } from '../core/router.js';
 
 window._aiCache=null;
 window._aiCachePartial=null;  // pre-warmed by web worker; consumed by getAiCache()

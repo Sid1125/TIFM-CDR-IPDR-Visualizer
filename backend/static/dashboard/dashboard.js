@@ -7,7 +7,7 @@
 // Exports renderDashboard (app.js re-renders it on load); self-registers the dashboard tab.
 
 import { esc, n, fmt, fmts } from '../core/utils.js';
-import { D } from '../core/dom.js';
+import { $, D } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { dashAgg } from '../services/cache.js';
 import { _totalCdrFn, _totalIpdrFn, rowsFor } from '../data/records.js';
