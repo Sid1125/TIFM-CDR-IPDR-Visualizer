@@ -23,6 +23,7 @@ import './towers/dump.js';  // self-registers the Tower Dump tab
 import { _wireExports } from './services/export.js';
 import './analytics/reports.js';  // self-registers the Phase B/C report tabs
 import './records/overlays.js';
+import './records/annotations.js';
 import { renderGraph, initGraphSubjects } from './graph/network.js';  // self-registers the Graph tab
 import { auditView } from './ui/admin.js';  // self-registers the Admin tab
 import { identCache, dashAgg, clearAnalyticsCaches } from './services/cache.js';
@@ -917,39 +918,7 @@ if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confir
 
 // ====== 6. RECORDS TABLE ======
 // loadAnnotations -> records/table.js
-// Build an evidence item mirroring a flagged record, looked up from state.data.records for a meaningful blurb.
-function _recordEvidence(r,numId){
-  const row=state.data.records.find(x=>x.id===r.id)||{};
-  const parts=[];
-  if(row.ts)parts.push(fmt(row.ts));
-  if(row.cnt)parts.push((r.type==='CDR'?'with ':'→ ')+row.cnt);
-  if(row.dur!=null&&row.dur!=='')parts.push(row.dur+'s');
-  if(row.svc)parts.push(row.svc);
-  if(row.tow)parts.push('tower '+row.tow);
-  return {kind:'record',sig:'record|'+r.type+'|'+numId,
-    label:subjLabelTxt(row.sub||'?')+' — '+r.type,
-    detail:'Flagged record · '+(parts.join(' · ')||(r.type+' #'+numId)),
-    ts:row.ts||null,subject:row.sub||null};
-}
-function toggleAnnot(r){
-  const numId=parseInt(r.id.slice(1));
-  const key=r.type+'_'+numId;
-  // Repaint just this row's star in place — re-rendering the whole table here would reset
-  // the paged view back to the first page.
-  const paint=()=>{const cell=D.recBody.querySelector('.annot-cell[data-annot="'+key+'"]');if(cell)cell.innerHTML=state.data.annotations[key]?'&#9733;':'&#9734;';};
-  if(state.data.annotations[key]){
-    API.del('/annotations/'+state.data.annotations[key].id).then(()=>{
-      delete state.data.annotations[key];paint();
-      unpinEvidenceBySig('record|'+r.type+'|'+numId);
-    }).catch(()=>{});
-  }else{
-    API.post('/annotations/',{record_type:r.type,record_id:numId,tag:'flagged',note:''}).then(a=>{
-      state.data.annotations[key]=a;paint();
-      pinEvidence(_recordEvidence(r,numId));
-      try{toast('Record added to evidence.');}catch(e){}
-    }).catch(e=>{console.error('annotation failed',e);});
-  }
-}
+// Records-table flag/annotation toggle (toggleAnnot + _recordEvidence) -> records/annotations.js
 // Records tab (table/pagination/export/annotations load) -> records/table.js
 
 // Subject Profile modal (showProfile + fillProfileSubscriber + towerAnalytics + buildNarrative) -> records/profile.js
@@ -1190,7 +1159,7 @@ async function resetCase(){
 // need bridging. This shim is TEMPORARY: as each feature migrates to event delegation (data-act),
 // its entries are dropped, and the whole block is deleted in the final cleanup step.
 Object.assign(window, {
-  switchTab, saveProfileTag, toggleAnnot,
+  switchTab, saveProfileTag,
 });
 
 provideWorkspaceHooks({renderStoryTimeline, renderDossier});  // evidence -> story/dossier refreshers
