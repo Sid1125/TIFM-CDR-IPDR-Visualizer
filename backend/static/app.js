@@ -25,6 +25,7 @@ import { reconstructSessions } from './services/sessions.js';
 import './analytics/services.js';  // self-registers the Services tab
 import { provideDetectMeetings } from './analytics/correlation.js';  // self-registers the Correlation tab
 import { renderTimeline } from './timeline/timeline.js';  // self-registers the Timeline tab
+import { detectMeetings, ensureMeetingsLoaded, meetingTotals, meetingsCache } from './services/meetings.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -293,7 +294,7 @@ async function loadCaseData(){
   // Bump render generation: tabs will know their cached render is stale.
   state.render.gen++;Object.keys(state.render.rendered).forEach(k=>delete state.render.rendered[k]);
   state._cd=null;  // chart data needs re-fetch
-  invalidateAiCache();state.data.geoRecords=null;_infReport=null;_infCache=null;_meetings=null;_storyXcaseCache={};_storyEvents=[];
+  invalidateAiCache();state.data.geoRecords=null;_infReport=null;_infCache=null;meetingsCache.v=null;_storyXcaseCache={};_storyEvents=[];
   try{
     const qp=new URLSearchParams({limit:500});
     if(state.data.caseId)qp.set('case_id',state.data.caseId);
@@ -1023,33 +1024,7 @@ function renderDashBar(contactCounts){
   window.dashBarChart=new Chart(D.dashBar,{type:'bar',data:{labels:sorted.map(s=>s[0].length>12?s[0].slice(0,12)+'...':s[0]),datasets:[{label:'Interactions',data:sorted.map(s=>s[1]),backgroundColor:'#2c6f79',borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{}},x:{grid:{display:false}}},responsive:true,maintainAspectRatio:false,onClick:(e,el)=>{if(el.length){const idx=el[0].datasetIndex;const sub=state.subjects.find(s=>sorted[idx]&&s.includes(sorted[idx][0].slice(0,8)));if(sub)showProfile(sub)}}}});
 }
 
-// -- Meeting / co-location cache (server-backed) --
-// Meeting detection runs server-side now (exact, full-coverage; see /investigation/meetings).
-// We fetch the whole case's meetings ONCE into _meetings and every consumer reads from it
-// synchronously via detectMeetings() below — no O(n^2) client scan, no top-30 sampling.
-let _meetings=null; // {list:[client-shaped], total, high, medium, low}
-async function ensureMeetingsLoaded(force){
-  if(_meetings&&!force)return _meetings;
-  try{
-    const p=new URLSearchParams();if(state.data.caseId)p.set('case_id',state.data.caseId);p.set('limit','2000');
-    const r=await API.get('/investigation/meetings?'+p.toString());
-    const byPair=new Map();
-    (r.meetings||[]).forEach(m=>{const k=[m.subject_a,m.subject_b].sort().join('|');byPair.set(k,(byPair.get(k)||0)+1);});
-    const list=(r.meetings||[]).map(m=>{
-      const gl=(m.confidence||'').toLowerCase()||(m.gap_min<5?'high':m.gap_min<15?'medium':'low');
-      const k=[m.subject_a,m.subject_b].sort().join('|');
-      return {subA:m.subject_a,subB:m.subject_b,tow:m.tower_id,lat:m.latitude,lng:m.longitude,
-        time:new Date(m.time_a),gap:m.gap_min,gapLevel:gl,
-        score:gl==='high'?90:gl==='medium'?60:30,
-        encounterCount:byPair.get(k)||1,subAEvent:'',subBEvent:'',
-        evidence:['Time gap: '+Math.round(m.gap_min)+'m ('+gl+')'+(byPair.get(k)>1?'; '+byPair.get(k)+' same-tower encounters':'')]};
-    });
-    _meetings={list,total:r.total||list.length,high:r.high||0,medium:r.medium||0,low:r.low||0};
-  }catch(e){console.error('meetings load',e);_meetings={list:[],total:0,high:0,medium:0,low:0};}
-  return _meetings;
-}
-// Exact meeting totals (full case), used by count consumers instead of the (capped) list length.
-function meetingTotals(){return _meetings||{list:[],total:0,high:0,medium:0,low:0};}
+// Meeting cache (ensureMeetingsLoaded + meetingTotals + detectMeetings) -> services/meetings.js
 
 // -- Analytics Cache --
 window._aiCache=null;
@@ -1137,23 +1112,7 @@ function confidenceBreakdown(baseScore,components){
   const total=components.reduce((s,c)=>s+c.value,baseScore);
   return{baseScore,components,total:Math.min(100,Math.max(0,total))};
 }
-// Synchronous filter over the server-fetched meeting cache (_meetings, loaded once per case by
-// ensureMeetingsLoaded). Supports {subject}, {subjectA,subjectB} (a specific pair), or all
-// pairs (default/allPairs). Returns client-shaped meetings sorted by score, optionally capped.
-function detectMeetings(opts){
-  const {subject,subjectA,subjectB,allPairs,maxResults}=opts||{};
-  const all=(_meetings&&_meetings.list)||[];
-  let res;
-  if(subject){
-    res=all.filter(m=>m.subA===subject||m.subB===subject);
-  }else if(subjectA&&subjectB){
-    res=all.filter(m=>(m.subA===subjectA&&m.subB===subjectB)||(m.subA===subjectB&&m.subB===subjectA));
-  }else{ // allPairs / default
-    res=all.slice();
-  }
-  res.sort((a,b)=>b.score-a.score);
-  return maxResults?res.slice(0,maxResults):res;
-}
+// detectMeetings (synchronous filter over the meeting cache) -> services/meetings.js
 
 // ====== INVESTIGATION SUMMARY ======
 function renderCaseSummary(){
@@ -1203,7 +1162,7 @@ function renderCaseSummary(){
   refreshDashMeetings();
 }
 // Fill the dashboard Meetings card from the server's exact, full-coverage co-location counts
-// (cached in _meetings, preloaded on case open).
+// (cached in meetingsCache.v, preloaded on case open).
 async function refreshDashMeetings(){
   const v=()=>document.getElementById('dashMeetVal'),s=()=>document.getElementById('dashMeetSub');
   try{
@@ -1562,7 +1521,7 @@ async function buildCaseEvents(subject){
     // Identity changes
     try{(buildIdentityProfile(subject).changes||[]).forEach(c=>ev.push({ts:new Date(c.time),kind:'identity',title:c.detail,detail:(c.from?('was '+c.from):'')+(c.to?(' → '+c.to):'')+' ('+c.confidence+' confidence)',sub:subject}));}catch(e){}
     // Meetings involving subject
-    ((_meetings&&_meetings.list)||[]).filter(m=>m.subA===subject||m.subB===subject).forEach(m=>{const other=m.subA===subject?m.subB:m.subA;ev.push({ts:new Date(m.time),kind:'meeting',title:'Co-located with '+other,detail:'tower '+(m.tow||'?')+' · '+Math.round(m.gap)+'m gap · '+m.gapLevel+' confidence'+(m.encounterCount>1?' · '+m.encounterCount+' encounters':''),sub:subject,cnt:other,tow:m.tow});});
+    ((meetingsCache.v&&meetingsCache.v.list)||[]).filter(m=>m.subA===subject||m.subB===subject).forEach(m=>{const other=m.subA===subject?m.subB:m.subA;ev.push({ts:new Date(m.time),kind:'meeting',title:'Co-located with '+other,detail:'tower '+(m.tow||'?')+' · '+Math.round(m.gap)+'m gap · '+m.gapLevel+' confidence'+(m.encounterCount>1?' · '+m.encounterCount+' encounters':''),sub:subject,cnt:other,tow:m.tow});});
     // Cross-case
     const xs=((xrep&&xrep.subjects)||[]).find(s=>s.subject===subject);
     if(xs){(xs.matches||[]).forEach(mm=>{const when=mm.first_seen?new Date(mm.first_seen):(any.length?new Date(any[0].ts):new Date());ev.push({ts:when,kind:'crosscase',title:'Also appears in case "'+(mm.case_name||mm.case_id)+'"',detail:'matched by '+((mm.match_types||[mm.match_type]).join(', '))+' · '+mm.confidence+' confidence · '+(mm.record_count||0)+' records',sub:subject});});}
@@ -1570,7 +1529,7 @@ async function buildCaseEvents(subject){
     addAiEvents(ev,subject,any.length?new Date(any[any.length-1].ts):new Date());
   }else{
     // Case-wide overview: meetings, identity changes, cross-case, AI (bounded).
-    ((_meetings&&_meetings.list)||[]).forEach(m=>ev.push({ts:new Date(m.time),kind:'meeting',title:m.subA+' ↔ '+m.subB,detail:'tower '+(m.tow||'?')+' · '+Math.round(m.gap)+'m · '+m.gapLevel,sub:m.subA,cnt:m.subB,tow:m.tow}));
+    ((meetingsCache.v&&meetingsCache.v.list)||[]).forEach(m=>ev.push({ts:new Date(m.time),kind:'meeting',title:m.subA+' ↔ '+m.subB,detail:'tower '+(m.tow||'?')+' · '+Math.round(m.gap)+'m · '+m.gapLevel,sub:m.subA,cnt:m.subB,tow:m.tow}));
     (state.subjects||[]).slice(0,200).forEach(s=>{try{(buildIdentityProfile(s).changes||[]).forEach(c=>ev.push({ts:new Date(c.time),kind:'identity',title:s+': '+c.detail,detail:(c.from||'')+(c.to?(' → '+c.to):'')+' ('+c.confidence+')',sub:s}));}catch(e){}});
     ((xrep&&xrep.subjects)||[]).forEach(xs=>{(xs.matches||[]).forEach(mm=>ev.push({ts:mm.first_seen?new Date(mm.first_seen):new Date(),kind:'crosscase',title:xs.subject+' ↔ case "'+(mm.case_name||mm.case_id)+'"',detail:'matched by '+((mm.match_types||[mm.match_type]).join(', '))+' · '+mm.confidence,sub:xs.subject}));});
     addAiEvents(ev,null,new Date());
@@ -3714,7 +3673,7 @@ if(D.dossierBtn)D.dossierBtn.addEventListener('click',renderDossier);
 if(D.dossierCloseBtn)D.dossierCloseBtn.addEventListener('click',()=>{D.dossier.style.display='none'});
 if(D.dossierPrintBtn)D.dossierPrintBtn.addEventListener('click',()=>window.print());
 {const ab=document.getElementById('dossierAgencyBtn');if(ab)ab.addEventListener('click',setAgencyDetails);}
-{const rb=document.getElementById('dossierRegenBtn');if(rb)rb.addEventListener('click',()=>{_storyXcaseCache={};_infReport=null;_meetings=null;renderDossier();});}
+{const rb=document.getElementById('dossierRegenBtn');if(rb)rb.addEventListener('click',()=>{_storyXcaseCache={};_infReport=null;meetingsCache.v=null;renderDossier();});}
 
 // All-seeing-eye seal (Argus Panoptes) rendered in monochrome navy so it prints cleanly.
 const ARGUS_EMBLEM='<svg class="dc-emblem" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="ARGUS emblem">'
@@ -3813,7 +3772,7 @@ async function renderDossier(){
     // Identity changes across subjects (SIM / handset swaps).
     const idChanges=[];(state.subjects||[]).slice(0,400).forEach(s=>{try{(buildIdentityProfile(s).changes||[]).forEach(c=>idChanges.push({sub:s,time:c.time,detail:c.detail,from:c.from,to:c.to,confidence:c.confidence}))}catch(e){}});
     idChanges.sort((a,b)=>new Date(a.time)-new Date(b.time));
-    const meetingsList=((_meetings&&_meetings.list)||[]).slice().sort((a,b)=>b.score-a.score);
+    const meetingsList=((meetingsCache.v&&meetingsCache.v.list)||[]).slice().sort((a,b)=>b.score-a.score);
     const impossible=(repC.impossible_travel||[]);
     const hidden=(repC.co_presence||[]).filter(p=>p.hidden_link||p.convoy);
 
