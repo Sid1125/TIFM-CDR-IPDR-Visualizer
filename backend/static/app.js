@@ -15,6 +15,9 @@ import { renderCharts, onChartsRendered } from './charts/charts.js';
 import './reference/laws.js';  // self-registers the Laws tab
 import { provideInfReport } from './maps/map.js';  // self-registers the Map tab
 import './towers/repo.js';  // self-registers the Tower Repository tab
+import { loadReference, refLookup } from './reference/telecom.js';
+import { _repCard, _wireVirtualTables } from './ui/report_table.js';
+import { provideExports } from './towers/dump.js';  // self-registers the Tower Dump tab
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -234,37 +237,7 @@ async function loadSubjectTags(){
   catch(e){state.subjectTags=state.subjectTags||{};}
 }
 // ====== TELECOM REFERENCE (offline number->operator/circle, ISD, IMEI TAC) ======
-async function loadReference(){
-  try{const m=await API.get('/reference/meta');state.ref={series:m.series||{},isd:m.isd||{},tac:m.tac||{},seed:m.series_seed};}
-  catch(e){state.ref={series:{},isd:{},tac:{}};}
-}
-function _refDigits(v){return String(v==null?'':v).replace(/\D/g,'')}
-function _refNational(v){
-  let d=_refDigits(v);const hadPlus=String(v||'').startsWith('+')||d.startsWith('00');
-  if(d.startsWith('00'))d=d.slice(2);
-  if(d.startsWith('91')&&d.length>10)return{national:d.slice(-10),d,hadPlus};
-  if(d.length===10&&'6789'.includes(d[0]))return{national:d,d,hadPlus};
-  if(d.length===11&&d[0]==='0')return{national:d.slice(1),d,hadPlus};
-  return{national:null,d,hadPlus};
-}
-function refIsdCountry(v){
-  const ref=state.ref||{};let d=_refDigits(v);if(d.startsWith('00'))d=d.slice(2);
-  for(let ln=Math.min(4,d.length);ln>=1;ln--){const p=d.slice(0,ln);if(ref.isd&&ref.isd[p])return{code:p,country:ref.isd[p]};}
-  return null;
-}
-function refLookup(v){
-  const ref=state.ref||{series:{},isd:{}};const {national,d,hadPlus}=_refNational(v);
-  const out={national,is_isd:false,country:null,operator:null,circle:null};
-  if(national){for(const ln of [5,4]){const p=national.slice(0,ln);if(ref.series&&ref.series[p]){out.operator=ref.series[p].operator;out.circle=ref.series[p].circle;break;}}return out;}
-  const isd=refIsdCountry(hadPlus?v:d);
-  if(isd&&isd.code!=='91'){out.is_isd=true;out.country=isd.country;}
-  return out;
-}
-function refOperator(v){return refLookup(v).operator||''}
-function refCircle(v){return refLookup(v).circle||''}
-function isIsdNum(v){return refLookup(v).is_isd}
-function refCountry(v){return refLookup(v).country||''}
-function refImei(v){const d=_refDigits(v).slice(0,8);const t=(state.ref&&state.ref.tac&&state.ref.tac[d])||null;return t?(t.make+' '+t.model):''}
+// Telecom reference (loadReference + refLookup/refOperator/refCircle/refImei/…) -> reference/telecom.js
 
 // ====== SUSPECT GROUPS (named watchlist groups + cross-UI highlight) ======
 async function loadSuspects(){
@@ -880,7 +853,7 @@ registerTab('crosscase',()=>{xcView==='graph'?renderCrossCaseGraph():renderCross
 registerTab('inferences',renderInferences);
 registerTab('analysisreports',renderAnalysisReports);
 registerTab('groupcompare',renderGroupCompare);
-registerTab('towerdump',renderTowerDump);
+// towerdump tab registered in towers/dump.js (self-registers via registerTab)
 // towerrepo tab registered in towers/repo.js (self-registers via registerTab)
 registerTab('ai',renderAiInsights);
 registerTab('admin',renderAdmin);
@@ -5224,87 +5197,7 @@ function _wireExports(box,reps,csvClass,fileBase){
   box.querySelectorAll('.'+csvClass+'-x').forEach(b=>b.onclick=()=>{const rep=reps[b.dataset.rep];if(rep)downloadXlsx(fileBase+'_'+b.dataset.rep+'.xlsx',b.dataset.rep,rep.headers,rep.rows);});
   try{_wireVirtualTables(box,reps);}catch(e){console.warn('vtable wiring',e);}  // Phase 2b: window large report tables
 }
-// ====== Shared report-table renderers ======
-const _AR_COLOR={
-  imei_summary:'var(--warn)',imsi_summary:'var(--warn)',
-  isd_calls:'var(--success)',other_state:'var(--success)',
-  latlng:'var(--success)',towers:'var(--success)',undertower:'var(--success)',
-  matrix:'#7356bf',contacts:'#7356bf',cells:'var(--success)',
-};
-const _AR_ICON={
-  day_first_last:'DAY',single_call_days:'1×',weekday_weekend:'WK',longest_calls:'DUR',
-  day_night:'D/N',isd_calls:'ISD',other_state:'OOS',off_periods:'OFF',
-  imei_summary:'IMEI',imsi_summary:'SIM',bank_sms:'OTP',
-  contacts:'COM',towers:'TWR',cells:'CEL',latlng:'LOC',imeis:'DEV',matrix:'MAP',
-  common:'COM',uncommon:'UNQ',imeispersim:'DEV',simsperimei:'SIM',undertower:'TWR',
-};
-// ── Virtual table (Phase 2b) — render only the visible rows of a large report table, so a
-// 50k-row report stays a few dozen <tr> in the DOM instead of 50k. Tables larger than _VCAP are
-// virtualized; on scroll only the window (+buffer) is re-rendered, with sized spacer rows above
-// and below to preserve scroll height. _wireVirtualTables() measures the real row height and
-// attaches the scroll handler after the table is in the DOM.
-const _VCAP=150;      // virtualize tables larger than this
-const _VROW_H=31;     // initial row-height estimate (remeasured live)
-const _VBUF=8;        // extra rows above/below the viewport
-const _VVIS=12;       // visible rows in the bounded scroller
-
-function _vTbody(rows,start,win,rowH,ncol){
-  const total=rows.length;
-  const s=Math.max(0,start);
-  const end=Math.min(total,s+win);
-  let h='';
-  if(s>0)h+='<tr class="vspacer"><td colspan="'+ncol+'" style="height:'+(s*rowH)+'px;padding:0;border:0"></td></tr>';
-  for(let i=s;i<end;i++)h+='<tr>'+rows[i].map(c=>'<td>'+esc(c==null?'':c)+'</td>').join('')+'</tr>';
-  if(end<total)h+='<tr class="vspacer"><td colspan="'+ncol+'" style="height:'+((total-end)*rowH)+'px;padding:0;border:0"></td></tr>';
-  return h;
-}
-
-function _wireVirtualTables(box,reps){
-  if(!box||!reps)return;
-  box.querySelectorAll('.ar-tablewrap.vtable[data-rep]').forEach(wrap=>{
-    const id=wrap.dataset.rep, rep=reps[id];
-    if(!rep||!rep.rows||!rep.rows.length)return;
-    const tbody=wrap.querySelector('tbody');
-    const fr=tbody&&tbody.querySelector('tr:not(.vspacer)');
-    const rowH=fr?Math.max(16,Math.round(fr.getBoundingClientRect().height)):_VROW_H;
-    const ncol=(rep.headers&&rep.headers.length)||1;
-    const win=Math.ceil(wrap.clientHeight/rowH)+2*_VBUF;
-    let last=-1;
-    const render=()=>{
-      const start=Math.floor(wrap.scrollTop/rowH)-_VBUF;
-      if(start===last)return; last=start;
-      tbody.innerHTML=_vTbody(rep.rows,start,win,rowH,ncol);
-    };
-    wrap.addEventListener('scroll',render,{passive:true});
-  });
-}
-
-function _repTableHtml(headers,rows,id){
-  if(!rows.length)return '<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No data for this report.</span></div>';
-  const thead='<thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead>';
-  if(rows.length<=_VCAP){
-    return '<div class="ar-tablewrap"><table class="data-table ar-table">'+thead+'<tbody>'
-      +rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c==null?'':c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
-  }
-  // Virtualized: bounded-height scroller, only the first window rendered up front; the rest fill in
-  // on scroll (wired by _wireVirtualTables once it's in the DOM).
-  const win=_VVIS+2*_VBUF;
-  return '<div class="ar-tablewrap vtable" data-rep="'+esc(id||'')+'" style="max-height:'+(_VROW_H*_VVIS)+'px;overflow:auto">'
-    +'<table class="data-table ar-table">'+thead+'<tbody>'+_vTbody(rows,0,win,_VROW_H,headers.length)+'</tbody></table></div>'
-    +'<div class="ar-note">'+n(rows.length)+' rows (scroll to browse all) — export for the file.</div>';
-}
-function _repCard(expClass,id,title,headers,rows,note){
-  const dis=rows.length?'':' disabled';
-  const col=_AR_COLOR[id]||'var(--accent)';
-  const ico=_AR_ICON[id]||'';
-  const iconHtml=ico?'<span class="ar-card-icon">'+ico+'</span>':'';
-  const badgeCls='ar-count'+(rows.length===0?' zero':'');
-  return '<div class="card ar-card" style="--ar-c:'+col+'">'+
-    '<h3>'+iconHtml+esc(title)+' <span class="'+badgeCls+'">'+rows.length+'</span>'+
-    '<span class="ar-exp-grp"><button class="cap-btn '+expClass+'" data-rep="'+id+'"'+dis+'>CSV</button>'+
-    '<button class="cap-btn '+expClass+'-x" data-rep="'+id+'"'+dis+'>XLSX</button></span></h3>'+
-    (note?'<div class="ar-note">'+esc(note)+'</div>':'')+_repTableHtml(headers,rows,id)+'</div>';
-}
+// Shared report-table renderers (_repCard + virtual tables) -> ui/report_table.js
 const _hm=v=>{try{return new Date(v).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}catch(e){return ''}};
 const _durStr=s=>{s=+s||0;return s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s'};
 
@@ -5453,77 +5346,7 @@ async function _gcRun(){
   }
 }
 
-// ====== PHASE D — TOWER DUMP ANALYSIS ======
-let _tdReports={};
-function renderTowerDump(){
-  const file=document.getElementById('tdFile'),lbl=document.getElementById('tdLabel'),imp=document.getElementById('tdImportBtn'),st=document.getElementById('tdImportStatus');
-  const list=document.getElementById('tdDumpList'),body=document.getElementById('tdBody');
-  if(!list||!body)return;
-  if(!document.getElementById('tdImportBtn')._wired){
-    imp._wired=true;
-    imp.onclick=async()=>{
-      if(!file.files[0]){st.textContent='Choose a file first.';return;}
-      const fd=new FormData();fd.append('file',file.files[0]);fd.append('case_id',state.data.caseId||'');fd.append('dump_label',(lbl.value||'').trim());fd.append('mode','replace');
-      st.textContent='Importing…';
-      try{const r=await fetch('/upload/tower-dump',{method:'POST',credentials:'same-origin',body:fd});if(!r.ok)throw new Error(await r.text());const j=await r.json();st.textContent='Imported '+j.records_imported+' rows into "'+(j.validation&&j.validation.dump_label||'dump')+'".';file.value='';lbl.value='';_tdLoadDumps();}
-      catch(e){st.textContent='Import failed: '+(e.message||e);}
-    };
-    document.getElementById('tdCommonBtn').onclick=()=>_tdRun('common');
-    document.getElementById('tdUncommonBtn').onclick=()=>_tdRun('uncommon');
-    document.getElementById('tdMultBtn').onclick=()=>_tdRun('multiplicity');
-  }
-  _tdLoadDumps();
-}
-function _tdSelectedLabels(){return [...document.querySelectorAll('#tdDumpList input:checked')].map(c=>c.value);}
-async function _tdLoadDumps(){
-  const list=document.getElementById('tdDumpList');if(!list)return;
-  try{
-    const dumps=await API.get('/tower-dump/dumps?case_id='+encodeURIComponent(state.data.caseId||''));
-    if(!dumps.length){list.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">No dumps imported for this case yet.</span></div>';return;}
-    list.innerHTML=dumps.map(d=>'<label class="gc-chk"><input type="checkbox" value="'+esc(d.dump_label)+'" checked> '+esc(d.dump_label)+' <span class="gc-cn">'+d.distinct_numbers+'&thinsp;nos</span> <button class="td-ut" data-label="'+esc(d.dump_label)+'" title="List all numbers under this dump">under-tower</button></label>').join('');
-    list.querySelectorAll('.td-ut').forEach(b=>b.onclick=ev=>{ev.preventDefault();_tdUnderTower(b.dataset.label);});
-  }catch(e){list.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⚠</span><span class="ar-empty-txt">Could not load dumps.</span></div>';}
-}
-async function _tdRun(kind){
-  const body=document.getElementById('tdBody');const labels=_tdSelectedLabels();
-  if(labels.length<2&&kind!=='multiplicity'){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 2 dumps first.</span></div>';return;}
-  if(!labels.length){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◎</span><span class="ar-empty-txt">Select at least 1 dump first.</span></div>';return;}
-  const cid=encodeURIComponent(state.data.caseId||''),ls=encodeURIComponent(labels.join(','));
-  body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico" style="animation:spin 1s linear infinite">◌</span><span class="ar-empty-txt">Running…</span></div>';
-  try{
-    if(kind==='common'){
-      const min=Math.max(2,parseInt(document.getElementById('tdMin').value)||2);
-      const j=await API.get('/tower-dump/common?case_id='+cid+'&labels='+ls+'&min='+min);
-      const rows=j.rows.map(r=>[r.msisdn,refOperator(r.msisdn),refCircle(r.msisdn),r.dump_count,r.dumps.join(' | '),r.imeis.join(' | ')]);
-      _tdReports.common={headers:['Number','Operator','Circle','# dumps','Dumps','IMEIs'],rows};
-      body.innerHTML=_repCard('td-exp','common','Common numbers — present in ≥ '+min+' of '+labels.length+' dumps',_tdReports.common.headers,rows,j.total+' numbers across the selected scenes.');
-    }else if(kind==='uncommon'){
-      const j=await API.get('/tower-dump/uncommon?case_id='+cid+'&labels='+ls);
-      const rows=j.rows.map(r=>[r.msisdn,r.dump]);
-      _tdReports.uncommon={headers:['Number','Only in dump'],rows};
-      body.innerHTML=_repCard('td-exp','uncommon','Un-common numbers (in exactly one dump — elimination)',_tdReports.uncommon.headers,rows);
-    }else if(kind==='multiplicity'){
-      const j=await API.get('/tower-dump/multiplicity?case_id='+cid+'&labels='+ls);
-      const r1=j.imeis_per_sim.map(x=>[x.msisdn,x.imeis.length,x.imeis.join(' | ')]);
-      const r2=j.sims_per_imei.map(x=>[x.imei,x.msisdns.length,x.msisdns.join(' | ')]);
-      _tdReports.imeispersim={headers:['SIM (MSISDN)','# IMEIs','IMEIs'],rows:r1};
-      _tdReports.simsperimei={headers:['IMEI','# SIMs','MSISDNs'],rows:r2};
-      body.innerHTML=_repCard('td-exp','imeispersim','SIMs used with more than one IMEI',_tdReports.imeispersim.headers,r1)
-        +_repCard('td-exp','simsperimei','IMEIs used with more than one SIM',_tdReports.simsperimei.headers,r2);
-    }
-    _wireExports(body,_tdReports,'td-exp','ARGUS_towerdump');
-  }catch(e){body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">⚠</span><span class="ar-empty-txt">Failed: '+esc(e.message||String(e))+'</span></div>';}
-}
-async function _tdUnderTower(label){
-  const body=document.getElementById('tdBody');body.innerHTML='<div class="ar-empty"><span class="ar-empty-ico">◌</span><span class="ar-empty-txt">Loading…</span></div>';
-  try{
-    const j=await API.get('/tower-dump/under-tower?case_id='+encodeURIComponent(state.data.caseId||'')+'&label='+encodeURIComponent(label));
-    const rows=j.rows.map(r=>[r.msisdn,refOperator(r.msisdn),refCircle(r.msisdn),r.appearances,r.imeis.join(' | ')]);
-    _tdReports.undertower={headers:['Number','Operator','Circle','Appearances','IMEIs'],rows};
-    body.innerHTML=_repCard('td-exp','undertower','Under tower — '+esc(label),_tdReports.undertower.headers,rows,j.total+' distinct numbers.');
-    _wireExports(body,_tdReports,'td-exp','ARGUS_towerdump');
-  }catch(e){body.innerHTML='<div class="ar-empty">Failed: '+esc(e.message||String(e))+'</div>';}
-}
+// Tower Dump Analysis tab (Phase D: import + common/uncommon/multiplicity/under-tower) -> towers/dump.js
 
 async function bootstrap(){
   await loadCases();
@@ -5564,6 +5387,7 @@ Object.assign(window, {
 
 onChartsRendered(installChartCaptureButtons);  // charts pin-to-evidence buttons (injected; avoids charts->workspace import)
 provideInfReport(getInfReport);  // map inference overlays reach getInfReport (inferences layer still in app.js)
+provideExports(_wireExports);  // tower-dump report cards reach the CSV/XLSX export wiring
 wireDelegation();  // central data-act delegation (dormant until features register actions)
 if(!D.loginUser.value)D.loginUser.value='admin';
 checkAuth();
