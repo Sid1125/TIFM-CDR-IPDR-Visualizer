@@ -29,6 +29,7 @@ import { detectMeetings, ensureMeetingsLoaded, meetingTotals, meetingsCache } fr
 import { EVK, evLoad, evSave, updateEvidenceCount, pinEvidence, unpinEvidenceBySig, renderEvidence, captureSvgToEvidence, refreshCapButtons, installChartCaptureButtons, renderEvidenceTab, provideWorkspaceHooks } from './workspace/evidence.js';
 import { renderCrossCaseHits, fillProfileCrossCase } from './analytics/crosscase.js';  // self-registers the Cross-Case tab
 import { buildIdentityProfile } from './services/identity.js';
+import { getInfReport, INF } from './services/inference.js';
 
 // ====== WEB WORKERS ======
 // Lazy-create workers once — reuse across calls.  Falls back to inline execution
@@ -255,7 +256,7 @@ window.addToSuspectGroup=async function(value,kind){
     await loadSuspects();try{toast('Added “'+value+'” to suspect group “'+state._lastGroup+'”.');}catch(e){}
     if(state.tab==='records')renderRecTable();
     if(state.tab==='graph')renderGraph();
-    if(state.tab==='inferences'){_infCache=null;renderInferences(true);}
+    if(state.tab==='inferences'){INF.cache=null;renderInferences(true);}
   }catch(e){try{toast('Could not add to suspect group');}catch(_){}}
 };
 
@@ -297,7 +298,7 @@ async function loadCaseData(){
   // Bump render generation: tabs will know their cached render is stale.
   state.render.gen++;Object.keys(state.render.rendered).forEach(k=>delete state.render.rendered[k]);
   state._cd=null;  // chart data needs re-fetch
-  invalidateAiCache();state.data.geoRecords=null;_infReport=null;_infCache=null;meetingsCache.v=null;_storyXcaseCache={};_storyEvents=[];
+  invalidateAiCache();state.data.geoRecords=null;INF.report=null;INF.cache=null;meetingsCache.v=null;_storyXcaseCache={};_storyEvents=[];
   try{
     const qp=new URLSearchParams({limit:500});
     if(state.data.caseId)qp.set('case_id',state.data.caseId);
@@ -1236,7 +1237,7 @@ async function buildCaseEvents(subject){
 }
 
 function addAiEvents(ev,subject,fallbackTs){
-  const rep=_infReport;if(!rep)return;
+  const rep=INF.report;if(!rep)return;
   const cdr=rep.cdr||{},ipdr=rep.ipdr||{};
   const match=s=>!subject||s===subject;
   (cdr.risk||[]).filter(r=>match(r.subject)).forEach(r=>{if((r.score||0)>=50||r.band==='Critical'||r.band==='High')ev.push({ts:fallbackTs,kind:'ai',title:(subject?'':r.subject+': ')+'Risk assessment — '+(r.band||'')+' (score '+(r.score||0)+')',detail:'composite spatiotemporal risk',sub:r.subject});});
@@ -1346,7 +1347,7 @@ function renderStoryTimeline(){
 // Evidence board + snapshot capture (pin/unpin/capture/refreshCapButtons) -> workspace/evidence.js
 
 if(D.storySubject)D.storySubject.addEventListener('change',renderStory);
-if(D.storyRefreshBtn)D.storyRefreshBtn.addEventListener('click',()=>{_storyXcaseCache={};_infReport=null;renderStory();});
+if(D.storyRefreshBtn)D.storyRefreshBtn.addEventListener('click',()=>{_storyXcaseCache={};INF.report=null;renderStory();});
 if(D.evidenceToggleBtn)D.evidenceToggleBtn.addEventListener('click',()=>{const p=D.evidencePanel;p.style.display=p.style.display==='none'?'':'none';renderEvidence();});
 if(D.evidenceClearBtn)D.evidenceClearBtn.addEventListener('click',()=>{if(confirm('Remove all '+evLoad().length+' evidence item(s)?')){evSave([]);updateEvidenceCount();renderEvidence();refreshCapButtons();renderStoryTimeline();renderEvidenceTab();}});
 
@@ -1847,14 +1848,7 @@ function toggleFindingDetail(i){
   if(el)el.style.display=el.style.display==='none'?'block':'none';
 }
 // ====== SPATIOTEMPORAL INFERENCES ======
-let _infCache=null,_infReport=null;
-// Shared fetch+cache of the inference report, reused by the Inferences tab and the map.
-async function getInfReport(force){
-  if(_infReport&&!force)return _infReport;
-  const cq=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';
-  _infReport=await API.get('/inference/report'+cq);
-  return _infReport;
-}
+// Inference report fetch/cache (getInfReport + INF) -> services/inference.js
 // watchlist/exports caches now live in core/state.js (state.watchlist / state.exports)
 async function loadWatchlist(){try{const cq=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';state.watchlist=await API.get('/watchlist'+cq);}catch(e){state.watchlist=[];}}
 async function loadExports(){try{const cq=state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):'';state.exports=await API.get('/inference/exports'+cq);}catch(e){state.exports=[];}}
@@ -1888,13 +1882,13 @@ function _watchlistBarHtml(rep){
     +'<details class="wl-exports"><summary>Export history <span id="wlExportNote" class="wl-note"></span></summary><div id="wlExportsList">'+_exportsHtml()+'</div></details>'
     +'</div>';
 }
-window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;const g=($('wlGroup')&&$('wlGroup').value||'Default').trim()||'Default';state._lastGroup=g;try{await API.post('/watchlist',{value:v,group_name:g,case_id:state.data.caseId||null});await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
-window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+window.wlAdd=async function(){const i=$('wlInput');const v=(i&&i.value||'').trim();if(!v)return;const g=($('wlGroup')&&$('wlGroup').value||'Default').trim()||'Default';state._lastGroup=g;try{await API.post('/watchlist',{value:v,group_name:g,case_id:state.data.caseId||null});await loadWatchlist();await loadSuspects();INF.cache=null;INF.report=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
+window.wlRemove=async function(id){try{await API.del('/watchlist/'+id);await loadWatchlist();await loadSuspects();INF.cache=null;INF.report=null;renderInferences(true);}catch(e){alert('Failed: '+e.message);}};
 window.removeFromSuspectGroup=async function(value){
   // Use /watchlist/by-value so removal works regardless of which case the entry was
   // created in — state.watchlist is case-scoped and would miss cross-case suspect entries.
   try{await API.del('/watchlist/by-value?value='+encodeURIComponent(value));}catch(e){toast('Remove failed: '+e.message);return;}
-  await loadWatchlist();await loadSuspects();_infCache=null;_infReport=null;
+  await loadWatchlist();await loadSuspects();INF.cache=null;INF.report=null;
   if(state.tab==='graph')renderGraph();
   if(state.tab==='inferences')renderInferences(true);
   showProfile(value);
@@ -1939,8 +1933,8 @@ function _decorateInferences(box){
 async function renderInferences(force){
   const box=$('infResults'),status=$('infStatus'),btn=$('infRefreshBtn');
   if(!box)return;
-  if(btn&&!btn._bound){btn._bound=true;btn.onclick=()=>{_infCache=null;_infReport=null;renderInferences(true);};}
-  if(_infCache&&!force){box.innerHTML=_infCache;_decorateInferences(box);return;}
+  if(btn&&!btn._bound){btn._bound=true;btn.onclick=()=>{INF.cache=null;INF.report=null;renderInferences(true);};}
+  if(INF.cache&&!force){box.innerHTML=INF.cache;_decorateInferences(box);return;}
   status.textContent='Analyzing...';
   box.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Running inference engine...</div>';
   let rep;
@@ -1948,8 +1942,8 @@ async function renderInferences(force){
   catch(e){status.textContent='Error';box.innerHTML='<div style="padding:40px;text-align:center;color:var(--danger)">Failed: '+esc(e.message)+'</div>';return;}
   await loadWatchlist();
   await loadExports();
-  _infCache=_watchlistBarHtml(rep)+buildInferenceHtml(rep);
-  box.innerHTML=_infCache;
+  INF.cache=_watchlistBarHtml(rep)+buildInferenceHtml(rep);
+  box.innerHTML=INF.cache;
   _decorateInferences(box);
   status.textContent=n((rep.cdr&&rep.cdr.subjects)||0)+' phone subjects · '+n((rep.ipdr&&rep.ipdr.sessions)||0)+' IPDR sessions';
 }
@@ -3226,7 +3220,7 @@ if(D.dossierBtn)D.dossierBtn.addEventListener('click',renderDossier);
 if(D.dossierCloseBtn)D.dossierCloseBtn.addEventListener('click',()=>{D.dossier.style.display='none'});
 if(D.dossierPrintBtn)D.dossierPrintBtn.addEventListener('click',()=>window.print());
 {const ab=document.getElementById('dossierAgencyBtn');if(ab)ab.addEventListener('click',setAgencyDetails);}
-{const rb=document.getElementById('dossierRegenBtn');if(rb)rb.addEventListener('click',()=>{_storyXcaseCache={};_infReport=null;meetingsCache.v=null;renderDossier();});}
+{const rb=document.getElementById('dossierRegenBtn');if(rb)rb.addEventListener('click',()=>{_storyXcaseCache={};INF.report=null;meetingsCache.v=null;renderDossier();});}
 
 // All-seeing-eye seal (Argus Panoptes) rendered in monochrome navy so it prints cleanly.
 const ARGUS_EMBLEM='<svg class="dc-emblem" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="ARGUS emblem">'
@@ -3285,7 +3279,7 @@ async function renderDossier(){
 
     const mt=(typeof meetingTotals==='function')?meetingTotals():{total:0};
     const xcount=(xrep&&xrep.subjects)?xrep.subjects.length:0;
-    const rep=_infReport||{};const poi=((rep.cdr&&rep.cdr.risk)||[]).filter(r=>r.band==='Critical'||r.band==='High').length;
+    const rep=INF.report||{};const poi=((rep.cdr&&rep.cdr.risk)||[]).filter(r=>r.band==='Critical'||r.band==='High').length;
     const imposs=((rep.cdr&&rep.cdr.impossible_travel)||[]).length;
     const ev=evLoad();
 
