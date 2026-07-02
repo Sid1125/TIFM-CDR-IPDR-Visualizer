@@ -22,6 +22,7 @@ import { _repCard, _wireVirtualTables } from './ui/report_table.js';
 import './towers/dump.js';  // self-registers the Tower Dump tab
 import { _wireExports } from './services/export.js';
 import './analytics/reports.js';  // self-registers the Phase B/C report tabs
+import './records/overlays.js';
 import { renderGraph, initGraphSubjects } from './graph/network.js';  // self-registers the Graph tab
 import { auditView } from './ui/admin.js';  // self-registers the Admin tab
 import { identCache, dashAgg, clearAnalyticsCaches } from './services/cache.js';
@@ -383,77 +384,7 @@ function computeQualityMetrics(){
 // towerAnalytics (profile tower stats) -> records/profile.js
 // Evidence integrity hash (evidenceHash) -> core/utils.js
 // -- View Supporting Records --
-function showSessionRecords(sessionData){
-  const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center';
-  overlay.onclick=e=>{if(e.target===overlay)overlay.remove()};
-  const box=document.createElement('div');
-  box.style.cssText='background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:20px;max-width:700px;max-height:80vh;overflow-y:auto;font-size:0.78rem';
-  box.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h3 style="margin:0">Session: ${esc(sessionData.serviceLabel||'Unknown')}</h3>
-      <span style="color:var(--muted);font-size:0.7rem">${evidenceHash(sessionData)}</span>
-    </div>
-    <div style="background:var(--accent-light);padding:8px;border-radius:4px;margin-bottom:10px">
-      <strong>Evidence Chain:</strong>
-      <div style="margin-top:4px">${sessionData.evidence?sessionData.evidence.map(e=>'<div style="padding:1px 0">&#x2022; '+esc(e)+'</div>').join(''):'No evidence'}</div>
-    </div>
-    <table style="width:100%;border-collapse:collapse">
-      <thead><tr style="border-bottom:1px solid var(--line)"><th style="text-align:left;padding:4px">Time</th><th style="text-align:left;padding:4px">Type</th><th style="text-align:left;padding:4px">Counterpart</th><th style="text-align:left;padding:4px">Tower</th></tr></thead>
-      <tbody>${(sessionData.recordsData||[]).map(r=>'<tr style="border-bottom:1px solid var(--line)"><td style="padding:3px">'+fmt(r.ts)+'</td><td style="padding:3px">'+esc(r.type||'')+'</td><td style="padding:3px">'+esc(r.cnt||'')+'</td><td style="padding:3px">'+esc(r.tow||'')+'</td></tr>').join('')}</tbody>
-    </table>`;
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-}
-function showMeetingOverlay(key,idx){
-  const meetings=window.meetingStore&&window.meetingStore[key];
-  if(!meetings||!meetings[idx])return;
-  const m=meetings[idx];
-  const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center';
-  overlay.onclick=e=>{if(e.target===overlay)overlay.remove()};
-  const box=document.createElement('div');
-  box.style.cssText='background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:20px;max-width:500px;max-height:60vh;overflow-y:auto;font-size:0.78rem';
-  box.innerHTML=`
-    <h3 style="margin:0 0 10px">Meeting: ${esc(m.subA)} & ${esc(m.subB)}</h3>
-    <div style="margin-bottom:10px">
-      <div><strong>Time:</strong> ${m.time?new Date(m.time).toLocaleString():'?'}</div>
-      <div><strong>Tower:</strong> ${esc(m.tow)}</div>
-      <div><strong>Gap:</strong> ${m.gap}m (${m.gapLevel})</div>
-      <div><strong>Score:</strong> ${m.score} (${m.encounterCount} encounters)</div>
-    </div>
-    <div style="background:var(--accent-light);padding:8px;border-radius:4px;margin-bottom:10px">
-      <strong>Evidence:</strong>
-      <div style="margin-top:4px">${m.evidence?m.evidence.map(e=>'<div style="padding:1px 0">&#x2022; '+esc(e)+'</div>').join(''):'No evidence'}</div>
-    </div>
-    <table style="width:100%;border-collapse:collapse">
-      <thead><tr style="border-bottom:1px solid var(--line)"><th style="text-align:left;padding:4px">Subject</th><th style="text-align:left;padding:4px">Event</th></tr></thead>
-      <tbody>
-        <tr style="border-bottom:1px solid var(--line)"><td style="padding:3px">${esc(m.subA)}</td><td style="padding:3px">${esc(m.subAEvent)}</td></tr>
-        <tr><td style="padding:3px">${esc(m.subB)}</td><td style="padding:3px">${esc(m.subBEvent)}</td></tr>
-      </tbody>
-    </table>`;
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-}
-function showSubjectRecords(sub){
-  const rows=rowsFor(sub).slice(-50).reverse();
-  if(!rows.length)return;
-  const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center';
-  overlay.onclick=e=>{if(e.target===overlay)overlay.remove()};
-  const box=document.createElement('div');
-  box.style.cssText='background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:16px;max-width:700px;max-height:80vh;overflow-y:auto;font-size:0.75rem';
-  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <h3 style="margin:0">Subject: ${subjLabel(sub)}</h3>
-    <span style="color:var(--muted);font-size:0.7rem">${rows.length} records shown</span></div>
-    <table style="width:100%;border-collapse:collapse">
-      <thead><tr style="border-bottom:1px solid var(--line)"><th style="text-align:left;padding:3px">Time</th><th style="text-align:left;padding:3px">Type</th><th style="text-align:left;padding:3px">Counterpart</th><th style="text-align:left;padding:3px">Service</th><th style="text-align:left;padding:3px">Tower</th></tr></thead>
-      <tbody>${rows.map(r=>'<tr style="border-bottom:1px solid var(--line)"><td style="padding:2px">'+fmt(r.ts)+'</td><td style="padding:2px">'+esc(r.type||'')+'</td><td style="padding:2px">'+esc(r.cnt||'')+'</td><td style="padding:2px">'+esc(r.svc||'')+'</td><td style="padding:2px">'+esc(r.tow||'')+'</td></tr>').join('')}</tbody>
-    </table>`;
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-}
+// Record/meeting/subject modal overlays (showSessionRecords/showMeetingOverlay/showSubjectRecords) -> records/overlays.js
 // -- Quality Dashboard Integration --
 function renderQualityCard(){
   const q=computeQualityMetrics();
@@ -1259,8 +1190,7 @@ async function resetCase(){
 // need bridging. This shim is TEMPORARY: as each feature migrates to event delegation (data-act),
 // its entries are dropped, and the whole block is deleted in the final cleanup step.
 Object.assign(window, {
-  switchTab, showSubjectRecords, showMeetingOverlay,
-  showSessionRecords, saveProfileTag, toggleAnnot,
+  switchTab, saveProfileTag, toggleAnnot,
 });
 
 provideWorkspaceHooks({renderStoryTimeline, renderDossier});  // evidence -> story/dossier refreshers
