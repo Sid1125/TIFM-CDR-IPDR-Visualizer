@@ -55,3 +55,11 @@ export function renderMd(t){
 
 // Verbose date-time ("Jan 03, 2026, 14:05") used by story / evidence / dossier.
 export function _fmtDT(v){try{return new Date(v).toLocaleString([], {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return String(v)}}
+
+// Deterministic integrity tag for a reconstructed session (service + sorted evidence + duration +
+// record count) — shown on the session tooltip and the supporting-records view.
+export function evidenceHash(sessionData){
+  const str=sessionData.serviceLabel+'|'+sessionData.evidence.sort().join(',')+'|'+sessionData.duration+'|'+(sessionData.records||0);
+  let hash=0;for(let i=0;i<str.length;i++){const c=str.charCodeAt(i);hash=((hash<<5)-hash)+c;hash|=0}
+  return 'EVID-'+Math.abs(hash).toString(16).toUpperCase().padStart(8,'0');
+}
