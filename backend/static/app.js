@@ -1,5 +1,5 @@
 import { esc, fmt, fmts, fmtd, fmtBytes, colWidth, n, debounce, renderMd } from './core/utils.js';
-import { SERVICE_DB, IP_RANGES, ISP_PROVIDERS, KNOWN_IP_HINTS, HOSTING_PROVIDERS, PRIVATE_LABEL, DISTINCTIVE_INDICATORS, EPHEMERAL_MIN, PORT_SVC, PORT_FAMILY, FAMILY_GAP } from './core/constants.js';
+import { SERVICE_DB, IP_RANGES, ISP_PROVIDERS, KNOWN_IP_HINTS, HOSTING_PROVIDERS, PRIVATE_LABEL, DISTINCTIVE_INDICATORS, EPHEMERAL_MIN, PORT_SVC, PORT_FAMILY, FAMILY_GAP, svcColor } from './core/constants.js';
 import { $, D } from './core/dom.js';
 import { state } from './core/state.js';
 import { API } from './core/api.js';
@@ -2997,8 +2997,7 @@ D.mapTimePlay.addEventListener('click',()=>{state.map.timePlaying=!state.map.tim
 function playMapTimeFn(){if(!state.map.timePlaying||!state.map.timeData.length)return;D.mapTimeSlider.value=Math.min(parseInt(D.mapTimeSlider.value)+1,state.map.timeData.length-1);updateMapTime();if(parseInt(D.mapTimeSlider.value)<state.map.timeData.length-1)setTimeout(playMapTimeFn,1000);else{state.map.timePlaying=false;D.mapTimePlay.textContent='Play'}}
 
 // ====== 4. ENTITY TIMELINE ======
-const SVC_COLORS={WhatsApp:'#25D366',Telegram:'#0088cc',Signal:'#3A76F0',Instagram:'#E4405F','Facebook/Messenger':'#1877F2',Threads:'#000000',Discord:'#5865F2',YouTube:'#FF0000',Zoom:'#2D8CFF','MS Teams':'#6264A7',Skype:'#00AFF0',Outlook:'#0078D4',OneDrive:'#0078D4','Xbox Live':'#107C10',LinkedIn:'#0A66C2',Webex:'#00BFFF',Slack:'#4A154B',Snapchat:'#FFFC00','X (Twitter)':'#1DA1F2',Reddit:'#FF4500',Netflix:'#E50914',Spotify:'#1DB954',Steam:'#171A21','Riot Games':'#EB0029','Epic Games':'#313131','Battle.net':'#148EFF','PlayStation Network':'#003087',GitHub:'#181717',GitLab:'#FCA121','Docker Hub':'#2496ED',ChatGPT:'#10A37F','OpenAI API':'#10A37F',Claude:'#D97757',Perplexity:'#1F8EF1',ProtonVPN:'#8B5CF6','Proton Mail':'#8B5CF6',NordVPN:'#4687FF',ExpressVPN:'#DA2020',Mullvad:'#1E1E1E',Surfshark:'#00AC4E','Quad9 DNS':'#F8C630',OpenDNS:'#FF6B00','Yahoo Mail':'#6001D1',Dropbox:'#0061FF',Mega:'#D90007',PayPal:'#00457C',PhonePe:'#5F259F',Paytm:'#00BAF2',Flipkart:'#2874F0',Myntra:'#E50046','Disney+':'#113CCF',Tor:'#7B4F9C','Google Search':'#4285F4',Gmail:'#4285F4','Google Meet':'#4285F4','Google Drive':'#4285F4','Google DNS':'#4285F4','Google Pay':'#4285F4',Gemini:'#4285F4',iMessage:'#34C759',FaceTime:'#34C759',iCloud:'#A2AAAD','Apple Push':'#A2AAAD','Amazon AWS':'#FF9900','Amazon.com':'#FF9900','Prime Video':'#FF9900','Amazon Pay':'#FF9900','Cloudflare CDN':'#F38040','Akamai CDN':'#0099CC','Fastly CDN':'#FF282D','Oracle Cloud':'#F80000',DigitalOcean:'#0080FF',OVH:'#1230F0',CDR:'#2c6f79',IPDR:'#b94a48'};
-function svcColor(s){return SVC_COLORS[s]||'#8a7a6a'}
+// SVC_COLORS + svcColor -> core/constants.js (shared by maps/profile/correlation/services)
 // Entity store for lazy timeline body rendering \u2014 keyed by index in the current render pass
 window._tlEntityStore={};
 const _tlOpenEntities=new Set();  // persist open state across re-renders
