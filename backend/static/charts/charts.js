@@ -54,7 +54,6 @@ async function renderCharts(){
 // _cd.service_timeline: {buckets[], services[], series[][]}
 function _dayKey(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function _cdBuckets(){return state._cd&&state._cd.daily?{buckets:state._cd.daily.buckets,unit:state._cd.daily.unit}:{buckets:[],unit:'day'};}
-function towerMeta(){const m={};(state.towers||[]).forEach(t=>{m[t.tower_id]={city:t.city,state:t.state}});return m;}
 function _destroy(name){if(window[name]){try{window[name].destroy()}catch(e){}window[name]=null}}
 
 function renderChartDailyTrend(){

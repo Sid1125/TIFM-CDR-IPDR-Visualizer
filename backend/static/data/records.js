@@ -5,6 +5,7 @@
 
 import { PORT_SVC } from '../core/constants.js';
 import { esc } from '../core/utils.js';
+import { state } from '../core/state.js';
 
 export function nCdr(r){
   const s=r.a_party_number||'',c=r.b_party_number||'';
@@ -21,6 +22,9 @@ export function nIpdr(r){
     case_id:r.case_id,lac:r.lac,cell:r.cell_id};
 }
 export function portSvc(p){return p?PORT_SVC[parseInt(p)]||'':''}
+// tower_id -> {city,state} lookup from the loaded tower master. Shared by story + investigation
+// (and charts). Reads state.towers.
+export function towerMeta(){const m={};(state.towers||[]).forEach(t=>{m[t.tower_id]={city:t.city,state:t.state}});return m;}
 export function twr(id){
   if(id==null||id==='')return '';
   const s=esc(String(id));

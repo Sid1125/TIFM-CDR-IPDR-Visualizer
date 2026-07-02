@@ -8,7 +8,7 @@ import { switchTab, registerTab, tabNeedsRender, tabMarkRendered } from './core/
 import { checkAuth, resetIdle, startHealthCheck, initAuth, onAuthenticated } from './core/auth.js';
 import { subjTag, subjLabel, subjLabelTxt, isSuspect } from './core/subjects.js';
 import { toast } from './ui/toast.js';
-import { nCdr, nIpdr, portSvc, twr } from './data/records.js';
+import { nCdr, nIpdr, portSvc, twr, towerMeta } from './data/records.js';
 import { isIspProvider, ipInRange, ipKind, ipHint, trafficPattern, scoreProvider, pickBest, recordSvcAttr, matchService } from './services/attribution.js';
 import { renderRecords, renderRecTable } from './records/table.js';
 import { renderCharts, onChartsRendered } from './charts/charts.js';
