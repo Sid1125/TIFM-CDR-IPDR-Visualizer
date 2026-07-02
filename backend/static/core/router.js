@@ -24,3 +24,8 @@ export function switchTab(tab){
   const fn=TAB_RENDERERS[tab];
   if(fn) fn();
 }
+
+// switchTab is referenced from inline onclick handlers (index.html topbar/menu + generated HTML +
+// AI "switch to X" leads); re-expose it on window. This is the last surviving window bridge — every
+// other inline handler is now self-bridged from its own feature module.
+Object.assign(window, { switchTab });

@@ -26,6 +26,7 @@ import './records/overlays.js';
 import './records/annotations.js';
 import { renderDashboard } from './dashboard/dashboard.js';  // self-registers the Dashboard tab
 import './workspace/evidence_export.js';
+import { loadSubjectTags, loadSuspects } from './data/subjects_intel.js';
 import { renderGraph, initGraphSubjects } from './graph/network.js';  // self-registers the Graph tab
 import { auditView } from './ui/admin.js';  // self-registers the Admin tab
 import { identCache, dashAgg, clearAnalyticsCaches } from './services/cache.js';
@@ -150,47 +151,12 @@ function updateChartTheme(){
 // Global-by-identifier tags loaded into state.subjectTags={subject:tag}. These helpers append the
 // tag in brackets wherever a subject is shown, so outside intel follows the number/IP everywhere.
 // (subjTag/subjLabel/subjLabelTxt/isSuspect now in core/subjects.js, imported above)
-async function loadSubjectTags(){
-  try{const rows=await API.get('/subject-tags/');const m={};(rows||[]).forEach(r=>{if(r.subject)m[r.subject]=r.tag});state.subjectTags=m;}
-  catch(e){state.subjectTags=state.subjectTags||{};}
-}
+// Subject intel tags loader (loadSubjectTags) -> data/subjects_intel.js
 // ====== TELECOM REFERENCE (offline number->operator/circle, ISD, IMEI TAC) ======
 // Telecom reference (loadReference + refLookup/refOperator/refCircle/refImei/…) -> reference/telecom.js
 
 // ====== SUSPECT GROUPS (named watchlist groups + cross-UI highlight) ======
-async function loadSuspects(){
-  try{const [v,g]=await Promise.all([API.get('/watchlist/values'),API.get('/watchlist/groups')]);
-    state.suspects=v||[];state.suspectSet=new Set((v||[]).map(x=>String(x.value)));state.suspectGroups=g||[];}
-  catch(e){state.suspects=[];state.suspectSet=new Set();state.suspectGroups=[];}
-}
-window.addToSuspectGroup=async function(value,kind){
-  value=String(value==null?'':value).trim();if(!value)return;
-  const def=state._lastGroup||((state.suspectGroups||[])[0]||{}).group_name||'Default';
-  const group=prompt('Add "'+value+'" to which suspect group?',def);
-  if(group===null)return;
-  state._lastGroup=(group||'').trim()||'Default';
-  try{await API.post('/watchlist',{value:value,kind:kind||undefined,group_name:state._lastGroup,case_id:state.data.caseId||null});
-    await loadSuspects();try{toast('Added “'+value+'” to suspect group “'+state._lastGroup+'”.');}catch(e){}
-    if(state.tab==='records')renderRecTable();
-    if(state.tab==='graph')renderGraph();
-    if(state.tab==='inferences'){INF.cache=null;renderInferences(true);}
-  }catch(e){try{toast('Could not add to suspect group');}catch(_){}}
-};
-
-async function saveSubjectTag(sub,tag){
-  const r=await API.put('/subject-tags/',{subject:sub,tag:tag});
-  const t=(tag||'').trim();
-  if(t)state.subjectTags[sub]=t;else delete state.subjectTags[sub];
-  return r;
-}
-function saveProfileTag(sub){
-  const inp=document.getElementById('profileTagInput');if(!inp)return;
-  const val=inp.value.trim();
-  saveSubjectTag(sub,val).then(()=>{
-    try{toast(val?'Intel tag saved':'Intel tag cleared');}catch(e){}
-    if(D.profileTitle)D.profileTitle.textContent='Subject: '+subjLabelTxt(sub);
-  }).catch(e=>{try{toast('Could not save tag');}catch(_){} });
-}
+// Suspect groups + subject-tag save (loadSuspects/addToSuspectGroup/saveProfileTag) -> data/subjects_intel.js
 // ====== DATA LOADING ======
 // Subject row index: rebuilt whenever state.data.records changes. Makes rowsFor/ownedRowsFor O(1)
 // instead of O(n) state.data.records.filter() scans. For 50k rows and 10 subjects this eliminates
@@ -656,16 +622,10 @@ async function resetCase(){
   const q=state.data.caseId?'?case_id='+state.data.caseId:'';
   try{await API.del('/records/reset'+q);D.importStatus.textContent='Case reset. Reloading...';await loadCaseData();D.importStatus.textContent='Case reset. Upload files to begin.'}catch(e){D.importStatus.textContent='Reset failed: '+e.message;console.error(e)}
 }
-// ── ESM window bridge (TRANSITIONAL) ─────────────────────────────────────────────────────────
-// app.js is now an ES module, so its top-level `function` declarations are module-scoped, not
-// global. Inline on*= handlers (in index.html and in generated HTML strings) resolve their names
-// on `window`, so we re-expose exactly the handlers they reference here. Functions already assigned
-// via `window.x = ...` (addToSuspectGroup, removeFromSuspectGroup, wlAdd, wlRemove, wlExport) don't
-// need bridging. This shim is TEMPORARY: as each feature migrates to event delegation (data-act),
-// its entries are dropped, and the whole block is deleted in the final cleanup step.
-Object.assign(window, {
-  switchTab, saveProfileTag,
-});
+// The transitional ESM->window bridge is gone: every inline on*= handler now resolves against a name
+// self-bridged from its own feature module (switchTab -> core/router.js; showProfile -> records/
+// profile.js; wl*/suspect-group/AI/story/etc from their modules). app.js only wires the cross-module
+// injection hooks below.
 
 provideWorkspaceHooks({renderStoryTimeline, renderDossier});  // evidence -> story/dossier refreshers
 onChartsRendered(installChartCaptureButtons);  // charts pin-to-evidence buttons (injected; avoids charts->workspace import)
