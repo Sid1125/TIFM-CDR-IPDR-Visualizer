@@ -8,6 +8,7 @@
 export const state={
   auth:{status:'checking',user:null,session:null},
   cdr:[],ipdr:[],towers:[],tab:'dashboard',subjects:[],graphData:null,timeline:[],charts:{},
+  watchlist:[],exports:[],  // was the loose _wl / _exports caches (set by loadWatchlist/loadExports)
   subjectTags:{},_ownedSubjects:[],_cdrStats:null,_ipdrStats:null,_cd:null,_totalCdr:0,_totalIpdr:0,
 
   // grouped namespaces for folded-in loose globals (populated in steps 4.1+)
