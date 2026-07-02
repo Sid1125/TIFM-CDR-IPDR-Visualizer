@@ -1,8 +1,8 @@
 // towers/dump.js — the Tower Dump Analysis tab (Phase D): import tower-dump CSVs, then run
 // common / uncommon / multiplicity / under-tower cross-scene queries and render them as report cards.
-// Extracted from app.js (feature layer). Imports the shared report renderer + telecom reference;
-// _wireExports (CSV/XLSX button wiring, still in app.js — coupled to the export worker) is injected
-// via provideExports(). Self-registers with the router. No behavior change.
+// Extracted from app.js (feature layer). Imports the shared report renderer + telecom reference +
+// the CSV/XLSX export wiring (_wireExports from services/export.js). Self-registers with the router.
+// No behavior change.
 
 import { esc } from '../core/utils.js';
 import { state } from '../core/state.js';
@@ -11,9 +11,7 @@ import { _repCard } from '../ui/report_table.js';
 import { refOperator, refCircle } from '../reference/telecom.js';
 import { registerTab } from '../core/router.js';
 
-// CSV/XLSX export wiring stays in app.js for now; app.js injects it at boot.
-let _wireExports=()=>{};
-export function provideExports(fn){ _wireExports=fn; }
+import { _wireExports } from '../services/export.js';
 
 let _tdReports={};
 function renderTowerDump(){
