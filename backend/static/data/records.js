@@ -30,3 +30,11 @@ export function twr(id){
   const s=esc(String(id));
   return '<span class="twr-link" data-tower="'+s+'" onclick="event.stopPropagation();showTower(this.dataset.tower)" title="Show tower '+s+' on map">'+s+'</span>';
 }
+
+// Server-or-sample totals (server stats preferred, sample count as fallback).
+export function _totalCdrFn(){return(state._cdrStats&&state._cdrStats.total_records)||state.cdr.length||0;}
+export function _totalIpdrFn(){return(state._ipdrStats&&state._ipdrStats.total_records)||state.ipdr.length||0;}
+// Per-subject record lookups via the subject row index (O(1); rebuilt when records change).
+// rowsFor = every record touching the subject; ownedRowsFor = only records they own (their device/SIM).
+export function rowsFor(sub){if(!sub)return state.data.records;return state.data.rowIdx.get(sub)||[];}
+export function ownedRowsFor(sub){if(!sub)return state.data.records;return state.data.ownedRowIdx.get(sub)||[];}

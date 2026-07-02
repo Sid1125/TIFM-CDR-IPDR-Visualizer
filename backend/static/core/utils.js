@@ -52,3 +52,6 @@ export function renderMd(t){
   s=s.replace(/<\/blockquote>\n<blockquote>/g,'\n');
   return s;
 }
+
+// Verbose date-time ("Jan 03, 2026, 14:05") used by story / evidence / dossier.
+export function _fmtDT(v){try{return new Date(v).toLocaleString([], {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return String(v)}}

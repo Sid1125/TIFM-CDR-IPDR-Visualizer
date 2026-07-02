@@ -1,4 +1,4 @@
-import { esc, fmt, fmts, fmtd, fmtBytes, colWidth, n, debounce, renderMd } from './core/utils.js';
+import { esc, fmt, fmts, fmtd, fmtBytes, colWidth, n, debounce, renderMd, _fmtDT } from './core/utils.js';
 import { SERVICE_DB, IP_RANGES, ISP_PROVIDERS, KNOWN_IP_HINTS, HOSTING_PROVIDERS, PRIVATE_LABEL, DISTINCTIVE_INDICATORS, EPHEMERAL_MIN, PORT_SVC, PORT_FAMILY, FAMILY_GAP, svcColor } from './core/constants.js';
 import { $, D } from './core/dom.js';
 import { state } from './core/state.js';
@@ -8,7 +8,7 @@ import { switchTab, registerTab, tabNeedsRender, tabMarkRendered } from './core/
 import { checkAuth, resetIdle, startHealthCheck, initAuth, onAuthenticated } from './core/auth.js';
 import { subjTag, subjLabel, subjLabelTxt, isSuspect } from './core/subjects.js';
 import { toast } from './ui/toast.js';
-import { nCdr, nIpdr, portSvc, twr, towerMeta } from './data/records.js';
+import { nCdr, nIpdr, portSvc, twr, towerMeta, _totalCdrFn, _totalIpdrFn, rowsFor, ownedRowsFor } from './data/records.js';
 import { isIspProvider, ipInRange, ipKind, ipHint, trafficPattern, scoreProvider, pickBest, recordSvcAttr, matchService } from './services/attribution.js';
 import { renderRecords, renderRecTable } from './records/table.js';
 import { renderCharts, onChartsRendered } from './charts/charts.js';
@@ -122,8 +122,8 @@ const _W = {
 // tab render tracking + switchTab now live in core/router.js (imported above); the gen/rendered
 // counters are on state.render.
 // Helper: true CDR/IPDR totals (server stats when available, fallback to sample length)
-function _totalCdrFn(){return(state._cdrStats&&state._cdrStats.total_records)||state.cdr.length||0;}
-function _totalIpdrFn(){return(state._ipdrStats&&state._ipdrStats.total_records)||state.ipdr.length||0;}
+
+
 
 // Shared analytics caches (sessionCache/identCache/dashAgg + clearAnalyticsCaches) -> services/cache.js
 function _getDashAgg(){
@@ -668,8 +668,8 @@ function buildNarrative(subject){
   narrative.sort((a,b)=>a.time-b.time);
   return narrative.slice(0,50);
 }
-function rowsFor(sub){if(!sub)return state.data.records;return state.data.rowIdx.get(sub)||[];}
-function ownedRowsFor(sub){if(!sub)return state.data.records;return state.data.ownedRowIdx.get(sub)||[];}
+
+
 
 // ====== TAB SWITCHING ======
 // Register each tab's render fn with the router (switchTab dispatches through this). As features
@@ -1493,7 +1493,7 @@ const EVK={
   record:{c:'#b94a48',g:'★',l:'Flagged record'},
 };
 let _storyEvents=[],_storyKinds=null,_storyXcaseCache={};
-function _fmtDT(v){try{return new Date(v).toLocaleString([], {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return String(v)}}
+
 function _evSig(e){return e.kind+'|'+(e.ts?new Date(e.ts).getTime():'')+'|'+e.title}
 
 // Assemble a meaningful, bounded chronological event feed for one subject (or '__all__').
