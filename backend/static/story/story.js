@@ -21,7 +21,7 @@ let _storyEvents=[],_storyKinds=null,_storyXcaseCache={};
 function _evSig(e){return e.kind+'|'+(e.ts?new Date(e.ts).getTime():'')+'|'+e.title}
 
 // Assemble a meaningful, bounded chronological event feed for one subject (or '__all__').
-async function buildCaseEvents(subject){
+export async function buildCaseEvents(subject){
   const ev=[];
   const xrep=await getStoryXcase();
   if(subject&&subject!=='__all__'){
@@ -72,13 +72,13 @@ function addAiEvents(ev,subject,fallbackTs){
   (ipdr.beaconing||[]).filter(b=>match(b.subject)).slice(0,20).forEach(b=>{ev.push({ts:fallbackTs,kind:'ai',title:(subject?'':b.subject+': ')+'Beaconing pattern',detail:'periodic data sessions — possible C2/automated traffic',sub:b.subject});});
 }
 
-async function getStoryXcase(){
+export async function getStoryXcase(){
   const k=state.data.caseId||'none';if(_storyXcaseCache[k])return _storyXcaseCache[k];
   try{_storyXcaseCache[k]=await API.get('/cross-case/report?case_id='+encodeURIComponent(state.data.caseId||''));}catch(e){_storyXcaseCache[k]={subjects:[]};}
   return _storyXcaseCache[k];
 }
 
-function buildStoryNarrative(subject,events){
+export function buildStoryNarrative(subject,events){
   if(subject==='__all__'){
     const meetings=events.filter(e=>e.kind==='meeting').length,ids=events.filter(e=>e.kind==='identity').length,xc=events.filter(e=>e.kind==='crosscase').length,ai=events.filter(e=>e.kind==='ai').length;
     let p='This case spans <b>'+n(state.subjects.length)+'</b> subjects and <b>'+n(state.data.records.length)+'</b> records. ';
