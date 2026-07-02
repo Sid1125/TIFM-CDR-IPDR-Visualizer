@@ -9,6 +9,7 @@ import { state } from '../core/state.js';
 import { API } from '../core/api.js';
 import { subjLabelTxt } from '../core/subjects.js';
 import { registerTab, tabNeedsRender, tabMarkRendered } from '../core/router.js';
+import { showProfile } from '../records/profile.js';
 
 // app.js injects installChartCaptureButtons here (called after a successful render).
 let _afterRender=()=>{};

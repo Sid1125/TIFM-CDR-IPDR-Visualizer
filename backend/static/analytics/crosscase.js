@@ -13,6 +13,7 @@ import { API } from '../core/api.js';
 import { subjLabel } from '../core/subjects.js';
 import { toast } from '../ui/toast.js';
 import { evLoad, unpinEvidenceBySig, captureSvgToEvidence, refreshCapButtons } from '../workspace/evidence.js';
+import { showProfile } from '../records/profile.js';
 import { registerTab } from '../core/router.js';
 
 const _XTYPE={number:'number',imei:'IMEI',imsi:'IMSI',ip:'IP'};

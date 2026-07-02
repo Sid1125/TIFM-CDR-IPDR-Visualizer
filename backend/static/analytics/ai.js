@@ -7,12 +7,12 @@
 // identity) + the web-worker layer. showProfile in onclick strings resolves via the window bridge; the
 // eight interactive handlers are re-exposed on window. Self-registers the AI tab. No behavior change.
 
-import { esc, n } from '../core/utils.js';
+import { esc, n, renderMd } from '../core/utils.js';
 import { D } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { API } from '../core/api.js';
 import { _W } from '../data/workers.js';
-import { rowsFor } from '../data/records.js';
+import { rowsFor, _totalCdrFn, _totalIpdrFn } from '../data/records.js';
 import { recordSvcAttr } from '../services/attribution.js';
 import { reconstructSessions } from '../services/sessions.js';
 import { detectMeetings, meetingTotals } from '../services/meetings.js';

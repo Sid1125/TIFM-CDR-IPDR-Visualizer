@@ -10,6 +10,7 @@ import { D } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { API } from '../core/api.js';
 import { isSuspect, subjTag, subjLabelTxt } from '../core/subjects.js';
+import { showProfile } from '../records/profile.js';
 import { registerTab } from '../core/router.js';
 
 let curGraphNodes=null,curGraphLinks=null,curGraphSim=null,curCentrality=null;
