@@ -4,13 +4,43 @@
 // app.js (bottom-up modularization). The session engine (classifySession/reconstructSessions) stays
 // in app.js for now and imports these helpers downward. No behavior change.
 
-import { ISP_PROVIDERS, KNOWN_IP_HINTS, IP_RANGES, SERVICE_DB, EPHEMERAL_MIN, PRIVATE_LABEL, PORT_SVC, PORT_MAP, PORT_RANGES, GENERIC_FAMILIES, HOSTING_PROVIDERS, DISTINCTIVE_INDICATORS } from '../core/constants.js';
+import { ISP_PROVIDERS, KNOWN_IP_HINTS, IP_RANGES, SERVICE_DB, EPHEMERAL_MIN, PRIVATE_LABEL, PORT_SVC, PORT_MAP, PORT_RANGES, GENERIC_FAMILIES, HOSTING_PROVIDERS, DISTINCTIVE_INDICATORS, FINGERPRINTS } from '../core/constants.js';
 import { fmtBytes } from '../core/utils.js';
 
 function isIspProvider(name){return ISP_PROVIDERS.has(name)}
-// Longest-prefix match: among all CIDRs containing the IP, return the most specific
-// (largest mask = most 1-bits), so a tight block beats a broad one.
-function ipInRange(ip,range){if(!ip||!ip.includes('.'))return null;const n=ip.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);let best=null;for(const r of range){if((n&r.mask)===(r.range&r.mask)&&(!best||(r.mask>>>0)>(best.mask>>>0)))best=r}return best}
+// Longest-prefix match with time-aware ownership (backend _match_ip mirror): among all CIDRs
+// containing the IP AND valid at `when` (epoch ms; null = today's table), return the most
+// specific. A TIME-SCOPED entry (historical owner, from range_history) that applies to the
+// query date beats ANY open-ended current-table entry regardless of prefix length — today's
+// more-specific sub-allocations did not exist when the block still belonged to the historical
+// owner. Within the same class, longest prefix (largest mask) wins as before. An undated
+// query never matches a closed window.
+function ipInRange(ip,range,when){
+  if(!ip||!ip.includes('.'))return null;
+  const n=ip.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);
+  let best=null,bestScoped=false;
+  for(const r of range){
+    if((n&r.mask)!==(r.range&r.mask))continue;
+    const scoped=r.vf!=null||r.vt!=null;
+    if(scoped){
+      if(when==null)continue;
+      if(r.vf!=null&&when<r.vf)continue;
+      if(r.vt!=null&&when>=r.vt)continue;
+    }
+    if(!best||(scoped!==bestScoped?scoped:(r.mask>>>0)>(best.mask>>>0))){best=r;bestScoped=scoped}
+  }
+  return best;
+}
+// Network-owner enrichment (backend _enrich mirror): ASN / country / owner type onto any
+// result built from an IP match, plus the ownership-at-record-time note for historical hits.
+function enrichFromMatch(result,m){
+  result.asn=m.asn||null;result.country=m.country||null;result.ipType=m.ptype||null;
+  const bits=[];if(m.asn)bits.push('AS'+m.asn);if(m.ptype)bits.push(m.ptype);if(m.country)bits.push(m.country);
+  const line=bits.join(' · ');
+  if(line&&!result.evidence.includes(line))result.evidence.push(line);
+  if(m.hist){let note='IP ownership at record time: '+m.provider;if(m.note)note+=' — '+m.note;result.evidence.push(note)}
+  return result;
+}
 // Non-public address classification (CGNAT / private / loopback / link-local).
 function ipKind(ip){if(!ip||!ip.includes('.'))return null;const o=ip.split('.').map(x=>parseInt(x));if(o.length!==4||o.some(isNaN))return null;const n=((o[0]*256+o[1])*256+o[2])*256+o[3];const in_=(a,bits)=>{const m=~(2**(32-bits)-1)>>>0;const r=a.split('.').reduce((s,x)=>(s*256+parseInt(x))>>>0,0);return (n&m)===(r&m)};if(in_('100.64.0.0',10))return'cgnat';if(in_('127.0.0.0',8))return'loopback';if(in_('169.254.0.0',16))return'link_local';if(in_('10.0.0.0',8)||in_('172.16.0.0',12)||in_('192.168.0.0',16))return'private';return null}
 function ipHint(ip){if(!ip||!ip.includes('.'))return null;const n=ip.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);const h=KNOWN_IP_HINTS.find(r=>(n&r.mask)===(r.range&r.mask));return h?{provider:h.prov,service:h.svc,activity:h.act}:null}
@@ -374,7 +404,7 @@ function classifyByPort(dportRaw,sportRaw,protocol,bytes){
   if(fb)return{service:fb.service,subtype:fb.subtype,confidence:fb.confidence,family:fb.service,port:null,category:'unknown',evidence:fb.evidence};
   return{service:'Unknown',subtype:'Unclassified',confidence:10,family:'Unknown',port:null,category:'unknown',evidence:[protocol?'Protocol '+protocol:'Protocol unknown','No classification possible']};
 }
-function matchService(rec){
+function matchServiceCore(rec){
   const sp=parseInt(rec.sport),dp=parseInt(rec.dport);
   // Drop an ephemeral source port when a destination port exists — it's the
   // connection's own short-lived port, not the service being contacted.
@@ -383,6 +413,8 @@ function matchService(rec){
   if(sp&&!(dp&&sp>=EPHEMERAL_MIN))ports.add(sp);
   const proto=rec.prot?rec.prot.toUpperCase():'';
   const dur=rec.dur||0;const dir=rec.dir||'';const up=rec.bytesUp||0;const dn=rec.bytesDn||0;
+  // Record timestamp for time-aware IP ownership (old records resolve to the owner AT THAT TIME).
+  const when=rec.tsMs||(rec.ts?Date.parse(rec.ts):null)||null;
   // Shared port-classification result (backend _classify_by_port mirror) — computed up-front,
   // exactly as the backend does, because the private-destination and carrier branches both
   // consult it before the generic fallbacks.
@@ -394,37 +426,38 @@ function matchService(rec){
     // Keep a specific port-mapped service (RDP into a LAN box, internal DB, ...) and mark it
     // internal; only fall back to the bare private label when the port says nothing specific.
     if(portRes.port!=null&&!GENERIC_FAMILIES.has(portRes.family)){
-      return{provider:'',tier:1,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,category:'internal',candidates:[],evidence:portRes.evidence.concat([label+' destination'])};
+      return{provider:'',tier:1,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,family:portRes.family,category:'internal',candidates:[],evidence:portRes.evidence.concat([label+' destination'])};
     }
-    return{provider:'',tier:1,primary:{service:label,activity:'Internal'},serviceLabel:label,activityLabel:'Internal / non-routable',serviceConfidence:70,category:'internal',candidates:[],evidence:[label+' destination IP'].concat(proto?[proto+' protocol']:[])};
+    return{provider:'',tier:1,primary:{service:label,activity:'Internal'},serviceLabel:label,activityLabel:'Internal / non-routable',serviceConfidence:70,family:'Private',category:'internal',candidates:[],evidence:[label+' destination IP'].concat(proto?[proto+' protocol']:[])};
   }
   // The COUNTERPART (destination) is what names the contacted service. The subject's own IP is
   // their endpoint (carrier CGNAT, or a hosting box for server-side records) — consulting it as a
   // content label would tag any session merely ORIGINATING from an AWS/Meta IP as that service.
   // It is therefore only used to identify the access network (ISP) when the counterpart matches
   // nothing — mirroring the backend engine's _classify_by_ip policy.
-  const cntM=ipInRange(rec.cnt,IP_RANGES),subM=ipInRange(rec.sub,IP_RANGES);
+  const cntM=ipInRange(rec.cnt,IP_RANGES,when),subM=ipInRange(rec.sub,IP_RANGES,when);
   const ipRes=cntM||(subM&&subM.isp?subM:null);
   const provName=ipRes?ipRes.provider:null;
   const evidence=[];
   // An ISP-only match identifies the carrier; fall through to port classification and only
   // label it an access network if no specific service is found (Phase 2 fallbacks below).
   const ispCarrier=(ipRes&&ipRes.isp)?provName:null;
-  const accessNet=()=>({provider:provName,providerConfidence:55,tier:1,primary:{service:provName,activity:'Access Network'},serviceLabel:provName+' (Access Network)',activityLabel:'Carrier / ISP traffic',serviceConfidence:30,category:'access_network',candidates:[],evidence:[provName+' access network ('+ipRes.raw+')'].concat(proto?[proto+' protocol']:[])});
+  const accessNet=()=>enrichFromMatch({provider:provName,providerConfidence:55,tier:1,primary:{service:provName,activity:'Access Network'},serviceLabel:provName+' (Access Network)',activityLabel:'Carrier / ISP traffic',serviceConfidence:30,family:'Access Network',category:'access_network',candidates:[],evidence:[provName+' access network ('+ipRes.raw+')'].concat(proto?[proto+' protocol']:[])},ipRes);
   // Phase 1: known content provider from IP (Level 1 — Infrastructure)
   if(provName&&!ispCarrier){
     evidence.push(provName+' IP range ('+ipRes.raw+')');
     const hint=ipHint(rec.cnt);  // counterpart only — a hint on the subject's own IP is not the contacted service
-    if(hint){
+    if(hint&&!ipRes.hist){
       evidence.push(hint.provider+' '+hint.service+' ('+hint.activity+')');
-      return{provider:hint.provider,providerConfidence:96,tier:1,primary:{service:hint.service,activity:hint.activity},serviceLabel:hint.service,activityLabel:hint.activity,serviceConfidence:95,category:'content',candidates:[],evidence};
+      return enrichFromMatch({provider:hint.provider,providerConfidence:96,tier:1,primary:{service:hint.service,activity:hint.activity},serviceLabel:hint.service,activityLabel:hint.activity,serviceConfidence:95,family:provName,category:'content',candidates:[],evidence},ipRes);
     }
-    const prov=SERVICE_DB.find(p=>p.pr===provName);
+    const prov=ipRes.hist?null:SERVICE_DB.find(p=>p.pr===provName);
     if(prov&&prov.services&&prov.services.length){
       const tp=trafficPattern(dur,up,dn,proto,ports,1,rec.ts?new Date(rec.ts).getHours():undefined);
       const scored=scoreProvider(prov.services,ports,proto,dur,dir,up,dn,1,provName);
       const best=pickBest(scored,dur,tp?tp.category:null,tp?tp.evidence:[]);
       best.provider=provName;
+      best.family=provName;
       if(HOSTING_PROVIDERS.has(provName)){best.category='hosting';best.evidence.push('Cloud/VPS host — possible VPN, proxy, or self-hosted endpoint')}
       else best.category='content';
       // Resolve placeholders
@@ -436,11 +469,12 @@ function matchService(rec){
       if(tp&&best.trafficCat)best.evidence.unshift('Behavior: '+best.trafficCat);
       best.candidates=scored.map(s=>({service:s.svc,activity:s.act,score:s.score,portMatch:s.portMatch,protoMatch:s.protoMatch,trafficCat:s.trafficCat}));
       best.evidence=best.evidence.filter((v,i,a)=>a.indexOf(v)===i);
-      return best;
+      return enrichFromMatch(best,ipRes);
     }
-    // Provider matched by IP but has no service catalogue entry — still name it, exactly like the
-    // backend's _merge_provider (confidence scaled by CIDR specificity). Previously this fell
-    // through to the generic path and silently discarded the provider match.
+    // Provider matched by IP but with no service catalogue to score against — either a
+    // catalogue-less provider entry or a HISTORICAL owner (whose modern catalogue is
+    // meaningless for a record predating the transfer). Name it exactly like the backend's
+    // _merge_provider: confidence scaled by CIDR specificity.
     const plen=32-Math.log2((~ipRes.mask>>>0)+1);
     const conf=plen>=20?90:plen>=16?85:78;
     const hosting=HOSTING_PROVIDERS.has(provName);
@@ -449,7 +483,7 @@ function matchService(rec){
     if(portRes.port)mergeEv.push('Port '+portRes.port);
     for(const e of portRes.evidence){if(!mergeEv.includes(e))mergeEv.push(e);if(mergeEv.length>=5)break}
     const mergeSub=portRes.service!=='Unknown'?portRes.subtype:'Network session';
-    return{provider:provName,providerConfidence:conf,tier:1,primary:{service:provName,activity:mergeSub},serviceLabel:'Likely '+provName,activityLabel:mergeSub,serviceConfidence:conf,category:hosting?'hosting':'content',candidates:[],evidence:mergeEv};
+    return enrichFromMatch({provider:provName,providerConfidence:conf,tier:1,primary:{service:provName,activity:mergeSub},serviceLabel:'Likely '+provName,activityLabel:mergeSub,serviceConfidence:conf,family:provName,category:hosting?'hosting':'content',candidates:[],evidence:mergeEv},ipRes);
   }
   // Phase 2: no content provider — the shared port-classification layer (a 1:1 backend mirror,
   // computed up-front as portRes). Carrier handling matches attribute_service(): a specific
@@ -458,7 +492,7 @@ function matchService(rec){
   // access-network label.
   if(ispCarrier){
     if(portRes.port!=null&&!GENERIC_FAMILIES.has(portRes.family)){
-      return{provider:ispCarrier,tier:4,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,category:portRes.category,candidates:[],evidence:portRes.evidence.concat([ispCarrier+' access network ('+ipRes.raw+')'])};
+      return enrichFromMatch({provider:ispCarrier,tier:4,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,family:portRes.family,category:portRes.category,candidates:[],evidence:portRes.evidence.concat([ispCarrier+' access network ('+ipRes.raw+')'])},ipRes);
     }
     return accessNet();
   }
@@ -477,12 +511,81 @@ function matchService(rec){
       const best=fallbackCandidates[0];
       evidence.push('Port '+best.port+' ('+(PORT_SVC[best.port]||'')+') — candidate: '+best.provider+' '+best.service);
       if(proto)evidence.push(proto+' protocol');
-      return{provider:best.provider,providerConfidence:25,tier:4,primary:{service:best.service,activity:best.activity},serviceLabel:'Unknown',activityLabel:'Possible '+best.activity,serviceConfidence:12,candidates:fallbackCandidates.map(c=>({service:c.service,activity:c.activity,score:10})),evidence};
+      return{provider:best.provider,providerConfidence:25,tier:4,primary:{service:best.service,activity:best.activity},serviceLabel:'Unknown',activityLabel:'Possible '+best.activity,serviceConfidence:12,family:'Unknown',category:'unknown',candidates:fallbackCandidates.map(c=>({service:c.service,activity:c.activity,score:10})),evidence};
     }
   }
   // Pure port-layer result: a table/range match, the behavioural fallback, or Unknown — all
   // shaped exactly like the backend's attribute_service() return for the same record.
-  return{provider:'',tier:4,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,category:portRes.category,candidates:[],evidence:portRes.evidence};
+  return{provider:'',tier:4,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,family:portRes.family,category:portRes.category,candidates:[],evidence:portRes.evidence};
 }
 
-export { isIspProvider, ipInRange, ipKind, ipHint, trafficPattern, scoreProvider, pickBest, recordSvcAttr, matchService, classifyByPort, fallbackClassify };
+// ── Behavioral fingerprint layer (backend app_fingerprint_service mirror) ──
+// Classifies HOW a session behaved — protocol, duration, volume, up/down ratio, ports, network
+// owner — against the shared profile table (ATTR_DATA.fingerprints). Deterministic weighted
+// scoring: each profile is judged only on features BOTH it and the record declare, so missing
+// data narrows the comparison instead of penalising it.
+function fingerprintSession(features,provider){
+  const W_PROTO=25,W_DUR=20,W_BYTES=20,W_RATIO=15,W_PORTS=10,W_PROV=10,MIN_POSSIBLE=40;
+  const inR=(v,b)=>v>=b[0]&&v<=b[1];
+  const out=[];
+  for(const fp of FINGERPRINTS){
+    // A provider-declaring profile only applies when that provider's network was actually
+    // seen — behavior alone is shared by dozens of apps, so a provider-specific claim
+    // (WhatsApp, Zoom) without the provider falls to the generic profiles instead.
+    if(fp.providers&&(!provider||!fp.providers.includes(provider)))continue;
+    let earned=0,possible=0;const matched=[];
+    if(fp.proto&&features.proto){possible+=W_PROTO;if(features.proto===fp.proto){earned+=W_PROTO;matched.push('protocol '+fp.proto)}}
+    if(fp.dur&&features.dur!=null){possible+=W_DUR;if(inR(features.dur,fp.dur)){earned+=W_DUR;matched.push('duration '+features.dur+'s')}}
+    if(fp.bytes&&features.bytes!=null){possible+=W_BYTES;if(inR(features.bytes,fp.bytes)){earned+=W_BYTES;matched.push('transfer volume')}}
+    if(fp.ratio&&features.ratio!=null){possible+=W_RATIO;if(inR(features.ratio,fp.ratio)){earned+=W_RATIO;matched.push('up/down ratio')}}
+    if(fp.ports&&features.ports&&features.ports.size){possible+=W_PORTS;if([...features.ports].some(p=>fp.ports.includes(p))){earned+=W_PORTS;matched.push('port profile')}}
+    if(fp.providers){possible+=W_PROV;earned+=W_PROV;matched.push(provider+' network')}
+    if(possible<MIN_POSSIBLE)continue;
+    const score=Math.floor(100*earned/possible+0.5);
+    if(score>0)out.push({name:fp.name,app:fp.app,family:fp.family,subtype:fp.subtype,category:fp.category||'service',score,matched});
+  }
+  out.sort((a,b)=>b.score-a.score);
+  return out;
+}
+
+// Overlay the behavioral read on a port/IP classification (backend _fingerprint_refine mirror):
+// only for records WITH a duration; same-family matches refine the subtype (+4 confidence);
+// a strong (>=80) fingerprint may re-label a generic/unknown result; otherwise evidence only.
+function fingerprintRefine(rec,result,provider){
+  const dur=rec.dur;
+  if(!dur)return result;
+  const up=rec.bytesUp||0,dn=rec.bytesDn||0;
+  const fpPorts=new Set();
+  const dp=parseInt(rec.dport),sp=parseInt(rec.sport);
+  if(dp)fpPorts.add(dp);
+  if(sp)fpPorts.add(sp);
+  const features={proto:rec.prot?rec.prot.toUpperCase():null,dur,bytes:up+dn,ratio:dn>0?up/dn:(up>0?999:null),ports:fpPorts};
+  const matches=fingerprintSession(features,provider);
+  if(!matches.length||matches[0].score<70)return result;
+  const top=matches[0];
+  result.evidence=(result.evidence||[]).concat(['Behavioral fingerprint: '+top.app+' ('+top.score+'% — '+top.matched.join(', ')+')']);
+  if(top.family===result.family){
+    result.activityLabel=top.subtype;
+    result.serviceConfidence=Math.min(96,result.serviceConfidence+4);
+    if(result.primary)result.primary.activity=top.subtype;
+  }else if(top.score>=80&&(result.category==='unknown'||GENERIC_FAMILIES.has(result.family))){
+    result.serviceLabel='Likely '+top.app;
+    result.activityLabel=top.subtype;
+    result.family=top.family;
+    result.category=top.category;
+    result.serviceConfidence=Math.max(result.serviceConfidence,Math.min(88,top.score));
+    result.primary={service:top.family,activity:top.subtype};
+  }
+  return result;
+}
+
+function matchService(rec){
+  const res=matchServiceCore(rec);
+  // Mirror the backend: the fingerprint overlay never runs on internal or access-network
+  // results, and the provider constraint only applies on content/hosting (IP-named) results.
+  if(res.category==='internal'||res.category==='access_network')return res;
+  const provider=(res.category==='content'||res.category==='hosting')?(res.provider||null):null;
+  return fingerprintRefine(rec,res,provider);
+}
+
+export { isIspProvider, ipInRange, ipKind, ipHint, trafficPattern, scoreProvider, pickBest, recordSvcAttr, matchService, classifyByPort, fallbackClassify, fingerprintSession };

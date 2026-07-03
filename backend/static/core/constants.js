@@ -9,8 +9,18 @@
 // -- Service Provider Database --
 // Format: { provider, asn, domains, ranges, services: [{name, activities, ports:{tcp,udp}, proto}] }
 export const SERVICE_DB=ATTR_DATA.providers;
+// Provider network-owner classification: explicit `type`, else derived from the isp/hosting flags.
+const _provType=p=>p.type||(p.isp?'ISP / Residential':p.hosting?'Hosting / Cloud':'Content Provider');
+const _cidrEntry=(c,extra)=>{const[r,bits]=c.split('/');const m=~(2**(32-parseInt(bits))-1)>>>0;const rn=r.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);const pfx=parseInt(bits);return{mask:m,range:rn,raw:c,pfx,specificity:pfx>=24?1:pfx>=20?0.8:pfx>=16?0.6:0.4,...extra}};
 // -- IP Range Lookup --
-export const IP_RANGES=SERVICE_DB.flatMap(p=>(p.ranges||[]).map(c=>{const[r,bits]=c.split('/');const m=~(2**(32-parseInt(bits))-1)>>>0;const rn=r.split('.').reduce((s,o)=>(s*256+parseInt(o))>>>0,0);const pfx=parseInt(bits);return{mask:m,range:rn,provider:p.pr,raw:c,isp:!!p.isp,specificity:pfx>=24?1:pfx>=20?0.8:pfx>=16?0.6:0.4}}));
+// Current owners (open-ended) + time-scoped historical owners from range_history: IP blocks
+// change hands (3.0.0.0/8 was General Electric until 2018, then AWS), so entries carry an
+// optional [vf, vt) validity window in epoch ms and matching is record-timestamp-aware.
+export const IP_RANGES=SERVICE_DB.flatMap(p=>(p.ranges||[]).map(c=>_cidrEntry(c,{provider:p.pr,isp:!!p.isp,asn:p.asn||null,country:p.country||null,ptype:_provType(p),vf:null,vt:null,hist:false,note:null})))
+  .concat((ATTR_DATA.range_history||[]).map(h=>_cidrEntry(h.cidr,{provider:h.provider,isp:!!h.isp,asn:h.asn||null,country:h.country||null,ptype:h.type||'Historical owner',vf:h.from?Date.parse(h.from):null,vt:h.to?Date.parse(h.to):null,hist:true,note:h.note||null})));
+// Behavioral app-fingerprint profiles (protocol/duration/volume/ratio/ports/provider) — shared
+// with the backend's app_fingerprint_service; both scorers mirror each other 1:1.
+export const FINGERPRINTS=ATTR_DATA.fingerprints||[];
 // Providers that are access networks (telecom/ISP), not content services. A match on
 // these identifies the carrier, and must never override a real content-provider match.
 export const ISP_PROVIDERS=new Set(SERVICE_DB.filter(p=>p.isp).map(p=>p.pr));

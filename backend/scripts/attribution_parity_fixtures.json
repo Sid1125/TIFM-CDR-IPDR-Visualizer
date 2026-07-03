@@ -9,14 +9,18 @@
    "dport": 53,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely DNS",
    "subtype": "Lookup / resolution",
    "confidence": 95,
    "family": "DNS",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -29,14 +33,18 @@
    "dport": 51820,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely VPN / Tunnel",
    "subtype": "Keepalive / handshake",
    "confidence": 81,
    "family": "VPN / Tunnel",
-   "category": "vpn"
+   "category": "vpn",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -49,14 +57,18 @@
    "dport": 9050,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Tor",
    "subtype": "Proxy session",
    "confidence": 72,
    "family": "Proxy / Tor",
-   "category": "anonymization"
+   "category": "anonymization",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -69,14 +81,18 @@
    "dport": 3389,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 1000
+   "bytesDn": 1000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Remote Desktop",
    "subtype": "Session setup",
    "confidence": 84,
    "family": "Remote Desktop",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -89,14 +105,18 @@
    "dport": 3389,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 500000
+   "bytesDn": 500000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Remote Desktop",
    "subtype": "Interactive session",
    "confidence": 88,
    "family": "Remote Desktop",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -109,14 +129,18 @@
    "dport": 27018,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 2000000
+   "bytesDn": 2000000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Database",
    "subtype": "Bulk data / query",
    "confidence": 80,
    "family": "Database",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -129,14 +153,18 @@
    "dport": 587,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Mail",
    "subtype": "Submission",
    "confidence": 84,
    "family": "Mail",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -149,14 +177,18 @@
    "dport": 3478,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely WhatsApp/Meta",
    "subtype": "Call initialization",
    "confidence": 96,
    "family": "WhatsApp",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -169,14 +201,18 @@
    "dport": 5222,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely WhatsApp/Meta",
    "subtype": "Session setup / keepalive",
    "confidence": 92,
    "family": "WhatsApp",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -189,14 +225,18 @@
    "dport": 3479,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 10000
+   "bytesDn": 10000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely WhatsApp/Meta",
    "subtype": "Call teardown / keepalive",
    "confidence": 72,
    "family": "WhatsApp",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -209,14 +249,18 @@
    "dport": 3479,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 100000
+   "bytesDn": 100000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely WhatsApp/Meta",
    "subtype": "Call signaling",
    "confidence": 82,
    "family": "WhatsApp",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -229,14 +273,18 @@
    "dport": 3479,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 1000000
+   "bytesDn": 1000000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely WhatsApp/Meta",
    "subtype": "Call duration / active session",
    "confidence": 88,
    "family": "WhatsApp",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -249,14 +297,18 @@
    "dport": 3479,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 5000000
+   "bytesDn": 5000000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely WhatsApp/Meta",
    "subtype": "Call duration / media session",
    "confidence": 92,
    "family": "WhatsApp",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -269,14 +321,18 @@
    "dport": 443,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Encrypted Web/App",
    "subtype": "QUIC (HTTP/3) session",
    "confidence": 84,
    "family": "Encrypted Web/App",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -289,14 +345,18 @@
    "dport": 8443,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Encrypted Web/App",
    "subtype": "QUIC (HTTP/3) session",
    "confidence": 84,
    "family": "Encrypted Web/App",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -309,14 +369,18 @@
    "dport": 443,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Encrypted Web/App",
    "subtype": "Encrypted session",
    "confidence": 84,
    "family": "Encrypted Web/App",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -329,14 +393,18 @@
    "dport": 80,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 10000
+   "bytesDn": 10000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Web",
    "subtype": "Page fetch / browsing",
    "confidence": 78,
    "family": "Web",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -349,14 +417,18 @@
    "dport": 80,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 2000000
+   "bytesDn": 2000000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Web",
    "subtype": "Content transfer / session",
    "confidence": 82,
    "family": "Web",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -369,14 +441,18 @@
    "dport": 5061,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely VoIP / SIP",
    "subtype": "Call signaling",
    "confidence": 92,
    "family": "VoIP / SIP",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -389,14 +465,18 @@
    "dport": null,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely MS Teams",
    "subtype": "Keepalive / STUN",
    "confidence": 47,
    "family": "Video Conf / Streaming",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -409,14 +489,18 @@
    "dport": 53,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely DNS",
    "subtype": "Lookup / resolution",
    "confidence": 95,
    "family": "DNS",
-   "category": "service"
+   "category": "service",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -429,14 +513,18 @@
    "dport": null,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 6000000
+   "bytesDn": 6000000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Streaming / Media",
    "subtype": "High-volume stream",
    "confidence": 60,
    "family": "Likely Streaming / Media",
-   "category": "unknown"
+   "category": "unknown",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -449,14 +537,18 @@
    "dport": null,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 2000000
+   "bytesDn": 2000000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Video Conf / Streaming",
    "subtype": "Media stream",
    "confidence": 56,
    "family": "Likely Video Conf / Streaming",
-   "category": "unknown"
+   "category": "unknown",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -469,14 +561,18 @@
    "dport": null,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 1000
+   "bytesDn": 1000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Messaging / VoIP",
    "subtype": "Media / signalling session",
    "confidence": 42,
    "family": "Likely Messaging / VoIP",
-   "category": "unknown"
+   "category": "unknown",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -489,14 +585,18 @@
    "dport": null,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 20000000
+   "bytesDn": 20000000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Content Transfer",
    "subtype": "Large download / upload",
    "confidence": 58,
    "family": "Likely Content Transfer",
-   "category": "unknown"
+   "category": "unknown",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -509,14 +609,18 @@
    "dport": null,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 600000
+   "bytesDn": 600000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely File Transfer",
    "subtype": "Medium file transfer",
    "confidence": 44,
    "family": "Likely File Transfer",
-   "category": "unknown"
+   "category": "unknown",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -529,14 +633,18 @@
    "dport": null,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 1000
+   "bytesDn": 1000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Encrypted Web/App",
    "subtype": "Generic TCP session",
    "confidence": 26,
    "family": "Likely Encrypted Web/App",
-   "category": "unknown"
+   "category": "unknown",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -549,14 +657,18 @@
    "dport": null,
    "prot": "ICMP",
    "bytesUp": 0,
-   "bytesDn": 100
+   "bytesDn": 100,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Custom Protocol",
    "subtype": "Protocol ICMP session",
    "confidence": 18,
    "family": "Likely Custom Protocol",
-   "category": "unknown"
+   "category": "unknown",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -569,14 +681,18 @@
    "dport": 3389,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Remote Desktop",
    "subtype": "Session setup",
    "confidence": 84,
    "family": "Remote Desktop",
-   "category": "internal"
+   "category": "internal",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -589,14 +705,18 @@
    "dport": 443,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Private / Internal Network",
    "subtype": "Internal / non-routable",
    "confidence": 70,
    "family": "Private",
-   "category": "internal"
+   "category": "internal",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -609,14 +729,18 @@
    "dport": 443,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Carrier NAT (CGNAT)",
    "subtype": "Internal / non-routable",
    "confidence": 70,
    "family": "Private",
-   "category": "internal"
+   "category": "internal",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -629,14 +753,18 @@
    "dport": 8080,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Loopback",
    "subtype": "Internal / non-routable",
    "confidence": 70,
    "family": "Private",
-   "category": "internal"
+   "category": "internal",
+   "asn": null,
+   "country": null
   }
  },
  {
@@ -649,14 +777,18 @@
    "dport": 53,
    "prot": "UDP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely DNS",
    "subtype": "Lookup / resolution",
    "confidence": 95,
    "family": "DNS",
-   "category": "service"
+   "category": "service",
+   "asn": 55836,
+   "country": "IN"
   }
  },
  {
@@ -669,14 +801,18 @@
    "dport": 443,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Reliance Jio (Access Network)",
    "subtype": "Carrier / ISP traffic",
    "confidence": 30,
    "family": "Access Network",
-   "category": "access_network"
+   "category": "access_network",
+   "asn": 55836,
+   "country": "IN"
   }
  },
  {
@@ -689,14 +825,18 @@
    "dport": null,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Reliance Jio (Access Network)",
    "subtype": "Carrier / ISP traffic",
    "confidence": 30,
    "family": "Access Network",
-   "category": "access_network"
+   "category": "access_network",
+   "asn": 55836,
+   "country": "IN"
   }
  },
  {
@@ -709,14 +849,18 @@
    "dport": null,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Reliance Jio (Access Network)",
    "subtype": "Carrier / ISP traffic",
    "confidence": 30,
    "family": "Access Network",
-   "category": "access_network"
+   "category": "access_network",
+   "asn": 55836,
+   "country": "IN"
   }
  },
  {
@@ -729,14 +873,18 @@
    "dport": 443,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Meta",
    "subtype": "Encrypted session",
    "confidence": 85,
    "family": "Meta",
-   "category": "content"
+   "category": "content",
+   "asn": 32934,
+   "country": "US"
   }
  },
  {
@@ -749,14 +897,18 @@
    "dport": 443,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 50000
+   "bytesDn": 50000,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely DigitalOcean",
    "subtype": "Encrypted session",
    "confidence": 85,
    "family": "DigitalOcean",
-   "category": "hosting"
+   "category": "hosting",
+   "asn": 14061,
+   "country": "US"
   }
  },
  {
@@ -769,14 +921,234 @@
    "dport": 9050,
    "prot": "TCP",
    "bytesUp": 0,
-   "bytesDn": 0
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
   },
   "expected": {
    "service": "Likely Tor",
    "subtype": "Proxy session",
    "confidence": 72,
    "family": "Proxy / Tor",
-   "category": "anonymization"
+   "category": "anonymization",
+   "asn": null,
+   "country": null
+  }
+ },
+ {
+  "name": "ge_2016",
+  "mode": "provider",
+  "input": {
+   "sub": null,
+   "cnt": "3.5.140.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0,
+   "ts": "2016-05-01T00:00:00",
+   "dur": null
+  },
+  "expected": {
+   "service": "Likely General Electric",
+   "subtype": "Encrypted session",
+   "confidence": 78,
+   "family": "General Electric",
+   "category": "content",
+   "asn": null,
+   "country": "US"
+  }
+ },
+ {
+  "name": "aws_2020",
+  "mode": "provider",
+  "input": {
+   "sub": null,
+   "cnt": "3.5.140.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0,
+   "ts": "2020-05-01T00:00:00",
+   "dur": null
+  },
+  "expected": {
+   "service": "Likely Amazon",
+   "subtype": "Encrypted session",
+   "confidence": 85,
+   "family": "Amazon",
+   "category": "content",
+   "asn": 16509,
+   "country": "US"
+  }
+ },
+ {
+  "name": "aws_52",
+  "mode": "provider",
+  "input": {
+   "sub": null,
+   "cnt": "52.10.1.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
+  },
+  "expected": {
+   "service": "Likely Amazon",
+   "subtype": "Encrypted session",
+   "confidence": 78,
+   "family": "Amazon",
+   "category": "content",
+   "asn": 16509,
+   "country": "US"
+  }
+ },
+ {
+  "name": "ms_o365_52",
+  "mode": "provider",
+  "input": {
+   "sub": null,
+   "cnt": "52.100.1.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
+  },
+  "expected": {
+   "service": "Likely Microsoft",
+   "subtype": "Encrypted session",
+   "confidence": 78,
+   "family": "Microsoft",
+   "category": "content",
+   "asn": 8075,
+   "country": "US"
+  }
+ },
+ {
+  "name": "gcp_35",
+  "mode": "provider",
+  "input": {
+   "sub": null,
+   "cnt": "35.190.1.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0,
+   "ts": null,
+   "dur": null
+  },
+  "expected": {
+   "service": "Likely Google",
+   "subtype": "Encrypted session",
+   "confidence": 78,
+   "family": "Google",
+   "category": "content",
+   "asn": 15169,
+   "country": "US"
+  }
+ },
+ {
+  "name": "fp_vpn_behavior",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 51820,
+   "prot": "UDP",
+   "bytesUp": 40000000,
+   "bytesDn": 60000000,
+   "ts": null,
+   "dur": 3600
+  },
+  "expected": {
+   "service": "Likely VPN / Tunnel",
+   "subtype": "Encrypted tunnel (behavioral)",
+   "confidence": 91,
+   "family": "VPN / Tunnel",
+   "category": "vpn",
+   "asn": null,
+   "country": null
+  }
+ },
+ {
+  "name": "fp_bulk_download",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 1000000,
+   "bytesDn": 800000000,
+   "ts": null,
+   "dur": 1800
+  },
+  "expected": {
+   "service": "Likely Large Download",
+   "subtype": "Bulk download (behavioral)",
+   "confidence": 88,
+   "family": "File Transfer",
+   "category": "service",
+   "asn": null,
+   "country": null
+  }
+ },
+ {
+  "name": "fp_voip_neutral",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 3479,
+   "prot": "UDP",
+   "bytesUp": 2000000,
+   "bytesDn": 2500000,
+   "ts": null,
+   "dur": 400
+  },
+  "expected": {
+   "service": "Likely WhatsApp/Meta",
+   "subtype": "Call duration / media session",
+   "confidence": 92,
+   "family": "WhatsApp",
+   "category": "service",
+   "asn": null,
+   "country": null
+  }
+ },
+ {
+  "name": "fp_keepalive",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "TCP",
+   "bytesUp": 100,
+   "bytesDn": 200,
+   "ts": null,
+   "dur": 2
+  },
+  "expected": {
+   "service": "Likely Keepalive / Probe",
+   "subtype": "Keepalive (behavioral)",
+   "confidence": 88,
+   "family": "Infrastructure",
+   "category": "unknown",
+   "asn": null,
+   "country": null
   }
  }
 ]

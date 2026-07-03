@@ -25,6 +25,7 @@ import ipaddress
 import json
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -40,6 +41,9 @@ class _Rec:
         self.protocol = kw.get("protocol")
         self.bytes_uploaded = kw.get("bytes_uploaded", 0)
         self.bytes_downloaded = kw.get("bytes_downloaded", 0)
+        self.start_time = kw.get("start_time")
+        self.end_time = kw.get("end_time")
+        self.duration_seconds = kw.get("duration_seconds")
 
 
 def _sample_ip(provider_name: str) -> str:
@@ -106,6 +110,25 @@ CASES = [
     ("hosting_digitalocean","provider", dict(destination_ip=DO, destination_port=443, protocol="TCP", bytes_downloaded=50_000)),
     # Content IP as SOURCE must not name the service (policy fixture).
     ("meta_src_not_service","exact",  dict(source_ip=META, destination_ip=NEUTRAL, destination_port=9050, protocol="TCP")),
+    # ── Time-aware ownership: same IP, different record dates, different owners ──
+    ("ge_2016",             "provider", dict(destination_ip="3.5.140.1", destination_port=443, protocol="TCP",
+                                             start_time=datetime(2016, 5, 1))),
+    ("aws_2020",            "provider", dict(destination_ip="3.5.140.1", destination_port=443, protocol="TCP",
+                                             start_time=datetime(2020, 5, 1))),
+    # ── Contested-/8 splits (52/8 and 35/8 were double-claimed before v2) ──
+    ("aws_52",              "provider", dict(destination_ip="52.10.1.1", destination_port=443, protocol="TCP")),
+    ("ms_o365_52",          "provider", dict(destination_ip="52.100.1.1", destination_port=443, protocol="TCP")),
+    ("gcp_35",              "provider", dict(destination_ip="35.190.1.1", destination_port=443, protocol="TCP")),
+    # ── Behavioral fingerprints (duration-bearing; the layer is skipped without one) ──
+    ("fp_vpn_behavior",     "exact", dict(destination_ip=NEUTRAL, destination_port=51820, protocol="UDP",
+                                          duration_seconds=3600, bytes_uploaded=40_000_000, bytes_downloaded=60_000_000)),
+    # (provider-gated video_streaming must NOT fire on a neutral IP; bulk download is the honest read)
+    ("fp_bulk_download",    "exact", dict(destination_ip=NEUTRAL, destination_port=443, protocol="TCP",
+                                          duration_seconds=1800, bytes_uploaded=1_000_000, bytes_downloaded=800_000_000)),
+    ("fp_voip_neutral",     "exact", dict(destination_ip=NEUTRAL, destination_port=3479, protocol="UDP",
+                                          duration_seconds=400, bytes_uploaded=2_000_000, bytes_downloaded=2_500_000)),
+    ("fp_keepalive",        "exact", dict(destination_ip=NEUTRAL, protocol="TCP",
+                                          duration_seconds=2, bytes_uploaded=100, bytes_downloaded=200)),
 ]
 
 
@@ -124,6 +147,8 @@ def main():
                 "prot": kw.get("protocol"),
                 "bytesUp": kw.get("bytes_uploaded", 0),
                 "bytesDn": kw.get("bytes_downloaded", 0),
+                "ts": kw["start_time"].isoformat() if kw.get("start_time") else None,
+                "dur": kw.get("duration_seconds"),
             },
             "expected": {
                 "service": result["service"],
@@ -131,6 +156,8 @@ def main():
                 "confidence": result["confidence"],
                 "family": result["family"],
                 "category": result["category"],
+                "asn": result.get("asn"),
+                "country": result.get("country"),
             },
         })
     out = os.path.join(os.path.dirname(__file__), "attribution_parity_fixtures.json")

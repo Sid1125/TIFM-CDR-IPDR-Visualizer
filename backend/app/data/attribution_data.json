@@ -135,7 +135,9 @@
       "TCP"
      ]
     }
-   ]
+   ],
+   "country": "US",
+   "type": "Content Provider"
   },
   {
    "pr": "Google",
@@ -160,7 +162,10 @@
     "64.233.160.0/19",
     "216.239.32.0/19",
     "108.177.0.0/17",
-    "35.0.0.0/8"
+    "35.184.0.0/13",
+    "35.192.0.0/11",
+    "35.224.0.0/12",
+    "35.240.0.0/13"
    ],
    "services": [
     {
@@ -323,7 +328,9 @@
       "TCP"
      ]
     }
-   ]
+   ],
+   "country": "US",
+   "type": "Content Provider"
   },
   {
    "pr": "Microsoft",
@@ -341,7 +348,9 @@
     "13.104.0.0/14",
     "20.0.0.0/8",
     "40.0.0.0/8",
-    "52.0.0.0/8"
+    "52.96.0.0/12",
+    "52.112.0.0/14",
+    "52.224.0.0/11"
    ],
    "services": [
     {
@@ -484,7 +493,9 @@
       "TCP"
      ]
     }
-   ]
+   ],
+   "country": "US",
+   "type": "Content Provider"
   },
   {
    "pr": "Amazon",
@@ -495,10 +506,21 @@
     "amazonpay.com"
    ],
    "ranges": [
-    "54.0.0.0/8",
-    "52.0.0.0/8",
-    "35.0.0.0/8",
-    "13.0.0.0/8"
+    "3.0.0.0/8",
+    "52.0.0.0/10",
+    "52.64.0.0/12",
+    "52.84.0.0/15",
+    "52.192.0.0/11",
+    "35.72.0.0/13",
+    "35.80.0.0/12",
+    "35.160.0.0/11",
+    "13.32.0.0/15",
+    "13.52.0.0/13",
+    "13.224.0.0/14",
+    "54.64.0.0/10",
+    "54.144.0.0/12",
+    "54.160.0.0/11",
+    "54.192.0.0/10"
    ],
    "services": [
     {
@@ -571,7 +593,9 @@
       "TCP"
      ]
     }
-   ]
+   ],
+   "country": "US",
+   "type": "Hosting / Cloud"
   },
   {
    "pr": "Cloudflare",
@@ -615,7 +639,9 @@
       "UDP"
      ]
     }
-   ]
+   ],
+   "country": "US",
+   "type": "CDN"
   },
   {
    "pr": "Akamai",
@@ -647,7 +673,9 @@
       "TCP"
      ]
     }
-   ]
+   ],
+   "country": "US",
+   "type": "CDN"
   },
   {
    "pr": "Fastly",
@@ -680,7 +708,9 @@
       "TCP"
      ]
     }
-   ]
+   ],
+   "country": "US",
+   "type": "CDN"
   },
   {
    "pr": "Oracle",
@@ -731,7 +761,9 @@
      ]
     }
    ],
-   "hosting": true
+   "hosting": true,
+   "country": "US",
+   "type": "Hosting / Cloud"
   },
   {
    "pr": "OVH",
@@ -798,7 +830,9 @@
       "UDP"
      ]
     }
-   ]
+   ],
+   "country": "AE",
+   "type": "Content Provider"
   },
   {
    "pr": "Signal",
@@ -1071,7 +1105,9 @@
       "TCP"
      ]
     }
-   ]
+   ],
+   "country": "US",
+   "type": "Content Provider"
   },
   {
    "pr": "Snapchat",
@@ -2019,7 +2055,9 @@
       "UDP"
      ]
     }
-   ]
+   ],
+   "country": "IN",
+   "type": "ISP / Residential"
   },
   {
    "pr": "Bharti Airtel",
@@ -2056,7 +2094,9 @@
       "UDP"
      ]
     }
-   ]
+   ],
+   "country": "IN",
+   "type": "ISP / Residential"
   },
   {
    "pr": "Vodafone Idea",
@@ -2092,7 +2132,9 @@
       "UDP"
      ]
     }
-   ]
+   ],
+   "country": "IN",
+   "type": "ISP / Residential"
   },
   {
    "pr": "BSNL",
@@ -2127,7 +2169,9 @@
       "UDP"
      ]
     }
-   ]
+   ],
+   "country": "IN",
+   "type": "ISP / Residential"
   },
   {
    "pr": "Yandex",
@@ -2183,7 +2227,9 @@
       "TCP"
      ]
     }
-   ]
+   ],
+   "country": "RU",
+   "type": "Content Provider"
   },
   {
    "pr": "Alibaba Cloud",
@@ -2216,7 +2262,9 @@
      ]
     }
    ],
-   "hosting": true
+   "hosting": true,
+   "country": "CN",
+   "type": "Hosting / Cloud"
   },
   {
    "pr": "Hetzner",
@@ -2249,7 +2297,9 @@
      ]
     }
    ],
-   "hosting": true
+   "hosting": true,
+   "country": "DE",
+   "type": "Hosting / Cloud"
   },
   {
    "pr": "Vultr",
@@ -2280,7 +2330,9 @@
      ]
     }
    ],
-   "hosting": true
+   "hosting": true,
+   "country": "US",
+   "type": "Hosting / Cloud"
   },
   {
    "pr": "Tor",
@@ -4514,5 +4566,339 @@
    "Infrastructure",
    "Network diagnostic"
   ]
+ ],
+ "range_history": [
+  {
+   "cidr": "3.0.0.0/8",
+   "provider": "General Electric",
+   "to": "2018-07-01",
+   "type": "Enterprise (legacy)",
+   "country": "US",
+   "note": "GE sold 3.0.0.0/8 to Amazon/AWS in 2018 (date approximate)"
+  },
+  {
+   "cidr": "13.0.0.0/8",
+   "provider": "Xerox",
+   "to": "2017-01-01",
+   "type": "Enterprise (legacy)",
+   "country": "US",
+   "note": "Xerox legacy /8; blocks sold to AWS and Microsoft around 2016-2018 (date approximate)"
+  },
+  {
+   "cidr": "20.0.0.0/8",
+   "provider": "CSC (Computer Sciences Corp)",
+   "to": "2017-06-01",
+   "type": "Enterprise (legacy)",
+   "country": "US",
+   "note": "CSC/DXC legacy /8; large blocks acquired by Microsoft ~2017 (date approximate)"
+  },
+  {
+   "cidr": "40.0.0.0/8",
+   "provider": "Eli Lilly and Company",
+   "to": "2011-01-01",
+   "type": "Enterprise (legacy)",
+   "country": "US",
+   "note": "Eli Lilly legacy /8; large blocks acquired by Microsoft ~2011 (date approximate)"
+  }
+ ],
+ "fingerprints": [
+  {
+   "name": "whatsapp_voice_call",
+   "app": "WhatsApp Voice Call",
+   "family": "WhatsApp",
+   "subtype": "Voice call (behavioral)",
+   "category": "service",
+   "proto": "UDP",
+   "dur": [
+    30,
+    7200
+   ],
+   "bytes": [
+    50000,
+    20000000
+   ],
+   "ratio": [
+    0.3,
+    3.0
+   ],
+   "ports": [
+    3478,
+    3479,
+    3480,
+    443
+   ],
+   "providers": [
+    "Meta"
+   ]
+  },
+  {
+   "name": "whatsapp_video_call",
+   "app": "WhatsApp Video Call",
+   "family": "WhatsApp",
+   "subtype": "Video call (behavioral)",
+   "category": "service",
+   "proto": "UDP",
+   "dur": [
+    60,
+    7200
+   ],
+   "bytes": [
+    20000000,
+    2000000000
+   ],
+   "ratio": [
+    0.3,
+    3.0
+   ],
+   "ports": [
+    3478,
+    3479,
+    3480,
+    443
+   ],
+   "providers": [
+    "Meta"
+   ]
+  },
+  {
+   "name": "whatsapp_messaging",
+   "app": "WhatsApp Messaging",
+   "family": "WhatsApp",
+   "subtype": "Messaging (behavioral)",
+   "category": "service",
+   "proto": "TCP",
+   "dur": [
+    0,
+    60
+   ],
+   "bytes": [
+    0,
+    100000
+   ],
+   "ports": [
+    5222,
+    5223,
+    443
+   ],
+   "providers": [
+    "Meta"
+   ]
+  },
+  {
+   "name": "video_conference",
+   "app": "Video Conference",
+   "family": "Video Conf / Streaming",
+   "subtype": "Conference call (behavioral)",
+   "category": "service",
+   "proto": "UDP",
+   "dur": [
+    120,
+    14400
+   ],
+   "bytes": [
+    500000,
+    5000000000
+   ],
+   "ratio": [
+    0.2,
+    5.0
+   ],
+   "ports": [
+    3478,
+    3479,
+    3480,
+    3481,
+    8801,
+    8810,
+    19302,
+    19303,
+    19304,
+    19305
+   ],
+   "providers": [
+    "Microsoft",
+    "Google",
+    "Zoom"
+   ]
+  },
+  {
+   "name": "video_streaming",
+   "app": "Video Streaming",
+   "family": "Streaming",
+   "subtype": "Content stream (behavioral)",
+   "category": "service",
+   "proto": "TCP",
+   "dur": [
+    120,
+    28800
+   ],
+   "bytes": [
+    5000000,
+    50000000000
+   ],
+   "ratio": [
+    0,
+    0.2
+   ],
+   "providers": [
+    "Google",
+    "Netflix",
+    "Amazon",
+    "Akamai",
+    "Fastly",
+    "Cloudflare"
+   ]
+  },
+  {
+   "name": "voip_generic",
+   "app": "VoIP Call",
+   "family": "VoIP / SIP",
+   "subtype": "Voice session (behavioral)",
+   "category": "service",
+   "proto": "UDP",
+   "dur": [
+    30,
+    7200
+   ],
+   "bytes": [
+    50000,
+    20000000
+   ],
+   "ratio": [
+    0.3,
+    3.0
+   ]
+  },
+  {
+   "name": "vpn_tunnel",
+   "app": "VPN Tunnel",
+   "family": "VPN / Tunnel",
+   "subtype": "Encrypted tunnel (behavioral)",
+   "category": "vpn",
+   "dur": [
+    300,
+    86400
+   ],
+   "bytes": [
+    100000,
+    100000000000
+   ],
+   "ports": [
+    500,
+    1194,
+    1701,
+    4500,
+    51820
+   ]
+  },
+  {
+   "name": "file_download",
+   "app": "Large Download",
+   "family": "File Transfer",
+   "subtype": "Bulk download (behavioral)",
+   "category": "service",
+   "proto": "TCP",
+   "dur": [
+    10,
+    28800
+   ],
+   "bytes": [
+    10000000,
+    1000000000000
+   ],
+   "ratio": [
+    0,
+    0.1
+   ]
+  },
+  {
+   "name": "media_upload",
+   "app": "Media Upload",
+   "family": "File Transfer",
+   "subtype": "Bulk upload (behavioral)",
+   "category": "service",
+   "proto": "TCP",
+   "dur": [
+    5,
+    28800
+   ],
+   "bytes": [
+    500000,
+    1000000000000
+   ],
+   "ratio": [
+    5.0,
+    10000
+   ]
+  },
+  {
+   "name": "cloud_sync",
+   "app": "Cloud Sync / Backup",
+   "family": "File Transfer",
+   "subtype": "Sync session (behavioral)",
+   "category": "service",
+   "proto": "TCP",
+   "dur": [
+    60,
+    86400
+   ],
+   "bytes": [
+    100000,
+    100000000000
+   ],
+   "ratio": [
+    0.3,
+    3.0
+   ],
+   "providers": [
+    "Google",
+    "Microsoft",
+    "Apple",
+    "Dropbox",
+    "Amazon"
+   ]
+  },
+  {
+   "name": "gaming_session",
+   "app": "Online Gaming",
+   "family": "Gaming",
+   "subtype": "Multiplayer session (behavioral)",
+   "category": "service",
+   "proto": "UDP",
+   "dur": [
+    300,
+    28800
+   ],
+   "bytes": [
+    1000000,
+    500000000
+   ],
+   "ratio": [
+    0.3,
+    3.0
+   ],
+   "ports": [
+    27015,
+    27031,
+    3074,
+    3478,
+    30000
+   ]
+  },
+  {
+   "name": "keepalive_probe",
+   "app": "Keepalive / Probe",
+   "family": "Infrastructure",
+   "subtype": "Keepalive (behavioral)",
+   "category": "unknown",
+   "dur": [
+    0,
+    5
+   ],
+   "bytes": [
+    0,
+    5000
+   ]
+  }
  ]
 }

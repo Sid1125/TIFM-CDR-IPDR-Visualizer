@@ -38,6 +38,8 @@ for (const f of fixtures) {
   } else { // provider
     if (r.provider !== e.family) problems.push(`provider '${r.provider}' != '${e.family}'`);
     if (r.category !== e.category) problems.push(`category '${r.category}' != '${e.category}'`);
+    if ((r.asn || null) !== (e.asn ?? null)) problems.push(`asn ${r.asn} != ${e.asn}`);
+    if ((r.country || null) !== (e.country ?? null)) problems.push(`country '${r.country}' != '${e.country}'`);
   }
   if (problems.length) fails.push([f.name, problems.join('; ')]);
   else pass++;

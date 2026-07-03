@@ -877,7 +877,7 @@ def vpn_proxy_use(ipdr_records):
         dip = getattr(r, "destination_ip", None)
         if dip and dip not in d["dests"]:
             match = _match_ip(dip)
-            d["dests"][dip] = match[0] if match else None
+            d["dests"][dip] = match["provider"] if match else None
 
     out = []
     for src, d in by_src.items():
@@ -997,7 +997,7 @@ def destination_profile(ipdr_records):
             if len(dst_sources[dst]) <= DEST_RARE_MAX_SOURCES and cnt >= DEST_RARE_MIN_SESSIONS:
                 m = _match_ip(dst)
                 rare.append({"destination_ip": dst, "sessions": cnt,
-                             "provider": (m[0] if m else None),
+                             "provider": (m["provider"] if m else None),
                              "seen_from_sources": len(dst_sources[dst])})
             if len(rare) >= 5:
                 break

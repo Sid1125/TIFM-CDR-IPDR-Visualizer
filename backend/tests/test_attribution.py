@@ -14,6 +14,7 @@ import types
 import unittest
 
 import ipaddress
+from datetime import datetime
 
 from app.services import service_attribution_service as svc
 from app.services.service_attribution_service import attribute_service, summarize_services
@@ -83,6 +84,50 @@ FIXTURES = [
     # --- QUIC: UDP on the TLS port is HTTP/3, labelled as encrypted web with QUIC evidence ---
     ("quic_udp_443",   rec(destination_port=443, protocol="UDP"),
         lambda r: r["family"] == "Encrypted Web/App" and any("QUIC" in e for e in r["evidence"])),
+    # --- historical ownership: 3.0.0.0/8 was General Electric until 2018, then AWS.
+    # A 2016-dated record must resolve to the owner AT THAT TIME; a 2020 one to Amazon;
+    # an UNDATED one to the current table only. ---
+    ("ge_2016",        rec(destination_ip="3.5.140.1", destination_port=443, protocol="TCP",
+                           start_time=datetime(2016, 5, 1)),
+        lambda r: r["family"] == "General Electric" and any("ownership at record time" in e.lower() for e in r["evidence"])),
+    ("aws_2020",       rec(destination_ip="3.5.140.1", destination_port=443, protocol="TCP",
+                           start_time=datetime(2020, 5, 1)),
+        lambda r: r["family"] == "Amazon"),
+    ("aws_undated",    rec(destination_ip="3.5.140.1", destination_port=443, protocol="TCP"),
+        lambda r: r["family"] == "Amazon"),
+    # --- contested /8 splits: 52/8 and 35/8 were double-claimed; now documented blocks ---
+    ("aws_52",         rec(destination_ip="52.10.1.1", destination_port=443, protocol="TCP"),
+        lambda r: r["family"] == "Amazon"),
+    ("ms_o365_52",     rec(destination_ip="52.100.1.1", destination_port=443, protocol="TCP"),
+        lambda r: r["family"] == "Microsoft"),
+    ("gcp_35",         rec(destination_ip="35.190.1.1", destination_port=443, protocol="TCP"),
+        lambda r: r["family"] == "Google"),
+    ("aws_35",         rec(destination_ip="35.170.1.1", destination_port=443, protocol="TCP"),
+        lambda r: r["family"] == "Amazon"),
+    # --- ASN enrichment: content and carrier matches carry ASN / country / type ---
+    ("meta_asn",       rec(destination_ip="157.240.1.1", destination_port=443, protocol="TCP"),
+        lambda r: r.get("asn") == 32934 and r.get("country") == "US" and r.get("ip_type") == "Content Provider"),
+    ("jio_asn",        rec(destination_ip="49.40.1.2", destination_port=443, protocol="TCP"),
+        lambda r: r.get("asn") == 55836 and r.get("ip_type") == "ISP / Residential"),
+    # --- behavioral fingerprints (only run when the record has a duration) ---
+    ("fp_whatsapp_voice", rec(destination_ip="157.240.1.1", destination_port=3478, protocol="UDP",
+                              duration_seconds=400, bytes_uploaded=2_000_000, bytes_downloaded=2_500_000),
+        lambda r: any("Behavioral fingerprint: WhatsApp Voice Call" in e for e in r["evidence"])),
+    # Without a known provider the provider-gated video_streaming profile must NOT fire;
+    # the provider-less bulk-download profile is the honest behavioral read.
+    ("fp_bulk_download",  rec(destination_port=443, protocol="TCP", duration_seconds=1800,
+                              bytes_uploaded=1_000_000, bytes_downloaded=800_000_000),
+        lambda r: r["family"] == "File Transfer" and "behavioral" in r["subtype"]),
+    # Tiny short session must NOT be claimed as a provider-specific app (whatsapp_messaging
+    # is provider-gated); it may read as a generic keepalive, nothing stronger.
+    ("fp_keepalive_not_whatsapp", rec(protocol="TCP", duration_seconds=2,
+                                      bytes_uploaded=100, bytes_downloaded=200),
+        lambda r: "WhatsApp" not in r["service"]),
+    ("fp_vpn_behavior",   rec(destination_ip="45.10.20.30", destination_port=51820, protocol="UDP",
+                              duration_seconds=3600, bytes_uploaded=40_000_000, bytes_downloaded=60_000_000),
+        lambda r: r["category"] == "vpn" and r["subtype"] == "Encrypted tunnel (behavioral)"),
+    ("fp_no_duration_unchanged", rec(destination_port=443, protocol="TCP", bytes_downloaded=800_000_000),
+        lambda r: not any("Behavioral fingerprint" in e for e in r["evidence"])),
 ]
 
 
@@ -118,23 +163,37 @@ class AttributionMetrics(unittest.TestCase):
 
     def test_index_matches_bruteforce_lpm(self):
         """The bucketed longest-prefix index must return exactly what a linear scan
-        over every provider net would, for both hits and misses."""
-        def brute(ip):
+        over every provider net would — hits, misses, and time-scoped ownership."""
+        from datetime import date
+
+        def brute(ip, when=None):
             addr = ipaddress.ip_address(ip)
             best = None
-            for net, provider, is_isp in svc._PROVIDER_NETS:
-                if addr.version == net.version and addr in net and (best is None or net.prefixlen > best[3]):
-                    best = (provider, is_isp, str(net), net.prefixlen)
+            for net, meta in svc._PROVIDER_NETS:
+                if addr.version != net.version or addr not in net:
+                    continue
+                if not svc._entry_applies(meta, when):
+                    continue
+                scoped = meta["valid_from"] is not None or meta["valid_to"] is not None
+                plen = net.prefixlen
+                if (best is None or (scoped, plen) > (best["historical"], best["prefixlen"])):
+                    best = {"provider": meta["provider"], "is_isp": meta["is_isp"],
+                            "cidr": str(net), "prefixlen": plen, "historical": scoped}
             return best
 
         samples = [
             "1.1.1.1", "8.8.8.8", "142.250.1.1", "3.5.140.1", "140.82.112.3",
             "151.101.1.1", "17.0.5.5", "49.32.5.5", "157.240.1.1", "104.16.9.9",
             "203.0.113.7", "198.51.100.5", "192.0.2.1", "100.64.1.1", "10.0.0.1",
-            "223.255.255.1", "11.22.33.44",
+            "223.255.255.1", "11.22.33.44", "52.10.1.1", "52.100.1.1", "35.190.1.1",
+            "35.170.1.1",
         ]
-        for ip in samples:
-            self.assertEqual(svc._match_ip(ip), brute(ip), f"index/brute mismatch for {ip}")
+        keys = ("provider", "is_isp", "cidr", "prefixlen", "historical")
+        for when in (None, date(2016, 5, 1), date(2020, 5, 1)):
+            for ip in samples:
+                got = svc._match_ip(ip, when)
+                got = {k: got[k] for k in keys} if got else None
+                self.assertEqual(got, brute(ip, when), f"index/brute mismatch for {ip} @ {when}")
 
     def test_summary_aggregates_keys_and_bytes(self):
         recs = [

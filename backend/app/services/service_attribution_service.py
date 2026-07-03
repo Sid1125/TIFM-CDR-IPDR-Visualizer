@@ -5,8 +5,10 @@ import ipaddress
 import json
 import os
 from collections import Counter
+from datetime import date, datetime
 
 from app.models.ipdr import IPDRRecord
+from app.services.app_fingerprint_service import extract_features, fingerprint
 
 # --- Shared attribution knowledge base (single source of truth) ---
 # backend/app/data/attribution_data.json is the canonical provider/port/constant data,
@@ -254,30 +256,79 @@ def _human_bytes(b):
 
 
 # --- IP-range / provider attribution (Level 1: infrastructure) ---
-# (provider, is_isp, [CIDR, ...]) sourced from the shared attribution_data.json. `is_isp`
-# entries identify the access network/carrier and never override a real content match.
-# Matching is longest-prefix, so broad blocks defer to more specific ones.
-PROVIDER_RANGES = [
-    (p["pr"], bool(p.get("isp")), p.get("ranges", []))
-    for p in _ATTR.get("providers", [])
-    if p.get("ranges")
-]
+# Sourced from the shared attribution_data.json. `is_isp` entries identify the access
+# network/carrier and never override a real content match. Matching is longest-prefix,
+# so broad blocks defer to more specific ones. Each provider carries ASN metadata
+# (asn / country / type) that flows into attribution results.
+# `range_history` entries are TIME-SCOPED owners: IP blocks change hands (3.0.0.0/8 was
+# General Electric until 2018, then AWS), so a record's TIMESTAMP decides which owner
+# applies — a 2016 session to 3.x.x.x was talking to GE infrastructure, not Amazon.
 
-# Pre-parse CIDRs into network objects once at import.
+
+def _parse_date(value):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _provider_type(p):
+    if p.get("type"):
+        return p["type"]
+    if p.get("isp"):
+        return "ISP / Residential"
+    if p.get("hosting"):
+        return "Hosting / Cloud"
+    return "Content Provider"
+
+
+# Each net entry: (network, meta) where meta carries everything a match should report.
 _PROVIDER_NETS = []
-for _prov, _is_isp, _cidrs in PROVIDER_RANGES:
-    for _cidr in _cidrs:
+for _p in _ATTR.get("providers", []):
+    for _cidr in _p.get("ranges", []) or []:
         try:
-            _PROVIDER_NETS.append((ipaddress.ip_network(_cidr), _prov, _is_isp))
+            _net = ipaddress.ip_network(_cidr)
         except ValueError:
             continue
+        _PROVIDER_NETS.append((_net, {
+            "provider": _p["pr"], "is_isp": bool(_p.get("isp")),
+            "asn": _p.get("asn"), "country": _p.get("country"),
+            "type": _provider_type(_p), "valid_from": None, "valid_to": None,
+            "note": None,
+        }))
+
+# Historical owners: only apply to records timestamped inside their validity window.
+for _h in _ATTR.get("range_history", []):
+    try:
+        _net = ipaddress.ip_network(_h["cidr"])
+    except (ValueError, KeyError):
+        continue
+    _PROVIDER_NETS.append((_net, {
+        "provider": _h["provider"], "is_isp": bool(_h.get("isp")),
+        "asn": _h.get("asn"), "country": _h.get("country"),
+        "type": _h.get("type", "Historical owner"),
+        "valid_from": _parse_date(_h.get("from")), "valid_to": _parse_date(_h.get("to")),
+        "note": _h.get("note"),
+    }))
+
+
+# Curated per-provider network metadata, for backfilling external-feed rows that carry only
+# a name (the live-feed CSV has network/provider/is_isp columns and nothing else). Keyed by
+# the exact provider name, which the feed generator shares with the curated table.
+_PROVIDER_META = {
+    p["pr"]: {"asn": p.get("asn"), "country": p.get("country"), "type": _provider_type(p)}
+    for p in _ATTR.get("providers", [])
+}
 
 
 def _load_external_ranges(path):
     """Optionally extend coverage from an external CSV (e.g. derived from MaxMind
-    GeoLite2-ASN or IPinfo). Columns: network/cidr, provider/org, [is_isp]. Missing
-    file is fine — the curated table is the default. Because matching is
-    longest-prefix, external entries simply add/override by specificity."""
+    GeoLite2-ASN or IPinfo). Columns: network/cidr, provider/org, [is_isp, asn, country,
+    type, valid_from, valid_to]. Missing file is fine — the curated table is the default.
+    Because matching is longest-prefix, external entries simply add/override by
+    specificity; valid_from/valid_to make an entry time-scoped (historical ownership)."""
     nets = []
     if not path or not os.path.isfile(path):
         return nets
@@ -290,9 +341,20 @@ def _load_external_ranges(path):
                     continue
                 is_isp = str(row.get("is_isp", "")).strip().lower() in ("1", "true", "yes", "isp")
                 try:
-                    nets.append((ipaddress.ip_network(cidr), provider, is_isp))
+                    net = ipaddress.ip_network(cidr)
                 except ValueError:
                     continue
+                asn_raw = (row.get("asn") or "").strip().lstrip("ASas")
+                curated = _PROVIDER_META.get(provider, {})
+                nets.append((net, {
+                    "provider": provider, "is_isp": is_isp,
+                    "asn": (int(asn_raw) if asn_raw.isdigit() else None) or curated.get("asn"),
+                    "country": (row.get("country") or "").strip() or curated.get("country"),
+                    "type": (row.get("type") or "").strip() or curated.get("type"),
+                    "valid_from": _parse_date(row.get("valid_from")),
+                    "valid_to": _parse_date(row.get("valid_to")),
+                    "note": None,
+                }))
     except OSError:
         return []
     return nets
@@ -315,18 +377,18 @@ _PROVIDER_NETS = _load_external_ranges(_EXTERNAL_RANGES_PATH) + _PROVIDER_NETS
 # so a query only checks its own bucket plus the rare <\8 "broad" nets. Each entry is
 # precomputed integer (lo, hi) bounds so matching is integer comparison, not object
 # containment. This turns ~2000 checks/IP into a few dozen.
-_V4_BUCKETS: dict = {}   # first octet -> [(lo, hi, prefixlen, provider, is_isp, cidr)]
+_V4_BUCKETS: dict = {}   # first octet -> [(lo, hi, prefixlen, meta)]
 _V4_BROAD: list = []     # IPv4 nets with prefixlen < 8 (span multiple /8s)
 _V6_NETS: list = []      # IPv6 (rare here) -> linear fallback
 
 
 def _index_provider_nets(nets):
-    for net, provider, is_isp in nets:
+    for net, meta in nets:
         if net.version == 6:
-            _V6_NETS.append((net, provider, is_isp))
+            _V6_NETS.append((net, meta))
             continue
-        entry = (int(net.network_address), int(net.broadcast_address),
-                 net.prefixlen, provider, is_isp, str(net))
+        entry = (int(net.network_address), int(net.broadcast_address), net.prefixlen,
+                 dict(meta, cidr=str(net)))
         if net.prefixlen < 8:
             _V4_BROAD.append(entry)
         else:
@@ -336,33 +398,73 @@ def _index_provider_nets(nets):
 _index_provider_nets(_PROVIDER_NETS)
 
 
-def _match_ip(ip):
-    """Longest-prefix match: among all CIDRs containing the address, return the most
-    specific one (largest prefix length), so a tight block beats a broad one."""
+def _entry_applies(meta, when):
+    """Validity-window check. `when` is the record's date (or None for undated queries).
+    A time-scoped entry (historical owner) only applies when the record is dated inside
+    its window; the CURRENT table (no window) always applies. An undated record resolves
+    against current ownership only — never a window that has already closed."""
+    vf, vt = meta["valid_from"], meta["valid_to"]
+    if vf is None and vt is None:
+        return True
+    if when is None:
+        return False
+    if vf is not None and when < vf:
+        return False
+    if vt is not None and when >= vt:
+        return False
+    return True
+
+
+def _better(candidate_plen, candidate_scoped, best):
+    """A TIME-SCOPED (historical) entry that applies to the query date beats ANY
+    open-ended current-table entry, regardless of prefix length: the current table
+    answers "who owns this today", and today's more-specific sub-allocations simply did
+    not exist when the block still belonged to the historical owner. Within the same
+    class (both scoped, or both current), longest prefix wins as usual."""
+    if best is None:
+        return True
+    if candidate_scoped != best["scoped"]:
+        return candidate_scoped
+    return candidate_plen > best["prefixlen"]
+
+
+def _match_ip(ip, when=None):
+    """Longest-prefix match with time-aware ownership: among all CIDRs containing the
+    address AND valid at `when` (a date/datetime; None = today's table), return the most
+    specific. Result dict: provider, is_isp, cidr, prefixlen, asn, country, type,
+    historical, note."""
     if not ip:
         return None
     try:
         addr = ipaddress.ip_address(str(ip).strip())
     except (ValueError, AttributeError):
         return None
+    if isinstance(when, datetime):
+        when = when.date()
 
+    def _result(meta, plen, scoped):
+        return {"provider": meta["provider"], "is_isp": meta["is_isp"], "cidr": meta["cidr"],
+                "prefixlen": plen, "asn": meta["asn"], "country": meta["country"],
+                "type": meta["type"], "historical": scoped, "note": meta["note"],
+                "scoped": scoped}
+
+    best = None
     if addr.version == 6:
-        best = None
-        for net, provider, is_isp in _V6_NETS:
-            if addr in net and (best is None or net.prefixlen > best[3]):
-                best = (provider, is_isp, str(net), net.prefixlen)
+        for net, meta in _V6_NETS:
+            if addr in net and _entry_applies(meta, when):
+                scoped = meta["valid_from"] is not None or meta["valid_to"] is not None
+                if _better(net.prefixlen, scoped, best):
+                    best = _result(dict(meta, cidr=str(net)), net.prefixlen, scoped)
         return best
 
     ip_int = int(addr)
-    best = None  # (provider, is_isp, cidr, prefixlen)
-    bucket = _V4_BUCKETS.get(ip_int >> 24)
-    if bucket:
-        for lo, hi, plen, provider, is_isp, cidr in bucket:
-            if lo <= ip_int <= hi and (best is None or plen > best[3]):
-                best = (provider, is_isp, cidr, plen)
-    for lo, hi, plen, provider, is_isp, cidr in _V4_BROAD:
-        if lo <= ip_int <= hi and (best is None or plen > best[3]):
-            best = (provider, is_isp, cidr, plen)
+    bucket = _V4_BUCKETS.get(ip_int >> 24, ())
+    for source in (bucket, _V4_BROAD):
+        for lo, hi, plen, meta in source:
+            if lo <= ip_int <= hi and _entry_applies(meta, when):
+                scoped = meta["valid_from"] is not None or meta["valid_to"] is not None
+                if _better(plen, scoped, best):
+                    best = _result(meta, plen, scoped)
     return best
 
 
@@ -383,18 +485,26 @@ def _ip_kind(ip):
     return None
 
 
+def _record_when(record):
+    """The record's own timestamp, for time-aware ownership resolution."""
+    return getattr(record, "start_time", None) or getattr(record, "end_time", None)
+
+
 def _classify_by_ip(record: IPDRRecord):
     """Resolve the provider for the SERVICE the subject contacted — which is the
     DESTINATION. The source IP is the subject's own endpoint (carrier/CGNAT, or for a
     server-side record the host itself); using it to name the contacted service would
     mislabel any session merely *originating* from an AWS/Meta IP as that service.
     The source is therefore only consulted to identify the subject's access network
-    (ISP) when the destination matches nothing — never as a content-provider label."""
-    dest = _match_ip(getattr(record, "destination_ip", None))
+    (ISP) when the destination matches nothing — never as a content-provider label.
+    Ownership is resolved AT THE RECORD'S TIMESTAMP: IP blocks change hands, so an old
+    record resolves against the owner at that time, not today's WHOIS."""
+    when = _record_when(record)
+    dest = _match_ip(getattr(record, "destination_ip", None), when)
     if dest:
         return dest
-    src = _match_ip(getattr(record, "source_ip", None))
-    if src and src[1]:  # source identifies the subject's carrier (ISP) only
+    src = _match_ip(getattr(record, "source_ip", None), when)
+    if src and src["is_isp"]:  # source identifies the subject's carrier (ISP) only
         return src
     return None
 
@@ -407,8 +517,38 @@ def _category_for(family):
     return "service"
 
 
-def _merge_provider(provider, raw, prefixlen, port_result):
+def _asn_evidence(match):
+    """One evidence line summarising the network owner: ASN, classification, country."""
+    bits = []
+    if match.get("asn"):
+        bits.append(f"AS{match['asn']}")
+    if match.get("type"):
+        bits.append(match["type"])
+    if match.get("country"):
+        bits.append(match["country"])
+    return " · ".join(bits) if bits else None
+
+
+def _enrich(result, match):
+    """Attach network-owner metadata (ASN / country / type) and, for a historical match,
+    the ownership-at-record-time note, to any attribution result built from an IP match."""
+    result["asn"] = match.get("asn")
+    result["country"] = match.get("country")
+    result["ip_type"] = match.get("type")
+    asn_line = _asn_evidence(match)
+    if asn_line and asn_line not in result["evidence"]:
+        result["evidence"].append(asn_line)
+    if match.get("historical"):
+        note = f"IP ownership at record time: {match['provider']}"
+        if match.get("note"):
+            note += f" — {match['note']}"
+        result["evidence"].append(note)
+    return result
+
+
+def _merge_provider(match, port_result):
     # An IP-range (infrastructure) match is a strong signal; scale confidence with CIDR specificity.
+    provider, raw, prefixlen = match["provider"], match["cidr"], match["prefixlen"]
     confidence = 90 if prefixlen >= 20 else 85 if prefixlen >= 16 else 78
     subtype = port_result["subtype"] if port_result["service"] != "Unknown" else "Network session"
     hosting = provider in _HOSTING_PROVIDERS
@@ -422,7 +562,7 @@ def _merge_provider(provider, raw, prefixlen, port_result):
             evidence.append(item)
         if len(evidence) >= 5:
             break
-    return {
+    return _enrich({
         "service": f"Likely {provider}",
         "subtype": subtype,
         "confidence": confidence,
@@ -430,7 +570,7 @@ def _merge_provider(provider, raw, prefixlen, port_result):
         "port": port_result.get("port"),
         "category": "hosting" if hosting else "content",
         "evidence": evidence,
-    }
+    }, match)
 
 
 _PRIVATE_LABEL = {
@@ -441,8 +581,9 @@ _PRIVATE_LABEL = {
 }
 
 
-def _access_network_result(provider, raw, protocol):
-    return {
+def _access_network_result(match, protocol):
+    provider, raw = match["provider"], match["cidr"]
+    return _enrich({
         "service": f"{provider} (Access Network)",
         "subtype": "Carrier / ISP traffic",
         "confidence": 30,
@@ -451,7 +592,7 @@ def _access_network_result(provider, raw, protocol):
         "category": "access_network",
         "evidence": [f"{provider} access network ({raw})",
                      f"Protocol {protocol}" if protocol else "Protocol unknown"],
-    }
+    }, match)
 
 
 def _private_result(kind, port_result, protocol):
@@ -474,6 +615,37 @@ def _private_result(kind, port_result, protocol):
     }
 
 
+def _fingerprint_refine(record, result, provider):
+    """Overlay the behavioral fingerprint (protocol + duration + volume + ratio + ports +
+    provider) on a port/IP-derived classification. Only runs when the record actually has
+    a duration — behavior without time is meaningless, and undated fixtures/records keep
+    their exact pre-fingerprint output. Conservative by design:
+      - same family: refine the subtype to the behavioral one and nudge confidence (+4);
+      - result was generic/unknown and the fingerprint is strong (>=80): adopt the app;
+      - otherwise: evidence only (the analyst sees the behavioral read either way)."""
+    features = extract_features(record)
+    if not features.get("dur"):
+        return result
+    matches = fingerprint(features, provider)
+    if not matches or matches[0]["score"] < 70:
+        return result
+    top = matches[0]
+    result = dict(result)
+    result["evidence"] = list(result["evidence"])
+    result["evidence"].append(f"Behavioral fingerprint: {top['app']} ({top['score']}% — {', '.join(top['matched'])})")
+    if top["family"] == result.get("family"):
+        result["subtype"] = top["subtype"]
+        result["confidence"] = min(96, result["confidence"] + 4)
+    elif top["score"] >= 80 and (result.get("category") == "unknown"
+                                 or result.get("family") in _GENERIC_PORT_FAMILIES):
+        result["service"] = f"Likely {top['app']}"
+        result["subtype"] = top["subtype"]
+        result["family"] = top["family"]
+        result["category"] = top["category"]
+        result["confidence"] = max(result["confidence"], min(88, top["score"]))
+    return result
+
+
 def attribute_service(record: IPDRRecord):
     protocol = (record.protocol or "").upper()
     bytes_transferred = _record_bytes(record)
@@ -488,21 +660,20 @@ def attribute_service(record: IPDRRecord):
     ip_result = _classify_by_ip(record)
 
     if ip_result:
-        provider, is_isp, raw, prefixlen = ip_result
-        if not is_isp:
+        if not ip_result["is_isp"]:
             # Content-provider IP match is the strongest signal — it names the actual service.
-            return _merge_provider(provider, raw, prefixlen, port_result)
+            return _fingerprint_refine(record, _merge_provider(ip_result, port_result), ip_result["provider"])
         # Access network/ISP: keep a *specific* port-mapped service (DNS, mail, VPN, ...) and
         # annotate the carrier; but a generic web / behavioural guess shouldn't outrank the
         # one thing we actually know — the carrier — so fall back to the access-network label.
         specific_port = port_result.get("port") is not None and port_result.get("family") not in _GENERIC_PORT_FAMILIES
         if specific_port:
             annotated = dict(port_result)
-            annotated["evidence"] = list(port_result["evidence"]) + [f"{provider} access network ({raw})"]
-            return annotated
-        return _access_network_result(provider, raw, protocol)
+            annotated["evidence"] = list(port_result["evidence"]) + [f"{ip_result['provider']} access network ({ip_result['cidr']})"]
+            return _fingerprint_refine(record, _enrich(annotated, ip_result), None)
+        return _access_network_result(ip_result, protocol)
 
-    return port_result
+    return _fingerprint_refine(record, port_result, None)
 
 
 def _classify_by_port(record: IPDRRecord, protocol: str, bytes_transferred: int):
