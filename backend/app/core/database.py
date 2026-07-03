@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base
@@ -14,23 +14,44 @@ from app.core.config import settings
 _DEFAULT_SQLITE_URL = "sqlite:///./cdrdb.sqlite3"
 database_url = settings.DATABASE_URL
 url = make_url(database_url)
-engine_kwargs = {"pool_pre_ping": True}
-
-if url.get_backend_name() == "sqlite":
-    engine_kwargs["connect_args"] = {"check_same_thread": False}
 
 
 def _create_engine(url_string: str):
     parsed = make_url(url_string)
     kwargs: dict = {"pool_pre_ping": True}
     if parsed.get_backend_name() == "sqlite":
-        kwargs["connect_args"] = {"check_same_thread": False}
+        # timeout: how long the DBAPI itself waits for a lock before raising — a defense-in-depth
+        # backstop for the very first connection (before the PRAGMA below has run). check_same_thread
+        # is off because a Session's connection can be used from whichever threadpool worker FastAPI
+        # hands the request to, not necessarily the thread that opened it.
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
     else:
         kwargs["pool_size"] = 10
         kwargs["max_overflow"] = 20
         kwargs["pool_timeout"] = 30
         kwargs["pool_recycle"] = 1800
-    return create_engine(url_string, **kwargs)
+    new_engine = create_engine(url_string, **kwargs)
+    if new_engine.url.get_backend_name() == "sqlite":
+        _enable_wal(new_engine)
+    return new_engine
+
+
+def _enable_wal(sqlite_engine) -> None:
+    """Every uvicorn request can land on a different threadpool worker, each opening its own
+    SQLite connection — with the default rollback-journal mode, one thread's write transaction
+    (e.g. an upload's analytics-cache invalidation) blocks every other connection's writes, and
+    without a busy timeout SQLite raises "database is locked" immediately instead of waiting.
+    WAL lets readers proceed without blocking on a writer at all (the single-writer-at-a-time
+    limitation SQLite always has stays, but contention drops sharply), and busy_timeout makes any
+    remaining writer/writer collision a brief wait instead of a hard failure. Set once per new
+    DBAPI connection, so it survives connection-pool recycling."""
+    @event.listens_for(sqlite_engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, _record):  # noqa: ANN001
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
 
 
 def app_data_dir() -> Path:
