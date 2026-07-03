@@ -70,6 +70,19 @@ FIXTURES = [
     # --- regression: ephemeral source port must not masquerade as Teams/Discord ---
     ("ephemeral_src",  rec(source_port=50005, destination_ip="45.10.20.30", destination_port=443, protocol="TCP"),
         lambda r: "Teams" not in r["service"] and "Discord" not in r["service"]),
+    # --- regression: duplicate dict-literal keys 27018/27019 used to resolve to Gaming,
+    # silently killing the MongoDB entries (same class as the fixed 27017) ---
+    ("mongodb_27018",  rec(destination_port=27018, protocol="TCP"),
+        lambda r: r["family"] == "Database"),
+    ("mongodb_27019",  rec(destination_port=27019, protocol="TCP"),
+        lambda r: r["family"] == "Database"),
+    # --- policy: a content-provider SOURCE IP must never name the contacted service
+    # (the source is the subject's own endpoint; only the destination names the service) ---
+    ("src_not_service", rec(source_ip="157.240.1.1", destination_ip="45.10.20.30", destination_port=8333, protocol="TCP"),
+        lambda r: r["family"] != "Meta"),
+    # --- QUIC: UDP on the TLS port is HTTP/3, labelled as encrypted web with QUIC evidence ---
+    ("quic_udp_443",   rec(destination_port=443, protocol="UDP"),
+        lambda r: r["family"] == "Encrypted Web/App" and any("QUIC" in e for e in r["evidence"])),
 ]
 
 

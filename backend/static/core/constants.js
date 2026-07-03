@@ -40,6 +40,12 @@ export const PORT_FAMILY=ATTR_DATA.port_families;
 // Idle gap (seconds) that ends a session, tuned per activity: chatty/streaming flows tolerate
 // long pauses; lookups/browsing are bursty.
 export const FAMILY_GAP=ATTR_DATA.family_gaps;
+// Full shared port-classification table (250 ports) + range bands, same data the backend engine
+// uses: port -> [label, confidence, reason, service_family, default_subtype].
+export const PORT_MAP=ATTR_DATA.port_map||{};
+export const PORT_RANGES=ATTR_DATA.port_ranges||[];
+// Families that carry no real service detail (generic web) — they never outrank a carrier match.
+export const GENERIC_FAMILIES=new Set(ATTR_DATA.constants.generic_families||['Web','Encrypted Web/App']);
 
 // -- Service -> brand color --
 // Shared by maps, profile, correlation, services (8 code callers), so it lives here, not in maps/.

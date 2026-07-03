@@ -4,7 +4,7 @@
 // app.js (bottom-up modularization). The session engine (classifySession/reconstructSessions) stays
 // in app.js for now and imports these helpers downward. No behavior change.
 
-import { ISP_PROVIDERS, KNOWN_IP_HINTS, IP_RANGES, SERVICE_DB, EPHEMERAL_MIN, PRIVATE_LABEL, PORT_SVC, HOSTING_PROVIDERS, DISTINCTIVE_INDICATORS } from '../core/constants.js';
+import { ISP_PROVIDERS, KNOWN_IP_HINTS, IP_RANGES, SERVICE_DB, EPHEMERAL_MIN, PRIVATE_LABEL, PORT_SVC, PORT_MAP, PORT_RANGES, GENERIC_FAMILIES, HOSTING_PROVIDERS, DISTINCTIVE_INDICATORS } from '../core/constants.js';
 import { fmtBytes } from '../core/utils.js';
 
 function isIspProvider(name){return ISP_PROVIDERS.has(name)}
@@ -55,7 +55,7 @@ function trafficPattern(dur,up,dwn,protocol,portSet,recCount,hour){
   // Cloud Sync: moderate data, TCP, persistent, bidirectional
   else if(isTCP&&dur>60&&totalBytes>100000&&symmetric&&!hasVoipPort){
     category='Cloud Sync';activity='Sync / Backup';confDelta=8;
-    evidence.push('Bidirectional sync: '+fmtBytes(up)+' — '+fmtBytes(dwn)+' ?');
+    evidence.push('Bidirectional sync: '+fmtBytes(up)+' up ↔ '+fmtBytes(dwn)+' down');
     if(dur>=600){confDelta+=5;evidence.push('Extended sync session ('+dur+'s)')}
   }
   // Screen Sharing: UDP, sustained, moderate data, screen-share ports
@@ -127,9 +127,9 @@ function trafficPattern(dur,up,dwn,protocol,portSet,recCount,hour){
   return{category,activity,confDelta,evidence};
 }
 // -- Multi-level service attribution engine --
-// Level 1: Infrastructure (provider IP) ? 95-99%
-// Level 2: Session behavioral fingerprint ? +5-25%
-// Level 3: Port + Protocol match ? +10-30%
+// Level 1: Infrastructure (provider IP) → 95-99%
+// Level 2: Session behavioral fingerprint → +5-25%
+// Level 3: Port + Protocol match → +10-30%
 // Level 4: Activity taxonomy
 // Output: {provider, tier, primary:{service,activity}, confidence, evidence[], candidates[]}
 function scoreProvider(servs,ports,proto,dur,dir,bytesUp,bytesDn,recCount,provName){
@@ -227,10 +227,13 @@ function matchService(rec){
     const portName=dp&&PORT_SVC[dp]?' ('+PORT_SVC[dp]+')':'';
     return{provider:'',tier:1,primary:{service:label,activity:'Internal'},serviceLabel:label,activityLabel:'Internal / non-routable',serviceConfidence:70,category:'internal',candidates:[],evidence:[label+' destination IP'+portName].concat(proto?[proto+' protocol']:[])};
   }
-  // Prefer a content-provider match (a real service) over an access-network/ISP match,
-  // checking the counterpart IP before the subject's own (often carrier) IP.
+  // The COUNTERPART (destination) is what names the contacted service. The subject's own IP is
+  // their endpoint (carrier CGNAT, or a hosting box for server-side records) — consulting it as a
+  // content label would tag any session merely ORIGINATING from an AWS/Meta IP as that service.
+  // It is therefore only used to identify the access network (ISP) when the counterpart matches
+  // nothing — mirroring the backend engine's _classify_by_ip policy.
   const cntM=ipInRange(rec.cnt,IP_RANGES),subM=ipInRange(rec.sub,IP_RANGES);
-  const ipRes=(cntM&&!cntM.isp?cntM:null)||(subM&&!subM.isp?subM:null)||cntM||subM;
+  const ipRes=cntM||(subM&&subM.isp?subM:null);
   const provName=ipRes?ipRes.provider:null;
   const evidence=[];
   // An ISP-only match identifies the carrier; fall through to port classification and only
@@ -240,7 +243,7 @@ function matchService(rec){
   // Phase 1: known content provider from IP (Level 1 — Infrastructure)
   if(provName&&!ispCarrier){
     evidence.push(provName+' IP range ('+ipRes.raw+')');
-    const hint=ipHint(rec.cnt)||ipHint(rec.sub);
+    const hint=ipHint(rec.cnt);  // counterpart only — a hint on the subject's own IP is not the contacted service
     if(hint){
       evidence.push(hint.provider+' '+hint.service+' ('+hint.activity+')');
       return{provider:hint.provider,providerConfidence:96,tier:1,primary:{service:hint.service,activity:hint.activity},serviceLabel:hint.service,activityLabel:hint.activity,serviceConfidence:95,candidates:[],evidence};
@@ -266,17 +269,28 @@ function matchService(rec){
   }
   // Phase 2: no provider — fallback to port-based classification
   const genericPorts=[80,443,8080,8443,9443,10443];
-  if(ports.size===0||[...ports].every(p=>genericPorts.includes(p)))return ispCarrier?accessNet():{provider:'',tier:4,primary:{service:'Unknown',activity:'Encrypted Traffic'},serviceLabel:'Unknown',activityLabel:'Encrypted Traffic',serviceConfidence:5,candidates:[],evidence:['No matching provider IP — generic HTTPS/encrypted']};
-  // Generic port-to-service mapping (covers common IANA ports not in provider DB)
-  const GENERIC_SVC={25:'SMTP Mail',53:'DNS',110:'POP3 Mail',123:'NTP',135:'RPC',137:'NetBIOS',138:'NetBIOS',139:'NetBIOS',143:'IMAP Mail',161:'SNMP',162:'SNMP-Trap',389:'LDAP',445:'SMB',465:'SMTPS Mail',514:'Syslog',587:'SMTP-Sub Mail',636:'LDAPS',853:'DNS-over-TLS',993:'IMAPS Mail',995:'POP3S Mail',1433:'MSSQL',1521:'Oracle DB',2049:'NFS',3306:'MySQL',3389:'RDP',5432:'PostgreSQL',6379:'Redis',8080:'HTTP-Alt',8443:'HTTPS-Alt',9090:'WebUI',27017:'MongoDB'};
-  const matchedPort=[...ports].find(p=>GENERIC_SVC[p]);
-  if(matchedPort){
-    const svcLabel=GENERIC_SVC[matchedPort];
-    let conf=60;
-    if((proto==='TCP'&&[25,110,143,465,587,853,993,995,1433,3306,5432,3389,6379,27017].includes(matchedPort))||(proto==='UDP'&&[53,123,137,138,161,162,514,636].includes(matchedPort)))conf=76;
-    evidence.push('Port '+matchedPort+' ('+svcLabel+')'+(proto?' — '+proto+' protocol':''));
+  // UDP on a TLS port is QUIC (HTTP/3) — real signal, so let it reach the port table below.
+  const isQuic=proto==='UDP'&&[...ports].some(p=>p===443||p===8443);
+  if(!isQuic&&(ports.size===0||[...ports].every(p=>genericPorts.includes(p))))return ispCarrier?accessNet():{provider:'',tier:4,primary:{service:'Unknown',activity:'Encrypted Traffic'},serviceLabel:'Unknown',activityLabel:'Encrypted Traffic',serviceConfidence:5,candidates:[],evidence:['No matching provider IP — generic HTTPS/encrypted']};
+  // Shared port-classification table — the SAME ~250-port PORT_MAP + range bands the backend
+  // engine uses (attribution_data.json "port_map"/"port_ranges"): port -> [label, confidence,
+  // reason, family, subtype]. Best match = highest confidence; tie-break toward the lower
+  // (more well-known) port. Replaces the old ~30-entry GENERIC_SVC subset.
+  const _portRule=p=>{const m=PORT_MAP[p];if(m)return m;const b=PORT_RANGES.find(r=>p>=r[0]&&p<=r[1]);return b?b.slice(2):null};
+  let pmPort=null,pmRule=null;
+  for(const p of ports){
+    const m=_portRule(p);
+    if(m&&(!pmRule||m[1]>pmRule[1]||(m[1]===pmRule[1]&&p<pmPort))){pmPort=p;pmRule=m;}
+  }
+  if(pmRule){
+    const label=pmRule[0],reason=pmRule[2],family=pmRule[3];let conf=pmRule[1],subtype=pmRule[4];
+    // A generic web family carries no real service detail — the carrier is the one thing we know.
+    if(ispCarrier&&GENERIC_FAMILIES.has(family))return accessNet();
+    if(proto==='UDP'&&(pmPort===443||pmPort===8443)){conf=Math.min(96,conf+2);subtype='QUIC (HTTP/3) session';evidence.push('QUIC (HTTP/3): UDP on TLS port')}
+    evidence.unshift('Port '+pmPort+' — '+reason+(proto?' ('+proto+')':''));
     if(ispCarrier)evidence.push(ispCarrier+' access network ('+ipRes.raw+')');
-    return{provider:ispCarrier||'',tier:4,primary:{service:svcLabel,activity:'Data Transfer'},serviceLabel:'Likely '+svcLabel,activityLabel:'Data Session',serviceConfidence:conf,candidates:[],evidence};
+    const category=family==='VPN / Tunnel'?'vpn':family==='Proxy / Tor'?'anonymization':'service';
+    return{provider:ispCarrier||'',tier:4,primary:{service:family,activity:subtype},serviceLabel:label,activityLabel:subtype,serviceConfidence:conf,category,candidates:[],evidence};
   }
   // Try known provider DB for less common ports
   const fallbackCandidates=[];
