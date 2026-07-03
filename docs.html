@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — ARGUS</title>
+  <meta name="description" content="ARGUS documentation: architecture, API reference, the service attribution engine, security model, deployment, and development guide.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" href="backend/static/logo-mark.png">
+</head>
+<body>
+  <div id="scroll-progress"></div>
+
+  <nav id="navbar">
+    <div class="nav-inner">
+      <a href="index.html" class="logo">ARGUS</a>
+      <ul class="nav-links">
+        <li><a href="index.html#how">How it works</a></li>
+        <li><a href="index.html#features">Features</a></li>
+        <li><a href="docs.html" class="active">Docs</a></li>
+        <li><a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank">GitHub</a></li>
+      </ul>
+      <button id="menu-toggle" aria-label="Menu">Menu</button>
+    </div>
+  </nav>
+
+  <header class="docs-header">
+    <div class="docs-header-inner">
+      <span class="docs-kicker">Documentation</span>
+      <h1>Everything under the hood</h1>
+      <p>Architecture, API reference, the service attribution engine, the security model, and how to build or deploy ARGUS — all in one place.</p>
+      <div class="docs-header-links">
+        <a href="#quickstart" class="btn btn-navy">Quick Start</a>
+        <a href="#api" class="btn btn-ghost">API Reference</a>
+        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank" class="btn btn-ghost">Source on GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-shell">
+    <aside class="docs-sidebar">
+      <nav class="docs-nav" id="docsNav">
+        <div class="docs-nav-group">
+          <span class="docs-nav-label">Getting Started</span>
+          <a href="#overview">Overview</a>
+          <a href="#quickstart">Quick Start</a>
+          <a href="#case-model">Case Model</a>
+        </div>
+        <div class="docs-nav-group">
+          <span class="docs-nav-label">Core Concepts</span>
+          <a href="#architecture">Architecture</a>
+          <a href="#features">Feature Areas</a>
+          <a href="#attribution">Service Attribution</a>
+        </div>
+        <div class="docs-nav-group">
+          <span class="docs-nav-label">Reference</span>
+          <a href="#api">API Reference</a>
+          <a href="#security">Security &amp; Sessions</a>
+        </div>
+        <div class="docs-nav-group">
+          <span class="docs-nav-label">Operations</span>
+          <a href="#deployment">Deployment</a>
+          <a href="#scale">Scale &amp; Performance</a>
+        </div>
+        <div class="docs-nav-group">
+          <span class="docs-nav-label">Contributing</span>
+          <a href="#development">Development Guide</a>
+          <a href="#faq">FAQ</a>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+
+      <section id="overview" class="doc-section">
+        <h2>Overview</h2>
+        <p>ARGUS (Advanced Records &amp; Geospatial Unified Surveillance) is a full-stack telecom forensics platform for law enforcement investigators. It ingests CDR (Call Detail Records) and IPDR (IP Data Records), reconstructs communication sessions and movement, and surfaces investigative leads through a spatiotemporal inference engine and an optional local AI assistant.</p>
+        <p>The system is designed for <strong>air-gapped deployment</strong>: it runs entirely offline, ships as a self-contained Windows installer, and stores every case in a local PostgreSQL (or SQLite fallback) database. No data ever leaves the machine unless the operator exports it.</p>
+        <div class="doc-grid-3">
+          <div class="doc-mini-card">
+            <strong>Backend</strong>
+            <span>Python 3 · FastAPI · 26 routers · 24 services · 15 SQLAlchemy models</span>
+          </div>
+          <div class="doc-mini-card">
+            <strong>Frontend</strong>
+            <span>47 native ES modules, no build toolchain — loads directly in the browser</span>
+          </div>
+          <div class="doc-mini-card">
+            <strong>Testing</strong>
+            <span>242 backend tests across 32 suites, unittest-based</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="quickstart" class="doc-section">
+        <h2>Quick Start</h2>
+
+        <h3>Windows installer (recommended for investigators)</h3>
+        <p>Download the ARGUS installer from the <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank">GitHub releases</a> page and run it. The installer bundles the Python runtime, all dependencies, and the frontend — no separate Python install, no internet connection required. On first launch, ARGUS opens in your default browser at <code>http://localhost:8000</code>.</p>
+        <div class="doc-callout doc-callout-warn">
+          <strong>First login</strong> — the app bootstraps a default admin account from environment variables on first start. Change the password immediately from the Admin tab.
+        </div>
+
+        <h3>Development setup</h3>
+        <pre><code>cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1        # Windows
+# source .venv/bin/activate       # Linux/macOS
+
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000</code></pre>
+        <p>Then open <code>http://localhost:8000</code>. SQLite is used automatically if no <code>DATABASE_URL</code> is configured — no database setup needed for local development.</p>
+
+        <h3>Generate sample data</h3>
+        <pre><code>cd backend
+python scripts/generate_sample_data.py</code></pre>
+        <p>Produces deterministic (seeded) sample CSVs — 60 towers, 1,200 CDR and 1,800 IPDR records across 10 Indian cities — in <code>backend/sample_data/</code>, ready to upload.</p>
+      </section>
+
+      <section id="case-model" class="doc-section">
+        <h2>Case Model</h2>
+        <p>Every CDR and IPDR record belongs to a <strong>case</strong>. Investigators create, switch between, and reset cases independently; uploading data always targets the currently active case. Two things are deliberately <strong>global</strong>, not case-scoped:</p>
+        <ul>
+          <li><strong>Tower repository</strong> — auto-harvested from every upload across every case, so tower coordinates learned in one case benefit all others. Upserts never clobber existing coordinates.</li>
+          <li><strong>Subject intel tags &amp; suspect groups</strong> — a free-text tag or watchlist entry on a phone number/IP follows that identifier into every case it appears in, so outside intelligence on a reoffender travels with them.</li>
+        </ul>
+        <p>Cross-case linking (see <a href="index.html#features">Features</a>) is how the system surfaces when a subject from the current case has also appeared elsewhere — matched by number, IMEI, IMSI, or (low-confidence) IP.</p>
+      </section>
+
+      <section id="architecture" class="doc-section">
+        <h2>Architecture</h2>
+        <p>Three layers, each replaceable independently:</p>
+        <div class="doc-arch-diagram">
+          <div class="doc-arch-row"><span class="doc-arch-num">01</span><div><strong>Data Layer</strong><p>PostgreSQL primary with automatic SQLite fallback. SQLAlchemy ORM across 15 models. Optional Redis cache tier and Celery workers for background jobs. Trigram/FTS5-accelerated search, opt-in table partitioning for very large cases.</p></div></div>
+          <div class="doc-arch-row"><span class="doc-arch-num">02</span><div><strong>Analysis Layer</strong><p>FastAPI application: 26 routers under <code>backend/app/api/</code>, 24 services under <code>backend/app/services/</code> holding all business logic. Pandas for ingestion/aggregation, NetworkX for graph analytics. An in-process event bus decouples uploads from analytics materialisation — a case-import event triggers an async re-materialise job rather than blocking the upload response.</p></div></div>
+          <div class="doc-arch-row"><span class="doc-arch-num">03</span><div><strong>Intelligence Layer</strong><p>The spatiotemporal inference engine (movement, co-presence, behavioural, identity, VPN signals) runs as pure functions over record iterables — unit-testable without a database. A fine-tuned local LLM (via Ollama, optional) powers the AI Insights tab; no data leaves the machine.</p></div></div>
+        </div>
+
+        <h3>Request flow</h3>
+        <pre><code>Browser (ES modules)
+   |  fetch() -> REST/JSON, credentials:'include'
+   v
+FastAPI router  ->  auth dependency (session cookie)
+   |
+   v
+Service layer  ->  business logic, query building
+   |
+   v
+SQLAlchemy ORM  ->  PostgreSQL / SQLite
+</code></pre>
+
+        <h3>Frontend module layout</h3>
+        <p>The frontend was refactored from a single 7,300-line script into 47 native ES modules with no bundler — the browser loads <code>&lt;script type="module" src="/static/app.js"&gt;</code> and the module graph resolves relative imports directly:</p>
+        <pre><code>backend/static/
+├── app.js              # bootstrap + data loading + tab registration
+├── core/                # state, dom, api, router, events, auth, utils, constants
+├── services/            # cache, sessions, meetings, identity, inference, attribution, export
+├── data/                # records, workers, subjects_intel
+├── analytics/           # ai, inferences, investigation, correlation, services, crosscase, dossier, reports
+├── records/, dashboard/, graph/, maps/, timeline/, story/, towers/, charts/
+└── ui/, workspace/, reference/, upload/</code></pre>
+        <p>State lives in one shared <code>core/state.js</code> store, grouped by domain (<code>state.data</code>, <code>state.ui</code>, <code>state.map</code>, …). A central event-delegation registry (<code>core/events.js</code>) replaces inline <code>onclick=</code> handlers with <code>data-act</code> attributes.</p>
+      </section>
+
+      <section id="features" class="doc-section">
+        <h2>Feature Areas</h2>
+        <p>Twenty-two functional areas, grouped by workflow stage. Full descriptions live on the <a href="index.html#features">landing page</a> — this is the reference index.</p>
+        <div class="doc-feature-table">
+          <div><strong>Ingestion</strong><span>CDR/IPDR/tower/tower-dump/SDR upload · operator column mapping · validation reports · permanent tower repository · offline reverse-geocoding</span></div>
+          <div><strong>Dashboard</strong><span>KPI summary · data quality score · period comparison · cross-case hits panel · mini network graph</span></div>
+          <div><strong>Network Graph</strong><span>Server-bounded D3 force graph · canvas renderer at scale · CDR/IPDR separation · centrality &amp; community detection</span></div>
+          <div><strong>Tower Map</strong><span>6 modes — movement path, heatmap, zones, meetings/co-location, triangulation, inference overlays · geofencing</span></div>
+          <div><strong>Timeline &amp; Sessions</strong><span>Entity timeline with Gantt session bars · session reconstruction engine · two-layer service attribution</span></div>
+          <div><strong>Inference Engine</strong><span>Composite 0–100 risk score · movement &amp; co-presence · identity/device (SIM swap, clone, burner) · behavioural &amp; VPN signals</span></div>
+          <div><strong>Investigation Workflow</strong><span>Story narrative &amp; timeline · evidence folder · court-ready dossier · chain-of-custody audit trail · hypotheses &amp; relationships</span></div>
+          <div><strong>Field Analysis Pack</strong><span>CDR analysis reports · group compare · tower dump analysis · offline telecom reference · Indian legal framework (Laws tab)</span></div>
+          <div><strong>Cross-Case &amp; AI</strong><span>Cross-case linking · fine-tuned local LLM · investigation command center · AI insights &amp; leads</span></div>
+          <div><strong>Security &amp; Admin</strong><span>Hardened sessions · AFK auto-logout · admin user management · case management</span></div>
+          <div><strong>Scale &amp; Deployment</strong><span>1–5M+ record cases · materialised analytics · optional Redis/Celery/partitioning · one-file Windows installer</span></div>
+        </div>
+      </section>
+
+      <section id="attribution" class="doc-section">
+        <h2>Service Attribution Engine</h2>
+        <p>ARGUS classifies IPDR sessions to a provider and service <strong>fully offline</strong> — no external lookups, no telemetry. Two engines (server-side Python, client-side JavaScript) share one knowledge base so results never diverge between the API and the UI.</p>
+
+        <h3>Two layers</h3>
+        <ol>
+          <li><strong>Infrastructure (IP)</strong> — longest-prefix CIDR match against 62 curated providers (Meta, Google, Cloudflare, Indian carriers, hosting providers, VPN/anonymisation networks, …). The destination IP names the contacted service; the subject's own IP is only ever used to identify their access network (carrier), never as a content label — misattributing a session merely <em>originating</em> from a cloud IP as that provider is a documented failure mode this engine avoids.</li>
+          <li><strong>Port + protocol</strong> — a shared 264-rule table (250 exact ports + 12 range bands) covering everything from WhatsApp STUN to database ports to BitTorrent, with behavioural fingerprinting (session duration, byte symmetry, traffic pattern) layered on top for a confidence score.</li>
+        </ol>
+
+        <h3>Single source of truth</h3>
+        <p>Both the backend (<code>service_attribution_service.py</code>) and frontend (<code>services/attribution.js</code>) engines load the same <code>attribution_data.json</code> — providers, CIDR ranges, and the full port table. Editing the JSON and regenerating the frontend copy keeps both engines byte-for-byte aligned:</p>
+        <pre><code>cd backend
+python scripts/gen_attribution_js.py</code></pre>
+
+        <h3>Verified accuracy</h3>
+        <div class="doc-grid-3">
+          <div class="doc-mini-card"><strong>21/21</strong><span>Backend fixture accuracy (100%)</span></div>
+          <div class="doc-mini-card"><strong>12/12</strong><span>Frontend fixtures (mirrored, run under Node)</span></div>
+          <div class="doc-mini-card"><strong>~14 µs</strong><span>Per-row IP match, indexed longest-prefix lookup</span></div>
+        </div>
+        <p>Also handles: CGNAT/private/loopback detection, QUIC (HTTP/3 over UDP on TLS ports) classification, and an optional external ASN-range CSV (<code>data/asn_ranges.csv</code>) for extending coverage from a live feed fetcher without code changes.</p>
+      </section>
+
+      <section id="api" class="doc-section">
+        <h2>API Reference</h2>
+        <p>Every route is served by the FastAPI application. When the server is running, the authoritative, always-current reference is the interactive docs — generated directly from the route code, so they never drift:</p>
+        <div class="doc-callout">
+          <strong>Interactive docs</strong> — <code>http://localhost:8000/docs</code> (Swagger UI) and <code>/redoc</code> (ReDoc).
+        </div>
+        <p>26 routers cover:</p>
+        <div class="doc-feature-table">
+          <div><strong>Authentication</strong><span>Login, session listing/revocation, password change, current-user check</span></div>
+          <div><strong>Upload</strong><span>CDR, IPDR, tower, tower-dump, SDR — multipart CSV/XLS/XLSX/TXT with a dry-run preview endpoint</span></div>
+          <div><strong>Records</strong><span>Paginated CDR/IPDR query with filters, reset</span></div>
+          <div><strong>Geo</strong><span>Geo-tagged records, subject list, tower coordinates</span></div>
+          <div><strong>Graph</strong><span>Bounded subgraph build, centrality/community metrics</span></div>
+          <div><strong>Investigation</strong><span>Unified timeline, service summary, tower activity, co-location, meeting detection</span></div>
+          <div><strong>Inference</strong><span>Full spatiotemporal report, per-subject movement timeline, dossier reference generation</span></div>
+          <div><strong>Analytics</strong><span>Materialised subjects/dashboard/reports, per-subject CDR/IPDR report cache</span></div>
+          <div><strong>Cross-Case</strong><span>Overview, per-subject matches, link-graph, case report</span></div>
+          <div><strong>Towers</strong><span>Repository stats/listing/rebuild, reverse-geocode</span></div>
+          <div><strong>Cases</strong><span>Create/list/switch/reset</span></div>
+          <div><strong>Watchlist</strong><span>Suspect groups, values, by-value removal</span></div>
+          <div><strong>Admin</strong><span>User CRUD, audit-log query</span></div>
+          <div><strong>Export</strong><span>Generic XLSX export for any table</span></div>
+          <div><strong>Subject Tags</strong><span>Global intel-tag upsert/read</span></div>
+          <div><strong>Reference</strong><span>Offline telecom lookups — number series, ISD codes, IMEI TAC</span></div>
+        </div>
+        <p>All authenticated routes resolve an HttpOnly session cookie via FastAPI dependency injection; a missing, expired, or revoked session returns <code>401</code>.</p>
+      </section>
+
+      <section id="security" class="doc-section">
+        <h2>Security &amp; Sessions</h2>
+        <div class="doc-grid-3">
+          <div class="doc-mini-card"><strong>PBKDF2-HMAC-SHA256</strong><span>210,000 iterations, random 16-byte salt per password</span></div>
+          <div class="doc-mini-card"><strong>48-byte tokens</strong><span><code>secrets.token_urlsafe(48)</code>, HttpOnly cookie — never readable by JavaScript</span></div>
+          <div class="doc-mini-card"><strong>7-day sliding TTL</strong><span>Every authenticated request extends <code>expires_at</code>; configurable via <code>AUTH_SESSION_TTL_HOURS</code></span></div>
+        </div>
+        <h3>Frontend session hardening</h3>
+        <ul>
+          <li><strong>AFK auto-logout</strong> — a 3-stage idle chain: Active → Idle (2 min) → Expiring (9 min, pulsing warning) → logged out at 10 minutes of inactivity, tracked across mouse/keyboard/scroll/touch events.</li>
+          <li><strong>Health check</strong> — pings <code>GET /auth/me</code> every 5 minutes; a <code>401</code> triggers immediate logout if the session was revoked elsewhere.</li>
+          <li><strong>Multi-session tracking</strong> — list every active session, revoke one or all ("logout everywhere").</li>
+        </ul>
+        <h3>Chain of custody</h3>
+        <p>Every meaningful action — login, upload, export, dossier generation, case create/delete, and read beacons for case/subject views — is written to an append-only audit log (who, from where, against which case, when), surfaced in the Admin tab's audit panel.</p>
+      </section>
+
+      <section id="deployment" class="doc-section">
+        <h2>Deployment</h2>
+        <h3>Air-gapped (recommended)</h3>
+        <p>The Windows installer (PyInstaller + Inno Setup) bundles the Python runtime, every dependency, and the static frontend into a single ~122 MB package. No network access is required at install time or runtime — this is the primary supported deployment for investigative units.</p>
+
+        <h3>Server deployment</h3>
+        <p>For a shared team deployment, run the FastAPI app behind a reverse proxy with HTTPS:</p>
+        <pre><code>uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 4</code></pre>
+        <ul>
+          <li>Configure <code>DATABASE_URL</code> to point at PostgreSQL — SQLite is a single-writer fallback, not intended for concurrent multi-user production load.</li>
+          <li>Terminate TLS at a reverse proxy (Nginx/Caddy); set <code>client_max_body_size</code> high enough for large CSV uploads.</li>
+          <li>Change the bootstrap admin password immediately; set a non-default <code>AUTH_SESSION_COOKIE_NAME</code>.</li>
+          <li>Optional accelerators: Redis cache tier, Celery for background jobs, trigram/FTS5 search — all off by default, on by capability detection or explicit config.</li>
+        </ul>
+
+        <h3>Local AI (optional)</h3>
+        <p>The AI Insights tab and report generation call a local <a href="https://ollama.ai" target="_blank">Ollama</a> instance at <code>http://localhost:11434</code>. If Ollama isn't running, those features degrade gracefully — every other tab works without it. No data leaves the machine when using local AI.</p>
+      </section>
+
+      <section id="scale" class="doc-section">
+        <h2>Scale &amp; Performance</h2>
+        <p>ARGUS is built to hold 1–5M+ record cases without freezing the browser or the database:</p>
+        <ul>
+          <li><strong>Bounded client mirror</strong> — the browser holds a capped, newest-first sample for live previews (timeline, correlation, mini-graph); authoritative analytics (dashboard, reports, inference, graph) are always computed server-side over the whole case.</li>
+          <li><strong>Materialised analytics</strong> — an event-driven, versioned cache recomputes only what an append actually touches (incremental update), not a full rebuild every time. Dashboards and reports open instantly on a revisit.</li>
+          <li><strong>Indexed IP matching</strong> — provider CIDR ranges are bucketed by first octet with precomputed integer bounds, turning a linear scan into a handful of integer comparisons — about 14 µs per row even with thousands of live-feed ranges loaded.</li>
+          <li><strong>Server-built bounded graphs</strong> — the network graph endpoint returns a top-N heaviest-edge subgraph with full-coverage node weights, so the browser never assembles the whole graph in memory; large graphs switch to a canvas renderer.</li>
+        </ul>
+      </section>
+
+      <section id="development" class="doc-section">
+        <h2>Development Guide</h2>
+        <h3>Project structure</h3>
+        <pre><code>backend/
+├── app/
+│   ├── main.py          # FastAPI app creation, router registration
+│   ├── api/               # 26 route-handler modules
+│   ├── core/               # config, database engine, events, capabilities
+│   ├── models/             # 15 SQLAlchemy ORM models
+│   ├── schemas/             # Pydantic request/response schemas
+│   ├── services/            # 24 business-logic modules
+│   ├── utils/               # helpers and validators
+│   └── data/                # bundled offline reference datasets (JSON)
+├── static/                # 47-module ES frontend (see Architecture)
+├── tests/                 # 32 suites, 242 tests
+├── scripts/                # sample-data generator, attribution codegen, etc.
+└── requirements.txt</code></pre>
+
+        <h3>Code style</h3>
+        <div class="doc-feature-table">
+          <div><strong>Python</strong><span>PEP 8, type hints on all params/returns, <code>snake_case</code> functions, <code>PascalCase</code> classes, stdlib → third-party → local import ordering</span></div>
+          <div><strong>JavaScript</strong><span>Native ES modules, no build step, <code>camelCase</code> functions/state, <code>const</code> for refs, one controller per feature module</span></div>
+          <div><strong>CSS</strong><span>Custom properties for all colours/repeated values, <code>kebab-case</code> classes, component-prefixed (<code>.tl-*</code>, <code>.ai-*</code>, <code>.dash-*</code>)</span></div>
+        </div>
+
+        <h3>Adding an API endpoint</h3>
+        <ol>
+          <li>Add the route handler in <code>backend/app/api/</code></li>
+          <li>Implement the logic in a service under <code>backend/app/services/</code></li>
+          <li>Add Pydantic schemas in <code>backend/app/schemas/</code> if the shape is new</li>
+          <li>Register the router in <code>backend/app/main.py</code></li>
+          <li>Write a test in <code>backend/tests/</code></li>
+        </ol>
+
+        <h3>Running the test suite</h3>
+        <pre><code>cd backend
+.venv/Scripts/python.exe -m unittest discover -s tests -p "test_*.py" -q</code></pre>
+
+        <h3>Regenerating the attribution knowledge base</h3>
+        <p>After editing <code>backend/app/data/attribution_data.json</code>:</p>
+        <pre><code>python scripts/gen_attribution_js.py</code></pre>
+      </section>
+
+      <section id="faq" class="doc-section">
+        <h2>FAQ</h2>
+        <div class="doc-faq-item">
+          <h4>Does ARGUS require an internet connection?</h4>
+          <p>No. Everything — ingestion, analysis, mapping, the inference engine, and (with Ollama installed) AI insights — runs fully offline. Map tiles from OpenStreetMap are the one optional online resource; without connectivity the map still functions, just without basemap imagery.</p>
+        </div>
+        <div class="doc-faq-item">
+          <h4>Which databases are supported?</h4>
+          <p>PostgreSQL is the primary target; SQLite is an automatic fallback requiring zero setup, suitable for single-investigator use or development.</p>
+        </div>
+        <div class="doc-faq-item">
+          <h4>How is CDR/IPDR separation enforced?</h4>
+          <p>Phone-number subjects (CDR) and IP subjects (IPDR) are never merged — distinct schemas, distinct graph components, distinct session-reconstruction paths. This is a deliberate design invariant enforced across the codebase and covered by tests, not just a UI convention.</p>
+        </div>
+        <div class="doc-faq-item">
+          <h4>Can I extend the service-attribution provider list?</h4>
+          <p>Yes — edit <code>attribution_data.json</code> (add a provider with its CIDR ranges and services) and run <code>gen_attribution_js.py</code> to sync the frontend copy. For ASN-scale coverage, drop a CSV at <code>data/asn_ranges.csv</code>; longest-prefix matching means specific external ranges automatically win over the curated defaults.</p>
+        </div>
+        <div class="doc-faq-item">
+          <h4>Where do I report a bug or request a feature?</h4>
+          <p><a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer/issues" target="_blank">Open an issue on GitHub</a>.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-col">
+        <div class="footer-brand">ARGUS</div>
+        <p class="footer-desc">Advanced Records &amp; Geospatial Unified Surveillance. Empowering law enforcement with intelligence.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Links</h4>
+        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank">Repository</a>
+        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer#readme" target="_blank">README</a>
+        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer/issues" target="_blank">Report issue</a>
+      </div>
+      <div class="footer-col">
+        <h4>Stack</h4>
+        <span>Python / FastAPI / PostgreSQL</span>
+        <span>D3.js / Leaflet / Turf.js / Chart.js</span>
+        <span>Qwen2.5-3B / NetworkX</span>
+        <span>PyInstaller / Inno Setup</span>
+      </div>
+    </div>
+    <div class="footer-bottom">Empowering Law Enforcement with Intelligence</div>
+  </footer>
+
+  <script src="app.js"></script>
+  <script src="docs.js"></script>
+</body>
+</html>
