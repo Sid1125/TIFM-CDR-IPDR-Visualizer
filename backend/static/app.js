@@ -44,6 +44,7 @@ import { renderStoryTimeline, resetStory } from './story/story.js';  // self-reg
 import { renderDossier } from './analytics/dossier.js';
 import { showProfile } from './records/profile.js';
 import './analytics/investigation.js';
+import './entities/entities.js';  // self-registers the Entities tab (identifier -> person resolution)
 import { renderInferences, loadExports, _exportsHtml, provideLoadSuspects } from './analytics/inferences.js';  // self-registers the Inferences tab
 import './ui/gantt_tooltip.js';
 

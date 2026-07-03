@@ -42,6 +42,7 @@
     <nav class="topbar-nav">
       <button class="topbar-tab active" data-tab="dashboard">Dashboard</button>
       <button class="topbar-tab" data-tab="story">Story</button>
+      <button class="topbar-tab" data-tab="entities" title="Resolved people: phones, SIMs, devices, IPs, apps, locations, cases">Entities</button>
       <button class="topbar-tab" data-tab="crosscase">Cross-Case</button>
       <button class="topbar-tab" data-tab="evidence">Evidence <span id="evidenceTabCount" class="tab-badge">0</span></button>
       <div class="nav-group">
@@ -357,6 +358,20 @@
     </div>
     <button id="recLoadMore" class="btn" style="width:100%;margin-top:8px;display:none">Load more</button>
     <div id="recPagination" style="display:flex;align-items:center;gap:12px;justify-content:center;padding:12px 0;flex-wrap:wrap"></div>
+  </section>
+
+  <!-- ENTITIES TAB — resolved people behind the identifiers -->
+  <section id="tab-entities" class="tab-content">
+    <div class="ent-toolbar">
+      <h3 style="margin:0">Entities</h3>
+      <span class="story-muted" id="entSummary"></span>
+      <div style="flex:1"></div>
+      <input id="entSearch" placeholder="Filter by number / IMEI / IMSI…" style="padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);font-size:.82rem;width:240px">
+    </div>
+    <div class="ent-layout">
+      <div id="entList" class="ent-list"></div>
+      <div id="entDetail" class="ent-detail"><div class="story-muted" style="padding:40px;text-align:center">Select an entity to see the person behind the identifiers.</div></div>
+    </div>
   </section>
 
   <!-- LAWS / LEGAL REFERENCE TAB -->
