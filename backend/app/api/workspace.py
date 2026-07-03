@@ -1,11 +1,12 @@
-"""Investigation workspace — relationship (edge) labels + hypotheses.
+"""Investigation workspace — relationship (edge) labels, hypotheses, and the evidence board.
 
-Fills the two genuine gaps in ARGUS's investigation-workspace layer (evidence pins, subject intel
-tags, annotations and the audit trail already exist):
+The investigation-workspace layer on top of the analytics:
   * relationship labels — label the link BETWEEN two subjects (global by pair)
   * hypotheses — a structured 'theory of the case' (case-scoped, with a status)
+  * evidence items — the findings board with its review lifecycle
+    (system -> confirmed / rejected, with investigator notes)
 
-Both are exposed as small CRUD routers and every mutation is written to the chain of custody.
+All exposed as small CRUD routers; every mutation is written to the chain of custody.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.auth import User
+from app.models.evidence_item import EvidenceItem
 from app.models.hypothesis import Hypothesis
 from app.models.relationship_label import RelationshipLabel
 from app.services.audit_service import log_action
@@ -25,8 +27,10 @@ from app.services.auth_service import get_current_user
 
 relationships_router = APIRouter()
 hypotheses_router = APIRouter()
+evidence_router = APIRouter()
 
 _STATUSES = {"open", "supported", "refuted"}
+_EV_STATUSES = {"system", "confirmed", "rejected"}
 
 
 # ── relationship labels ─────────────────────────────────────────────────────────
@@ -166,4 +170,113 @@ def delete_hypothesis(hid: int, request: Request,
         title, cid = h.title, h.case_id
         db.delete(h); db.commit()
         log_action(db, user, request, "hypothesis_delete", case_id=cid, target=title)
+    return {"success": True}
+
+
+# ── evidence board (findings + review lifecycle) ────────────────────────────────
+
+def _ev_dict(e: EvidenceItem) -> dict:
+    return {"id": e.id, "case_id": e.case_id, "sig": e.sig, "kind": e.kind, "label": e.label,
+            "detail": e.detail, "subject": e.subject,
+            "ts": e.ts.isoformat() if e.ts else None,
+            "image": e.image, "status": e.status, "note": e.note,
+            "created_by": e.created_by,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+            "reviewed_by": e.reviewed_by,
+            "reviewed_at": e.reviewed_at.isoformat() if e.reviewed_at else None}
+
+
+class EvidenceWrite(BaseModel):
+    case_id: str | None = None
+    sig: str
+    kind: str = "note"
+    label: str = ""
+    detail: str | None = None
+    subject: str | None = None
+    ts: datetime | None = None
+    image: str | None = None
+
+
+class EvidenceReview(BaseModel):
+    status: str | None = None   # confirmed | rejected | system (undo a review)
+    note: str | None = None
+
+
+@evidence_router.get("/")
+def list_evidence(db: Session = Depends(get_db), _user: User = Depends(get_current_user),
+                  case_id: str = Query(default=""), status: str = Query(default="")):
+    q = db.query(EvidenceItem)
+    if case_id:
+        q = q.filter(EvidenceItem.case_id == case_id)
+    if status and status in _EV_STATUSES:
+        q = q.filter(EvidenceItem.status == status)
+    return [_ev_dict(e) for e in q.order_by(EvidenceItem.id.desc()).all()]
+
+
+@evidence_router.post("/")
+def pin_evidence(payload: EvidenceWrite, request: Request,
+                 db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Pin a finding onto the board. Upserts by (case_id, sig) so re-pinning the same
+    finding refreshes its content instead of duplicating — but never clobbers an existing
+    review (status/note survive a re-pin)."""
+    sig = (payload.sig or "").strip()
+    if not sig:
+        raise HTTPException(status_code=400, detail="sig is required")
+    row = db.query(EvidenceItem).filter(
+        EvidenceItem.case_id == (payload.case_id or None), EvidenceItem.sig == sig).one_or_none()
+    if row is None:
+        row = EvidenceItem(case_id=payload.case_id or None, sig=sig, kind=payload.kind or "note",
+                           label=payload.label or "", detail=payload.detail, subject=payload.subject,
+                           ts=payload.ts, image=payload.image, created_by=user.username)
+        db.add(row)
+        action = "evidence_pin"
+    else:
+        row.kind = payload.kind or row.kind
+        row.label = payload.label or row.label
+        row.detail = payload.detail if payload.detail is not None else row.detail
+        row.subject = payload.subject if payload.subject is not None else row.subject
+        row.ts = payload.ts or row.ts
+        row.image = payload.image or row.image
+        action = "evidence_repin"
+    db.commit(); db.refresh(row)
+    log_action(db, user, request, action, case_id=payload.case_id, target=row.label,
+               detail={"sig": sig, "kind": row.kind})
+    return _ev_dict(row)
+
+
+@evidence_router.put("/{eid}")
+def review_evidence(eid: int, payload: EvidenceReview, request: Request,
+                    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """The review lifecycle: confirm / reject (or move back to system), and/or attach a
+    note. Who reviewed and when is recorded on the row AND in the chain of custody —
+    the decision is part of the record."""
+    e = db.get(EvidenceItem, eid)
+    if e is None:
+        raise HTTPException(status_code=404, detail="evidence item not found")
+    changed = {}
+    if payload.status is not None:
+        if payload.status not in _EV_STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of {sorted(_EV_STATUSES)}")
+        e.status = payload.status
+        changed["status"] = payload.status
+    if payload.note is not None:
+        e.note = payload.note.strip() or None
+        changed["note"] = bool(e.note)
+    if changed:
+        e.reviewed_by = user.username
+        e.reviewed_at = datetime.utcnow()
+    db.commit(); db.refresh(e)
+    log_action(db, user, request, "evidence_review", case_id=e.case_id, target=e.label,
+               detail={"sig": e.sig, **changed})
+    return _ev_dict(e)
+
+
+@evidence_router.delete("/{eid}")
+def delete_evidence(eid: int, request: Request,
+                    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    e = db.get(EvidenceItem, eid)
+    if e is not None:
+        label, cid, sig = e.label, e.case_id, e.sig
+        db.delete(e); db.commit()
+        log_action(db, user, request, "evidence_unpin", case_id=cid, target=label, detail={"sig": sig})
     return {"success": True}

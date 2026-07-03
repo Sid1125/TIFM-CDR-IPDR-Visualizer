@@ -32,7 +32,7 @@ from app.api.analysis import router as analysis_router
 from app.api.analytics import router as analytics_router
 from app.api.jobs import router as jobs_router
 from app.api.backup import router as backup_router
-from app.api.workspace import relationships_router, hypotheses_router
+from app.api.workspace import relationships_router, hypotheses_router, evidence_router
 from app.core.config import settings
 from app.core.database import Base
 from app.core.database import engine
@@ -282,4 +282,5 @@ app.include_router(jobs_router, prefix="/jobs", tags=["Jobs"], dependencies=[Dep
 app.include_router(backup_router, prefix="/backup", tags=["Backup"], dependencies=[Depends(get_current_user)])
 app.include_router(relationships_router, prefix="/relationships", tags=["Workspace"], dependencies=[Depends(get_current_user)])
 app.include_router(hypotheses_router, prefix="/hypotheses", tags=["Workspace"], dependencies=[Depends(get_current_user)])
+app.include_router(evidence_router, prefix="/evidence", tags=["Workspace"], dependencies=[Depends(get_current_user)])
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
