@@ -23,6 +23,7 @@ from app.models.tower import Tower
 from app.schemas.upload import UploadResponse
 from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
+from app.services.analytics_materialize_service import invalidate
 from app.services.ingest_service import coerce_frame
 from app.services.ingest_service import resolve_columns
 from app.utils.validators import ensure_columns
@@ -201,6 +202,13 @@ async def upload_cdr(
             events.RECORDS_APPENDED if mode.lower() == "append" else events.CASE_IMPORTED,
             case_id=case_id or None,
         )
+        # Drop the materialised analytics cache for this case INLINE. The event above enqueues an
+        # async re-materialise, but read_through serves a stale cached value until that job lands —
+        # so appending CDR to an IPDR-only case kept returning {cdr:[], ipdr:[…]} and the analysis /
+        # group-compare subject pickers listed no CDR subjects. Clearing here forces the next read to
+        # recompute fresh regardless of job timing.
+        invalidate(db, case_id or None)
+        db.commit()
         return UploadResponse(success=True, records_imported=len(records), validation=report)
     except HTTPException:
         db.rollback()
@@ -293,6 +301,13 @@ async def upload_ipdr(
             events.RECORDS_APPENDED if mode.lower() == "append" else events.CASE_IMPORTED,
             case_id=case_id or None,
         )
+        # Drop the materialised analytics cache for this case INLINE. The event above enqueues an
+        # async re-materialise, but read_through serves a stale cached value until that job lands —
+        # so appending CDR to an IPDR-only case kept returning {cdr:[], ipdr:[…]} and the analysis /
+        # group-compare subject pickers listed no CDR subjects. Clearing here forces the next read to
+        # recompute fresh regardless of job timing.
+        invalidate(db, case_id or None)
+        db.commit()
         return UploadResponse(success=True, records_imported=len(records), validation=report)
     except HTTPException:
         db.rollback()
