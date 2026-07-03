@@ -32,6 +32,8 @@ backend/.venv/
 # ──────────────────────────── Database ────────────────────────────
 *.sqlite3
 *.sqlite
+*.sqlite3-wal
+*.sqlite3-shm
 *.db
 backend/cdrdb.sqlite3
 
