@@ -5,15 +5,42 @@ from fastapi import Depends
 from fastapi import Query
 from sqlalchemy.orm import Session
 
+from sqlalchemy import or_
+
 from app.core.database import get_db
+from app.services.activity_event_service import build_activity_events
 from app.services.investigation_service import build_unified_timeline
 from app.services.investigation_service import find_meetings
+from app.services.investigation_service import reconstruct_ipdr_sessions
 from app.services.service_attribution_service import summarize_services
 from app.services.tower_service import find_colocation_candidates
 from app.services.tower_service import list_tower_activity
 from app.models.ipdr import IPDRRecord
 
 router = APIRouter()
+
+
+@router.get("/events")
+def activity_events(
+    db: Session = Depends(get_db),
+    case_id: str = Query(default=""),
+    subject: str = Query(default=""),
+    limit: int = Query(default=2000, ge=1, le=10000),
+):
+    """The activity-event timeline: IPDR rows -> sessions -> synthesized events
+    ("Probable WhatsApp Voice Call, 21:31-21:58, subject <-> WhatsApp (Meta), 86%",
+    with human evidence and an explainable fused confidence) instead of raw rows.
+    `subject` matches the phone number (msisdn) or either endpoint IP."""
+    q = db.query(IPDRRecord)
+    if case_id:
+        q = q.filter(IPDRRecord.case_id == case_id)
+    if subject:
+        q = q.filter(or_(IPDRRecord.msisdn == subject,
+                         IPDRRecord.source_ip == subject,
+                         IPDRRecord.destination_ip == subject))
+    records = q.order_by(IPDRRecord.start_time).limit(limit).all()
+    events = build_activity_events(reconstruct_ipdr_sessions(records))
+    return {"total": len(events), "events": events}
 
 
 @router.get("/meetings")

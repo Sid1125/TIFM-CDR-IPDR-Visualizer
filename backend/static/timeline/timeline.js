@@ -156,14 +156,17 @@ function renderEntityBody(e){
     const left=Math.max(0,((st-firstT)/span)*100);
     const w=Math.max(2,((et-st)/span)*100);
     const evText=Array.isArray(s.evidence)?s.evidence.join(', '):(s.evidence||'');
-    const disLabel=s.activityLabel||s.activity||'';
-    const attr=esc(disLabel)+(s.serviceConfidence?` (${Math.round(s.serviceConfidence)}%)`:'');
-    const badgeLabel=s.serviceLabel||s.service||svcName;
+    // Prefer the synthesized activity event ("Probable WhatsApp Voice Call · 86%") over the
+    // raw session label — the event overlay fuses IP + port + session-level behavior.
+    const disLabel=s.eventActivity||s.activityLabel||s.activity||'';
+    const conf=s.eventConfidence||s.serviceConfidence;
+    const attr=esc(disLabel)+(conf?` (${Math.round(conf)}%)`:'');
+    const badgeLabel=s.eventTitle||s.serviceLabel||s.service||svcName;
     const alts=s.candidates&&s.candidates.length?JSON.stringify(s.candidates.slice(0,4)):'';
     const sid='sess_'+s.start+'_'+Math.random().toString(36).slice(2,6);
     window.evSessions=window.evSessions||{};window.evSessions[sid]=s;
     return `<div class="tl-gantt-bar" style="margin-left:${left}%;width:${w}%;background:${c}18;border-left:2px solid ${c}"
-      data-svc="${esc(svcName)}" data-attr="${attr}" data-start="${s.start||''}" data-end="${s.end||''}" data-dur="${s.duration}" data-conf="${s.serviceConfidence?Math.round(s.serviceConfidence):''}" data-ev="${esc(evText)}" data-alts="${esc(alts)}" data-sid="${sid}" data-recs="${s.records||0}"
+      data-svc="${esc(svcName)}" data-attr="${attr}" data-start="${s.start||''}" data-end="${s.end||''}" data-dur="${s.duration}" data-conf="${conf?Math.round(conf):''}" data-ev="${esc(evText)}" data-alts="${esc(alts)}" data-sid="${sid}" data-recs="${s.records||0}"
       onmouseover="showGanttTip(this,event)" onmouseout="scheduleHideGanttTip()">
       <span style="background:${c}">${esc(badgeLabel)}</span> ${esc(disLabel)} <em>${s.duration>=60?Math.floor(s.duration/60)+'m':s.duration+'s'}</em>
     </div>`;

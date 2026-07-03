@@ -6,10 +6,10 @@
 // (frontend services layer). Pure over its inputs — depends only on constants, the attribution
 // helpers, utils and the shared cache. No behavior change.
 
-import { IP_RANGES, EPHEMERAL_MIN, SERVICE_DB, DISTINCTIVE_INDICATORS, PORT_FAMILY, FAMILY_GAP } from '../core/constants.js';
+import { IP_RANGES, EPHEMERAL_MIN, SERVICE_DB, DISTINCTIVE_INDICATORS, PORT_FAMILY, FAMILY_GAP, PORT_MAP, GENERIC_FAMILIES } from '../core/constants.js';
 import { fmtBytes } from '../core/utils.js';
 import { state } from '../core/state.js';
-import { ipInRange, isIspProvider, ipHint, trafficPattern } from './attribution.js';
+import { ipInRange, isIspProvider, ipHint, trafficPattern, fingerprintSession } from './attribution.js';
 import { sessionCache, clearAnalyticsCaches } from './cache.js';
 
 function classifySession(recs){
@@ -140,6 +140,61 @@ function classifySession(recs){
   if(continuous)evidence.push('Continuous traffic');
   return{provider:'',providerConfidence:10,tier:4,primary:{service:'Unknown',activity:'Unclassified'},serviceLabel:'Unknown',activityLabel:'Unclassified Session',serviceConfidence:8,candidates:[],evidence,start,end,duration:durSec,records:recs.length};
 }
+// ── Activity-event overlay (backend activity_event_service mirror) ──
+// A classified session is still network-shaped; this turns it investigation-shaped:
+// "Probable WhatsApp Voice Call · 86%" with a session-level behavioral fingerprint
+// (the whole session's duration/volume/ratio — which no single record shows), fused
+// explainable confidence, and human evidence. Fields are ADDED to the session object
+// (eventTitle/eventActivity/eventConfidence/confidenceParts); nothing existing changes.
+function sessionEventOverlay(cls,recs){
+  const up=recs.reduce((s,r)=>s+(r.bytesUp||0),0),dn=recs.reduce((s,r)=>s+(r.bytesDn||0),0);
+  const ports=new Set();recs.forEach(r=>{const dp=parseInt(r.dport),sp=parseInt(r.sport);if(dp)ports.add(dp);if(sp)ports.add(sp)});
+  const protos={};recs.forEach(r=>{if(r.prot){const p=r.prot.toUpperCase();protos[p]=(protos[p]||0)+1}});
+  const proto=Object.keys(protos).length?Object.keys(protos).reduce((a,b)=>protos[a]>=protos[b]?a:b):null;
+  const durSec=cls.duration||null;
+  const features={proto,dur:durSec,bytes:up+dn,ratio:dn>0?up/dn:(up>0?999:null),ports};
+  const isContent=cls.category==='content'||cls.category==='hosting'||(cls.provider&&!isIspProvider(cls.provider));
+  const provider=isContent?(cls.provider||null):null;
+  const matches=durSec?fingerprintSession(features,provider):[];
+  const fp=matches.length&&matches[0].score>=70?matches[0]:null;
+  // Title + activity
+  let title,activity;
+  if(fp){title='Probable '+fp.app;activity=fp.subtype}
+  else if(cls.provider&&isIspProvider(cls.provider)){title='Mobile data session ('+cls.provider+')';activity='Carrier / ISP traffic'}
+  else if(cls.provider){title='Probable '+(cls.primary&&cls.primary.service?cls.primary.service:cls.provider)+' session';activity=cls.activityLabel||''}
+  else if(cls.serviceLabel&&cls.serviceLabel!=='Unknown'){title='Probable '+cls.serviceLabel.replace('Likely ','');activity=cls.activityLabel||''}
+  else{title='Unclassified data session';activity=cls.activityLabel||'Unknown activity'}
+  // Confidence fusion (mirror: mean + agreement bonus, floored at the weaker input, cap 96)
+  const attrConf=cls.serviceConfidence||10;
+  const parts={attribution:attrConf};
+  let fused=Math.min(96,attrConf);
+  if(fp){
+    parts.behavior=fp.score;
+    const agree=fp.family===(cls.family||(cls.primary?cls.primary.service:null));
+    parts.agreement=agree;
+    fused=Math.max(Math.min(96,Math.round((attrConf+fp.score)/2)+(agree?6:0)),Math.min(attrConf,fp.score));
+  }
+  // Human evidence additions
+  const ev=cls.evidence||[];
+  const total=up+dn;
+  if(total){
+    const ratio=features.ratio;
+    const shape=ratio!=null&&ratio>=0.3&&ratio<=3?'stable bidirectional flow':ratio!=null&&ratio>5?'upload-heavy flow':ratio!=null&&ratio<0.2?'download-heavy flow':'mixed flow';
+    const line=fmtBytes(up)+' up / '+fmtBytes(dn)+' down — '+shape;
+    if(!ev.includes(line))ev.push(line);
+  }
+  if(fp)ev.push('Behavioral fingerprint: '+fp.app+' ('+fp.score+'% — '+fp.matched.join(', ')+')');
+  for(const p of ports){
+    if(p>=EPHEMERAL_MIN)continue;
+    const entry=PORT_MAP[p];
+    if(!entry||GENERIC_FAMILIES.has(entry[3]))continue;
+    const line=entry[2]+' (port '+p+')';
+    if(!ev.includes(line)){ev.push(line);break}
+  }
+  cls.eventTitle=title;cls.eventActivity=activity;cls.eventConfidence=fused;cls.confidenceParts=parts;cls.evidence=ev;
+  return cls;
+}
+
 function recPortFamily(r){
   const dp=parseInt(r.dport),sp=parseInt(r.sport);
   return PORT_FAMILY[dp]||PORT_FAMILY[sp]||'Other';
@@ -159,7 +214,7 @@ export function reconstructSessions(entity){
   const ipdrs=((state.data.rowIdx.get(entity)||[])).filter(r=>r.type==='IPDR').sort((a,b)=>a.tsMs-b.tsMs);
   if(!ipdrs.length)return[];
   const open={};const sessions=[];
-  const flush=k=>{const o=open[k];if(o&&o.recs.length){const cls=classifySession(o.recs);if(cls)sessions.push(cls)}delete open[k]};
+  const flush=k=>{const o=open[k];if(o&&o.recs.length){const cls=classifySession(o.recs);if(cls)sessions.push(sessionEventOverlay(cls,o.recs))}delete open[k]};
   for(const r of ipdrs){
     // Peer = the destination service IP for the subject's own sessions; if the entity is
     // itself the destination IP, the peer is the source.

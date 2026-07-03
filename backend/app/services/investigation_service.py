@@ -5,6 +5,7 @@ from datetime import datetime
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower
+from app.services.activity_event_service import synthesize_event
 from app.services.service_attribution_service import FAMILY_GAP_MAP
 from app.services.service_attribution_service import PORT_FAMILY_MAP
 from app.services.service_attribution_service import attribute_service
@@ -41,17 +42,38 @@ def _finalize_session(recs):
     duration = int((end - start).total_seconds()) if (start and end) else None
     # Representative attribution = the most confident classification across the session.
     best = max((attribute_service(r) for r in recs), key=lambda a: a.get("confidence", 0))
+    # Session-level shape (ports touched, dominant protocol) — the activity-event layer
+    # fingerprints the WHOLE session's behavior, which individual records can't show
+    # (a 27-minute call split over 27 small records never looks like a call row-by-row).
+    ports = set()
+    protos = {}
+    for r in recs:
+        for raw in (r.destination_port, r.source_port):
+            try:
+                ports.add(int(raw))
+            except (TypeError, ValueError):
+                pass
+        p = (r.protocol or "").upper()
+        if p:
+            protos[p] = protos.get(p, 0) + 1
     return {
         "start": start,
         "end": end,
         "duration_seconds": duration,
         "subject": recs[0].source_ip,
+        "msisdn": recs[0].msisdn,
         "peer": recs[0].destination_ip,
         "tower_id": recs[0].tower_id,
         "service": best["service"],
         "subtype": best.get("subtype"),
         "confidence": best.get("confidence"),
         "family": best.get("family"),
+        "category": best.get("category"),
+        "asn": best.get("asn"),
+        "country": best.get("country"),
+        "ip_type": best.get("ip_type"),
+        "protocol": max(protos, key=protos.get) if protos else None,
+        "ports": sorted(ports),
         "record_count": len(recs),
         "bytes_uploaded": sum(_to_int(r.bytes_uploaded) for r in recs),
         "bytes_downloaded": sum(_to_int(r.bytes_downloaded) for r in recs),
@@ -212,14 +234,21 @@ def build_unified_timeline(db, limit: int = 200, case_id=None):
         ipdr_q = ipdr_q.filter(IPDRRecord.case_id == case_id)
     ipdr_records = ipdr_q.order_by(IPDRRecord.start_time).limit(limit).all()
     for session in reconstruct_ipdr_sessions(ipdr_records):
+        # Synthesize the activity event (title, participants, fused confidence, human
+        # evidence) on top of the session; legacy keys stay for existing consumers.
+        event = synthesize_event(session)
         events.append(
             {
                 "time": session["start"],
                 "event_type": "IP Session",
+                "title": event["title"],
+                "activity": event["activity"],
                 "service": session["service"],
-                "confidence": session["confidence"],
-                "subject": session["subject"],
+                "confidence": event["confidence"],
+                "confidence_parts": event["confidence_parts"],
+                "subject": event["participants"]["subject"],
                 "peer": session["peer"],
+                "peer_label": event["participants"]["peer_label"],
                 "tower_id": session["tower_id"],
                 "details": {
                     "subtype": session["subtype"],
@@ -229,7 +258,7 @@ def build_unified_timeline(db, limit: int = 200, case_id=None):
                     "record_count": session["record_count"],
                     "bytes_uploaded": session["bytes_uploaded"],
                     "bytes_downloaded": session["bytes_downloaded"],
-                    "evidence": session["evidence"],
+                    "evidence": event["evidence"],
                 },
             }
         )
