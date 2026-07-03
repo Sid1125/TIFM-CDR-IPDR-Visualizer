@@ -1,0 +1,782 @@
+[
+ {
+  "name": "dns_udp_53",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 53,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely DNS",
+   "subtype": "Lookup / resolution",
+   "confidence": 95,
+   "family": "DNS",
+   "category": "service"
+  }
+ },
+ {
+  "name": "wireguard_udp",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 51820,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely VPN / Tunnel",
+   "subtype": "Keepalive / handshake",
+   "confidence": 81,
+   "family": "VPN / Tunnel",
+   "category": "vpn"
+  }
+ },
+ {
+  "name": "tor_socks",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 9050,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely Tor",
+   "subtype": "Proxy session",
+   "confidence": 72,
+   "family": "Proxy / Tor",
+   "category": "anonymization"
+  }
+ },
+ {
+  "name": "rdp_idle",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 3389,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 1000
+  },
+  "expected": {
+   "service": "Likely Remote Desktop",
+   "subtype": "Session setup",
+   "confidence": 84,
+   "family": "Remote Desktop",
+   "category": "service"
+  }
+ },
+ {
+  "name": "rdp_active",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 3389,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 500000
+  },
+  "expected": {
+   "service": "Likely Remote Desktop",
+   "subtype": "Interactive session",
+   "confidence": 88,
+   "family": "Remote Desktop",
+   "category": "service"
+  }
+ },
+ {
+  "name": "mongodb_bulk",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 27018,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 2000000
+  },
+  "expected": {
+   "service": "Likely Database",
+   "subtype": "Bulk data / query",
+   "confidence": 80,
+   "family": "Database",
+   "category": "service"
+  }
+ },
+ {
+  "name": "mail_submission",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 587,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely Mail",
+   "subtype": "Submission",
+   "confidence": 84,
+   "family": "Mail",
+   "category": "service"
+  }
+ },
+ {
+  "name": "whatsapp_stun",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 3478,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely WhatsApp/Meta",
+   "subtype": "Call initialization",
+   "confidence": 96,
+   "family": "WhatsApp",
+   "category": "service"
+  }
+ },
+ {
+  "name": "whatsapp_xmpp",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 5222,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely WhatsApp/Meta",
+   "subtype": "Session setup / keepalive",
+   "confidence": 92,
+   "family": "WhatsApp",
+   "category": "service"
+  }
+ },
+ {
+  "name": "whatsapp_teardown",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 3479,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 10000
+  },
+  "expected": {
+   "service": "Likely WhatsApp/Meta",
+   "subtype": "Call teardown / keepalive",
+   "confidence": 72,
+   "family": "WhatsApp",
+   "category": "service"
+  }
+ },
+ {
+  "name": "whatsapp_signaling",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 3479,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 100000
+  },
+  "expected": {
+   "service": "Likely WhatsApp/Meta",
+   "subtype": "Call signaling",
+   "confidence": 82,
+   "family": "WhatsApp",
+   "category": "service"
+  }
+ },
+ {
+  "name": "whatsapp_active",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 3479,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 1000000
+  },
+  "expected": {
+   "service": "Likely WhatsApp/Meta",
+   "subtype": "Call duration / active session",
+   "confidence": 88,
+   "family": "WhatsApp",
+   "category": "service"
+  }
+ },
+ {
+  "name": "whatsapp_media",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 3479,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 5000000
+  },
+  "expected": {
+   "service": "Likely WhatsApp/Meta",
+   "subtype": "Call duration / media session",
+   "confidence": 92,
+   "family": "WhatsApp",
+   "category": "service"
+  }
+ },
+ {
+  "name": "quic_443",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 443,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely Encrypted Web/App",
+   "subtype": "QUIC (HTTP/3) session",
+   "confidence": 84,
+   "family": "Encrypted Web/App",
+   "category": "service"
+  }
+ },
+ {
+  "name": "quic_8443",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 8443,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely Encrypted Web/App",
+   "subtype": "QUIC (HTTP/3) session",
+   "confidence": 84,
+   "family": "Encrypted Web/App",
+   "category": "service"
+  }
+ },
+ {
+  "name": "https_plain",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely Encrypted Web/App",
+   "subtype": "Encrypted session",
+   "confidence": 84,
+   "family": "Encrypted Web/App",
+   "category": "service"
+  }
+ },
+ {
+  "name": "http_small",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 80,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 10000
+  },
+  "expected": {
+   "service": "Likely Web",
+   "subtype": "Page fetch / browsing",
+   "confidence": 78,
+   "family": "Web",
+   "category": "service"
+  }
+ },
+ {
+  "name": "http_large",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 80,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 2000000
+  },
+  "expected": {
+   "service": "Likely Web",
+   "subtype": "Content transfer / session",
+   "confidence": 82,
+   "family": "Web",
+   "category": "service"
+  }
+ },
+ {
+  "name": "sip_tls",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 5061,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely VoIP / SIP",
+   "subtype": "Call signaling",
+   "confidence": 92,
+   "family": "VoIP / SIP",
+   "category": "service"
+  }
+ },
+ {
+  "name": "ephemeral_only_src",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": 50005,
+   "dport": null,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely MS Teams",
+   "subtype": "Keepalive / STUN",
+   "confidence": 47,
+   "family": "Video Conf / Streaming",
+   "category": "service"
+  }
+ },
+ {
+  "name": "ephemeral_vs_dest",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": 50005,
+   "dport": 53,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely DNS",
+   "subtype": "Lookup / resolution",
+   "confidence": 95,
+   "family": "DNS",
+   "category": "service"
+  }
+ },
+ {
+  "name": "udp_stream_heavy",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 6000000
+  },
+  "expected": {
+   "service": "Likely Streaming / Media",
+   "subtype": "High-volume stream",
+   "confidence": 60,
+   "family": "Likely Streaming / Media",
+   "category": "unknown"
+  }
+ },
+ {
+  "name": "udp_media_medium",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 2000000
+  },
+  "expected": {
+   "service": "Likely Video Conf / Streaming",
+   "subtype": "Media stream",
+   "confidence": 56,
+   "family": "Likely Video Conf / Streaming",
+   "category": "unknown"
+  }
+ },
+ {
+  "name": "udp_light",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 1000
+  },
+  "expected": {
+   "service": "Likely Messaging / VoIP",
+   "subtype": "Media / signalling session",
+   "confidence": 42,
+   "family": "Likely Messaging / VoIP",
+   "category": "unknown"
+  }
+ },
+ {
+  "name": "tcp_bulk",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 20000000
+  },
+  "expected": {
+   "service": "Likely Content Transfer",
+   "subtype": "Large download / upload",
+   "confidence": 58,
+   "family": "Likely Content Transfer",
+   "category": "unknown"
+  }
+ },
+ {
+  "name": "tcp_medium",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 600000
+  },
+  "expected": {
+   "service": "Likely File Transfer",
+   "subtype": "Medium file transfer",
+   "confidence": 44,
+   "family": "Likely File Transfer",
+   "category": "unknown"
+  }
+ },
+ {
+  "name": "tcp_light",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 1000
+  },
+  "expected": {
+   "service": "Likely Encrypted Web/App",
+   "subtype": "Generic TCP session",
+   "confidence": 26,
+   "family": "Likely Encrypted Web/App",
+   "category": "unknown"
+  }
+ },
+ {
+  "name": "unknown_protocol",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "ICMP",
+   "bytesUp": 0,
+   "bytesDn": 100
+  },
+  "expected": {
+   "service": "Likely Custom Protocol",
+   "subtype": "Protocol ICMP session",
+   "confidence": 18,
+   "family": "Likely Custom Protocol",
+   "category": "unknown"
+  }
+ },
+ {
+  "name": "private_rdp",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "192.168.1.50",
+   "sport": null,
+   "dport": 3389,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely Remote Desktop",
+   "subtype": "Session setup",
+   "confidence": 84,
+   "family": "Remote Desktop",
+   "category": "internal"
+  }
+ },
+ {
+  "name": "private_generic",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "192.168.1.50",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Private / Internal Network",
+   "subtype": "Internal / non-routable",
+   "confidence": 70,
+   "family": "Private",
+   "category": "internal"
+  }
+ },
+ {
+  "name": "cgnat_dest",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "100.70.1.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Carrier NAT (CGNAT)",
+   "subtype": "Internal / non-routable",
+   "confidence": 70,
+   "family": "Private",
+   "category": "internal"
+  }
+ },
+ {
+  "name": "loopback_dest",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "127.0.0.1",
+   "sport": null,
+   "dport": 8080,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Loopback",
+   "subtype": "Internal / non-routable",
+   "confidence": 70,
+   "family": "Private",
+   "category": "internal"
+  }
+ },
+ {
+  "name": "isp_dns",
+  "mode": "exact",
+  "input": {
+   "sub": null,
+   "cnt": "49.32.0.1",
+   "sport": null,
+   "dport": 53,
+   "prot": "UDP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely DNS",
+   "subtype": "Lookup / resolution",
+   "confidence": 95,
+   "family": "DNS",
+   "category": "service"
+  }
+ },
+ {
+  "name": "isp_https",
+  "mode": "access",
+  "input": {
+   "sub": null,
+   "cnt": "49.32.0.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Reliance Jio (Access Network)",
+   "subtype": "Carrier / ISP traffic",
+   "confidence": 30,
+   "family": "Access Network",
+   "category": "access_network"
+  }
+ },
+ {
+  "name": "isp_no_port",
+  "mode": "access",
+  "input": {
+   "sub": null,
+   "cnt": "49.32.0.1",
+   "sport": null,
+   "dport": null,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Reliance Jio (Access Network)",
+   "subtype": "Carrier / ISP traffic",
+   "confidence": 30,
+   "family": "Access Network",
+   "category": "access_network"
+  }
+ },
+ {
+  "name": "isp_source_only",
+  "mode": "access",
+  "input": {
+   "sub": "49.32.0.1",
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": null,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Reliance Jio (Access Network)",
+   "subtype": "Carrier / ISP traffic",
+   "confidence": 30,
+   "family": "Access Network",
+   "category": "access_network"
+  }
+ },
+ {
+  "name": "meta_https",
+  "mode": "provider",
+  "input": {
+   "sub": null,
+   "cnt": "157.240.0.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely Meta",
+   "subtype": "Encrypted session",
+   "confidence": 85,
+   "family": "Meta",
+   "category": "content"
+  }
+ },
+ {
+  "name": "hosting_digitalocean",
+  "mode": "provider",
+  "input": {
+   "sub": null,
+   "cnt": "159.89.0.1",
+   "sport": null,
+   "dport": 443,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 50000
+  },
+  "expected": {
+   "service": "Likely DigitalOcean",
+   "subtype": "Encrypted session",
+   "confidence": 85,
+   "family": "DigitalOcean",
+   "category": "hosting"
+  }
+ },
+ {
+  "name": "meta_src_not_service",
+  "mode": "exact",
+  "input": {
+   "sub": "157.240.0.1",
+   "cnt": "45.10.20.30",
+   "sport": null,
+   "dport": 9050,
+   "prot": "TCP",
+   "bytesUp": 0,
+   "bytesDn": 0
+  },
+  "expected": {
+   "service": "Likely Tor",
+   "subtype": "Proxy session",
+   "confidence": 72,
+   "family": "Proxy / Tor",
+   "category": "anonymization"
+  }
+ }
+]

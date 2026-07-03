@@ -211,6 +211,169 @@ function recordSvcAttr(r){
   const confStr=conf?' ['+conf+'%]':'';
   return m.serviceLabel+actStr+confStr;
 }
+
+// ── Port-classification layer: a 1:1 mirror of the backend engine's stack ──
+// (service_attribution_service.py: _classify_whatsapp / _classify_generic / _fallback_classify /
+// _classify_by_port). Same shared PORT_MAP/PORT_RANGES data, same subtype refinement by transfer
+// volume, same ephemeral demotion, protocol-alignment nudges, and tie-breaks — so a record shown
+// in the frontend Records table classifies identically to the backend Services report. The parity
+// harness (scripts/test_attribution_parity.mjs) asserts this stays true; if you change a rule
+// here, change the backend too and re-run it.
+function humanBytes(b){if(b>=1e9)return(b/1e9).toFixed(1)+'GB';if(b>=1e6)return(b/1e6).toFixed(1)+'MB';if(b>=1e3)return(b/1e3).toFixed(1)+'KB';return b+'B'}
+
+function classifyWhatsApp(protocol,port,bytes){
+  if(port===3478&&protocol==='UDP')return['Call initialization',96,['UDP STUN / NAT traversal']];
+  if(port===5222||port===5223)return['Session setup / keepalive',90,['Messaging session port']];
+  if(port===5228)return['Session keepalive',91,['Push / background messaging port']];
+  if(bytes!=null){
+    if(bytes<25000)return['Call teardown / keepalive',72,['Low transfer volume']];
+    if(bytes<250000)return['Call signaling',82,['Medium transfer volume']];
+    if(bytes<1500000)return['Call duration / active session',88,['Sustained media exchange']];
+    return['Call duration / media session',92,['High transfer volume']];
+  }
+  return['Call session',80,['Port mapped to WhatsApp']];
+}
+
+function classifyGeneric(service,port,bytes,protocol){
+  if(service==='DNS')return['Lookup / resolution',92,['DNS family port']];
+  if(service==='Web'||service==='Encrypted Web/App'||service==='Hosting / Web'||service==='Casting / Streaming'){
+    if(bytes!=null&&bytes>500000)return['Content transfer / session',80,['Large payload']];
+    if(protocol==='TLS'||port===443||port===8443||port===2083||port===2096)return['Encrypted session',82,['Encrypted transport']];
+    return['Page fetch / browsing',76,['Web family port']];
+  }
+  if(service==='Mail'){
+    if(port===25||port===465||port===587||port===2525)return['Submission',84,['Mail submission port']];
+    return['Retrieval',84,['Mailbox retrieval port']];
+  }
+  if(service==='VPN / Tunnel'){
+    if(bytes!=null&&bytes>250000)return['Tunnel traffic',84,['Sustained tunnel traffic']];
+    if(bytes!=null&&bytes<5000)return['Keepalive / handshake',78,['Minimal tunnel traffic']];
+    return['Tunnel setup',86,['Tunnel negotiation port']];
+  }
+  if(service==='VoIP / SIP')return['Call signaling',90,['SIP family port']];
+  if(service==='Remote Desktop'){
+    if(bytes!=null&&bytes>250000)return['Interactive session',86,['Active remote session']];
+    return['Session setup',82,['Remote access port']];
+  }
+  if(service==='Database'){
+    if(bytes!=null&&bytes>1000000)return['Bulk data / query',80,['Large database transfer']];
+    return['Query / transaction',78,['Database family port']];
+  }
+  if(service==='Streaming'){
+    if(bytes!=null&&bytes>5000000)return['Active media stream',86,['High-volume streaming']];
+    return['Media session',80,['Streaming family port']];
+  }
+  if(service==='IoT / MQTT')return['Broker session',78,['MQTT broker port']];
+  if(service==='File Transfer'){
+    if(bytes!=null&&bytes>5000000)return['Large file transfer',84,['High-volume transfer']];
+    return['Transfer session',78,['File transfer port']];
+  }
+  if(service==='Remote Access'){
+    if(bytes!=null&&bytes>100000)return['Active session',76,['Sustained remote access']];
+    return['Remote login',74,['Remote access port']];
+  }
+  if(service==='Device Discovery')return['Discovery',70,['Discovery port']];
+  if(service==='Video Conf / Streaming'){
+    if(bytes!=null&&bytes>500000)return['Active video call',86,['Sustained media exchange']];
+    if(bytes!=null&&bytes>50000)return['Audio call / screen share',80,['Medium media exchange']];
+    if(bytes!=null&&bytes<5000)return['Keepalive / STUN',72,['Minimal media keepalive']];
+    return['Media session',78,['Conferencing family port']];
+  }
+  if(service==='Messaging / Social'){
+    if(bytes!=null&&bytes<10000)return['Instant message / ping',74,['Minimal transfer volume']];
+    return['Messaging session',72,['Messaging platform port']];
+  }
+  if(service==='Gaming'){
+    if(bytes!=null&&bytes>5000000)return['Active gameplay',82,['High-volume game traffic']];
+    if(bytes!=null&&bytes>100000)return['Multiplayer session',78,['Sustained game traffic']];
+    return['Client / lobby',72,['Game family port']];
+  }
+  if(service==='P2P / File Sharing'){
+    if(bytes!=null&&bytes>10000000)return['Active download / upload',86,['High-volume P2P transfer']];
+    return['P2P session',76,['P2P family port']];
+  }
+  if(service==='Proxy / Tor'){
+    if(bytes!=null&&bytes>1000000)return['Relayed traffic',76,['High-volume proxy tunnel']];
+    return['Proxy session',72,['Proxy family port']];
+  }
+  if(service==='Cache / Backend')return['Backend session',70,['Cache / backend port']];
+  if(service==='Queue / Backend')return['Message broker session',72,['Queue/backend port']];
+  if(service==='File / Print')return['File / print service',68,['File/print family port']];
+  if(service==='Directory / LDAP')return['Directory lookup',72,['Directory family port']];
+  if(service==='Authentication')return['Auth session',68,['Authentication protocol port']];
+  if(service==='Infrastructure')return['Network service',68,['Infrastructure port']];
+  if(service==='Remote Management')return['Admin session',66,['Management port']];
+  if(service==='Multimedia / Home')return['Media sharing session',62,['Home entertainment port']];
+  if(service==='Development')return['Dev tool session',62,['Development port']];
+  if(service==='Crypto / Blockchain'){
+    if(bytes!=null&&bytes>100000000)return['Blockchain sync',80,['High-volume blockchain traffic']];
+    return['Crypto node session',68,['Blockchain port']];
+  }
+  if(service==='Security')return['Suspicious activity',44,['Common RAT port']];
+  return['Session',60,['Generic service family']];
+}
+
+function fallbackClassify(protocol,bytes,port){
+  const candidates=[];
+  if(protocol==='UDP'){
+    if(bytes!=null&&bytes>5000000)candidates.push({service:'Likely Streaming / Media',subtype:'High-volume stream',confidence:60,evidence:['UDP high traffic ('+humanBytes(bytes)+')','Unrecognized port']});
+    if(bytes!=null&&bytes>1000000)candidates.push({service:'Likely Video Conf / Streaming',subtype:'Media stream',confidence:56,evidence:['UDP sustained traffic ('+humanBytes(bytes)+')','Unrecognized port']});
+    candidates.push({service:'Likely Messaging / VoIP',subtype:'Media / signalling session',confidence:42,evidence:['Protocol UDP','Generic media or signalling session']});
+  }else if(protocol==='TCP'){
+    if(bytes!=null&&bytes>10000000)candidates.push({service:'Likely Content Transfer',subtype:'Large download / upload',confidence:58,evidence:['TCP high traffic ('+humanBytes(bytes)+')','Unrecognized port']});
+    if(bytes!=null&&bytes>500000)candidates.push({service:'Likely File Transfer',subtype:'Medium file transfer',confidence:44,evidence:['TCP sustained traffic ('+humanBytes(bytes)+')','Unrecognized port']});
+    candidates.push({service:'Likely Encrypted Web/App',subtype:'Generic TCP session',confidence:26,evidence:['Protocol TCP','Generic TCP session']});
+  }else{
+    candidates.push({service:'Likely Custom Protocol',subtype:'Protocol '+protocol+' session',confidence:18,evidence:['Unknown protocol '+protocol,'No known port match']});
+  }
+  if(bytes===0&&port)candidates.push({service:'Likely Keepalive / Probe',subtype:'Zero-byte session',confidence:36,evidence:['Zero data transferred','Port connection attempt']});
+  if(port!=null&&port>=49152&&port<=65535)candidates.forEach(c=>c.evidence.push('Ephemeral source port (no service info)'));
+  return candidates.reduce((a,b)=>b.confidence>a.confidence?b:a,candidates[0]);
+}
+
+const _UDP_ALIGNED=new Set([53,3478,500,4500,1194,1701,51820,3544,19302]);
+const _TCP_ALIGNED=new Set([80,443,5222,5223,5228,5060,5061,3389,5900,3306,5432,8443,25,110,143,993,995]);
+
+function classifyByPort(dportRaw,sportRaw,protocol,bytes){
+  const candidates=[];
+  const seenServices=new Set();
+  // Destination first: for an outbound session it's the well-known service port; the source is
+  // typically ephemeral, so a match there is flagged and demoted unless nothing better exists.
+  for(const[raw,isSource]of[[dportRaw,false],[sportRaw,true]]){
+    if(raw==null||raw==='')continue;
+    const port=parseInt(raw);
+    if(isNaN(port))continue;
+    let base=PORT_MAP[port];
+    if(!base){const band=PORT_RANGES.find(r=>port>=r[0]&&port<=r[1]);base=band?band.slice(2):null}
+    if(!base)continue;
+    const label=base[0],reason=base[2],family=base[3];
+    if(seenServices.has(family))continue;
+    seenServices.add(family);
+    const suspectEphemeral=isSource&&port>=EPHEMERAL_MIN;
+    const evidence=['Port '+port,reason];
+    const sub=family==='WhatsApp'?classifyWhatsApp(protocol,port,bytes):classifyGeneric(family,port,bytes,protocol);
+    let subtype=sub[0],confidence=sub[1];
+    evidence.push(...sub[2]);
+    if(protocol==='UDP'&&_UDP_ALIGNED.has(port)){confidence=Math.min(96,confidence+3);evidence.push('UDP aligned')}
+    else if(protocol==='UDP'&&(port===443||port===8443)){confidence=Math.min(96,confidence+2);subtype='QUIC (HTTP/3) session';evidence.push('QUIC (HTTP/3): UDP on TLS port')}
+    else if(protocol==='TCP'&&_TCP_ALIGNED.has(port)){confidence=Math.min(96,confidence+2);evidence.push('TCP aligned')}
+    candidates.push({service:label,subtype,confidence,evidence,family,port,suspectEphemeral});
+  }
+  if(candidates.length){
+    const strong=candidates.filter(c=>!c.suspectEphemeral);
+    let pool=candidates;
+    if(strong.length)pool=strong;
+    else pool.forEach(c=>{c.confidence=Math.max(10,c.confidence-25);c.evidence.push('Ephemeral source-port match (low confidence)')});
+    let best=pool[0];
+    for(const c of pool)if(c.confidence>best.confidence||(c.confidence===best.confidence&&c.port<best.port))best=c;
+    const category=best.family==='VPN / Tunnel'?'vpn':best.family==='Proxy / Tor'?'anonymization':'service';
+    return{service:best.service,subtype:best.subtype,confidence:best.confidence,family:best.family,port:best.port,category,evidence:best.evidence};
+  }
+  const fbPort=parseInt(dportRaw)||parseInt(sportRaw)||null;
+  const fb=fallbackClassify(protocol,bytes,fbPort);
+  if(fb)return{service:fb.service,subtype:fb.subtype,confidence:fb.confidence,family:fb.service,port:null,category:'unknown',evidence:fb.evidence};
+  return{service:'Unknown',subtype:'Unclassified',confidence:10,family:'Unknown',port:null,category:'unknown',evidence:[protocol?'Protocol '+protocol:'Protocol unknown','No classification possible']};
+}
 function matchService(rec){
   const sp=parseInt(rec.sport),dp=parseInt(rec.dport);
   // Drop an ephemeral source port when a destination port exists — it's the
@@ -220,12 +383,20 @@ function matchService(rec){
   if(sp&&!(dp&&sp>=EPHEMERAL_MIN))ports.add(sp);
   const proto=rec.prot?rec.prot.toUpperCase():'';
   const dur=rec.dur||0;const dir=rec.dir||'';const up=rec.bytesUp||0;const dn=rec.bytesDn||0;
+  // Shared port-classification result (backend _classify_by_port mirror) — computed up-front,
+  // exactly as the backend does, because the private-destination and carrier branches both
+  // consult it before the generic fallbacks.
+  const portRes=classifyByPort(rec.dport,rec.sport,proto,up+dn);
   // Deterministic: a private/CGNAT/loopback destination is internal, not an internet service.
   const dkind=ipKind(rec.cnt);
   if(dkind){
     const label=PRIVATE_LABEL[dkind]||'Private';
-    const portName=dp&&PORT_SVC[dp]?' ('+PORT_SVC[dp]+')':'';
-    return{provider:'',tier:1,primary:{service:label,activity:'Internal'},serviceLabel:label,activityLabel:'Internal / non-routable',serviceConfidence:70,category:'internal',candidates:[],evidence:[label+' destination IP'+portName].concat(proto?[proto+' protocol']:[])};
+    // Keep a specific port-mapped service (RDP into a LAN box, internal DB, ...) and mark it
+    // internal; only fall back to the bare private label when the port says nothing specific.
+    if(portRes.port!=null&&!GENERIC_FAMILIES.has(portRes.family)){
+      return{provider:'',tier:1,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,category:'internal',candidates:[],evidence:portRes.evidence.concat([label+' destination'])};
+    }
+    return{provider:'',tier:1,primary:{service:label,activity:'Internal'},serviceLabel:label,activityLabel:'Internal / non-routable',serviceConfidence:70,category:'internal',candidates:[],evidence:[label+' destination IP'].concat(proto?[proto+' protocol']:[])};
   }
   // The COUNTERPART (destination) is what names the contacted service. The subject's own IP is
   // their endpoint (carrier CGNAT, or a hosting box for server-side records) — consulting it as a
@@ -239,22 +410,23 @@ function matchService(rec){
   // An ISP-only match identifies the carrier; fall through to port classification and only
   // label it an access network if no specific service is found (Phase 2 fallbacks below).
   const ispCarrier=(ipRes&&ipRes.isp)?provName:null;
-  const accessNet=()=>({provider:provName,providerConfidence:55,tier:1,primary:{service:provName,activity:'Access Network'},serviceLabel:provName+' (Access Network)',activityLabel:'Carrier / ISP traffic',serviceConfidence:30,candidates:[],evidence:[provName+' access network ('+ipRes.raw+')'].concat(proto?[proto+' protocol']:[])});
+  const accessNet=()=>({provider:provName,providerConfidence:55,tier:1,primary:{service:provName,activity:'Access Network'},serviceLabel:provName+' (Access Network)',activityLabel:'Carrier / ISP traffic',serviceConfidence:30,category:'access_network',candidates:[],evidence:[provName+' access network ('+ipRes.raw+')'].concat(proto?[proto+' protocol']:[])});
   // Phase 1: known content provider from IP (Level 1 — Infrastructure)
   if(provName&&!ispCarrier){
     evidence.push(provName+' IP range ('+ipRes.raw+')');
     const hint=ipHint(rec.cnt);  // counterpart only — a hint on the subject's own IP is not the contacted service
     if(hint){
       evidence.push(hint.provider+' '+hint.service+' ('+hint.activity+')');
-      return{provider:hint.provider,providerConfidence:96,tier:1,primary:{service:hint.service,activity:hint.activity},serviceLabel:hint.service,activityLabel:hint.activity,serviceConfidence:95,candidates:[],evidence};
+      return{provider:hint.provider,providerConfidence:96,tier:1,primary:{service:hint.service,activity:hint.activity},serviceLabel:hint.service,activityLabel:hint.activity,serviceConfidence:95,category:'content',candidates:[],evidence};
     }
     const prov=SERVICE_DB.find(p=>p.pr===provName);
-    if(prov){
+    if(prov&&prov.services&&prov.services.length){
       const tp=trafficPattern(dur,up,dn,proto,ports,1,rec.ts?new Date(rec.ts).getHours():undefined);
       const scored=scoreProvider(prov.services,ports,proto,dur,dir,up,dn,1,provName);
       const best=pickBest(scored,dur,tp?tp.category:null,tp?tp.evidence:[]);
       best.provider=provName;
       if(HOSTING_PROVIDERS.has(provName)){best.category='hosting';best.evidence.push('Cloud/VPS host — possible VPN, proxy, or self-hosted endpoint')}
+      else best.category='content';
       // Resolve placeholders
       if(best.serviceLabel==='__PROV__'){best.serviceLabel=provName+' '+best.primary.service;best.primary={service:provName,activity:best.activityLabel||'Network Traffic'}}
       else if(best.serviceLabel==='__MULTI__'){best.serviceLabel=provName+' ('+best.activityLabel+')';best.primary={service:provName,activity:'Multiple'};best.activityLabel='Multiple: '+scored.filter(s=>s.score>=scored[0].score-3).map(s=>s.svc).join('/')}
@@ -266,48 +438,51 @@ function matchService(rec){
       best.evidence=best.evidence.filter((v,i,a)=>a.indexOf(v)===i);
       return best;
     }
+    // Provider matched by IP but has no service catalogue entry — still name it, exactly like the
+    // backend's _merge_provider (confidence scaled by CIDR specificity). Previously this fell
+    // through to the generic path and silently discarded the provider match.
+    const plen=32-Math.log2((~ipRes.mask>>>0)+1);
+    const conf=plen>=20?90:plen>=16?85:78;
+    const hosting=HOSTING_PROVIDERS.has(provName);
+    const mergeEv=[provName+' IP range ('+ipRes.raw+')'];
+    if(hosting)mergeEv.push('Cloud/VPS host — possible VPN, proxy, or self-hosted endpoint');
+    if(portRes.port)mergeEv.push('Port '+portRes.port);
+    for(const e of portRes.evidence){if(!mergeEv.includes(e))mergeEv.push(e);if(mergeEv.length>=5)break}
+    const mergeSub=portRes.service!=='Unknown'?portRes.subtype:'Network session';
+    return{provider:provName,providerConfidence:conf,tier:1,primary:{service:provName,activity:mergeSub},serviceLabel:'Likely '+provName,activityLabel:mergeSub,serviceConfidence:conf,category:hosting?'hosting':'content',candidates:[],evidence:mergeEv};
   }
-  // Phase 2: no provider — fallback to port-based classification
-  const genericPorts=[80,443,8080,8443,9443,10443];
-  // UDP on a TLS port is QUIC (HTTP/3) — real signal, so let it reach the port table below.
-  const isQuic=proto==='UDP'&&[...ports].some(p=>p===443||p===8443);
-  if(!isQuic&&(ports.size===0||[...ports].every(p=>genericPorts.includes(p))))return ispCarrier?accessNet():{provider:'',tier:4,primary:{service:'Unknown',activity:'Encrypted Traffic'},serviceLabel:'Unknown',activityLabel:'Encrypted Traffic',serviceConfidence:5,candidates:[],evidence:['No matching provider IP — generic HTTPS/encrypted']};
-  // Shared port-classification table — the SAME ~250-port PORT_MAP + range bands the backend
-  // engine uses (attribution_data.json "port_map"/"port_ranges"): port -> [label, confidence,
-  // reason, family, subtype]. Best match = highest confidence; tie-break toward the lower
-  // (more well-known) port. Replaces the old ~30-entry GENERIC_SVC subset.
-  const _portRule=p=>{const m=PORT_MAP[p];if(m)return m;const b=PORT_RANGES.find(r=>p>=r[0]&&p<=r[1]);return b?b.slice(2):null};
-  let pmPort=null,pmRule=null;
-  for(const p of ports){
-    const m=_portRule(p);
-    if(m&&(!pmRule||m[1]>pmRule[1]||(m[1]===pmRule[1]&&p<pmPort))){pmPort=p;pmRule=m;}
+  // Phase 2: no content provider — the shared port-classification layer (a 1:1 backend mirror,
+  // computed up-front as portRes). Carrier handling matches attribute_service(): a specific
+  // port-mapped service (DNS, VPN, RDP, ...) is kept and annotated with the carrier; a generic
+  // web match or behavioural guess never outranks the carrier, which falls back to the
+  // access-network label.
+  if(ispCarrier){
+    if(portRes.port!=null&&!GENERIC_FAMILIES.has(portRes.family)){
+      return{provider:ispCarrier,tier:4,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,category:portRes.category,candidates:[],evidence:portRes.evidence.concat([ispCarrier+' access network ('+ipRes.raw+')'])};
+    }
+    return accessNet();
   }
-  if(pmRule){
-    const label=pmRule[0],reason=pmRule[2],family=pmRule[3];let conf=pmRule[1],subtype=pmRule[4];
-    // A generic web family carries no real service detail — the carrier is the one thing we know.
-    if(ispCarrier&&GENERIC_FAMILIES.has(family))return accessNet();
-    if(proto==='UDP'&&(pmPort===443||pmPort===8443)){conf=Math.min(96,conf+2);subtype='QUIC (HTTP/3) session';evidence.push('QUIC (HTTP/3): UDP on TLS port')}
-    evidence.unshift('Port '+pmPort+' — '+reason+(proto?' ('+proto+')':''));
-    if(ispCarrier)evidence.push(ispCarrier+' access network ('+ipRes.raw+')');
-    const category=family==='VPN / Tunnel'?'vpn':family==='Proxy / Tor'?'anonymization':'service';
-    return{provider:ispCarrier||'',tier:4,primary:{service:family,activity:subtype},serviceLabel:label,activityLabel:subtype,serviceConfidence:conf,category,candidates:[],evidence};
-  }
-  // Try known provider DB for less common ports
-  const fallbackCandidates=[];
-  SERVICE_DB.forEach(prov=>{
-    prov.services.forEach(svc=>{
-      const allPorts=[...(svc.ports.tcp||[]),...(svc.ports.udp||[])];
-      if([...ports].some(p=>allPorts.includes(p)))fallbackCandidates.push({provider:prov.pr,service:svc.n,activity:svc.acts[0],port:[...ports].find(p=>allPorts.includes(p))});
+  // No port-table match either: check the provider service catalogues for less common ports
+  // (frontend-only extra signal the backend doesn't have — kept because it can still suggest a
+  // candidate service, at very low confidence, where the shared table says nothing).
+  if(portRes.port==null&&ports.size){
+    const fallbackCandidates=[];
+    SERVICE_DB.forEach(prov=>{
+      (prov.services||[]).forEach(svc=>{
+        const allPorts=[...(svc.ports.tcp||[]),...(svc.ports.udp||[])];
+        if([...ports].some(p=>allPorts.includes(p)))fallbackCandidates.push({provider:prov.pr,service:svc.n,activity:svc.acts[0],port:[...ports].find(p=>allPorts.includes(p))});
+      });
     });
-  });
-  if(fallbackCandidates.length){
-    const best=fallbackCandidates[0];
-    evidence.push('Port '+best.port+' ('+(PORT_SVC[best.port]||'')+') — candidate: '+best.provider+' '+best.service);
-    if(proto)evidence.push(proto+' protocol');
-    if(ispCarrier)evidence.push(ispCarrier+' access network ('+ipRes.raw+')');
-    return{provider:best.provider,providerConfidence:25,tier:4,primary:{service:best.service,activity:best.activity},serviceLabel:'Unknown',activityLabel:'Possible '+best.activity,serviceConfidence:12,candidates:fallbackCandidates.map(c=>({service:c.service,activity:c.activity,score:10})),evidence};
+    if(fallbackCandidates.length){
+      const best=fallbackCandidates[0];
+      evidence.push('Port '+best.port+' ('+(PORT_SVC[best.port]||'')+') — candidate: '+best.provider+' '+best.service);
+      if(proto)evidence.push(proto+' protocol');
+      return{provider:best.provider,providerConfidence:25,tier:4,primary:{service:best.service,activity:best.activity},serviceLabel:'Unknown',activityLabel:'Possible '+best.activity,serviceConfidence:12,candidates:fallbackCandidates.map(c=>({service:c.service,activity:c.activity,score:10})),evidence};
+    }
   }
-  return ispCarrier?accessNet():{provider:'',tier:4,primary:{service:'Unknown',activity:'Traffic'},serviceLabel:'Unknown',activityLabel:'Traffic',serviceConfidence:8,candidates:[],evidence:['No matching provider or service signature']};
+  // Pure port-layer result: a table/range match, the behavioural fallback, or Unknown — all
+  // shaped exactly like the backend's attribute_service() return for the same record.
+  return{provider:'',tier:4,primary:{service:portRes.family,activity:portRes.subtype},serviceLabel:portRes.service,activityLabel:portRes.subtype,serviceConfidence:portRes.confidence,category:portRes.category,candidates:[],evidence:portRes.evidence};
 }
 
-export { isIspProvider, ipInRange, ipKind, ipHint, trafficPattern, scoreProvider, pickBest, recordSvcAttr, matchService };
+export { isIspProvider, ipInRange, ipKind, ipHint, trafficPattern, scoreProvider, pickBest, recordSvcAttr, matchService, classifyByPort, fallbackClassify };
