@@ -62,6 +62,6 @@ exe = EXE(
     pyz, a.scripts, [], exclude_binaries=True,
     name="ARGUS",
     console=True,          # keep a console so the operator can see the URL / stop it
-    icon=None,             # set to an .ico path if you have one
+    icon=os.path.join(os.getcwd(), "assets", "logo.ico"),  # taskbar / Explorer / shortcut icon
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="ARGUS")
