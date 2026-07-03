@@ -8,22 +8,32 @@ Admin-only: a snapshot contains every table including credential hashes and the 
 """
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.config import settings
-from app.core.database import engine
+from app.core.database import app_data_dir, engine
 from app.models.auth import User
 from app.services.auth_service import get_current_admin
 from app.services.backup_service import export_database
 
 router = APIRouter()
 
+_DEFAULT_BACKUP_DIR = "backups"
+
 
 def _backup_dir() -> Path:
-    d = Path(settings.BACKUP_DIR)
+    # The default BACKUP_DIR ("backups") is CWD-relative — inside Program Files for a frozen
+    # install, which a standard user can't write to (same failure mode as the SQLite fallback in
+    # core/database.py). Route the unconfigured default to the writable app-data dir instead; an
+    # operator-set BACKUP_DIR (e.g. a dedicated backup volume) is respected as-is.
+    if settings.BACKUP_DIR == _DEFAULT_BACKUP_DIR and getattr(sys, "frozen", False):
+        d = app_data_dir() / "backups"
+    else:
+        d = Path(settings.BACKUP_DIR)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -49,7 +59,7 @@ def create_backup(_admin: User = Depends(get_current_admin)):
 @router.get("")
 def list_backups(_admin: User = Depends(get_current_admin)):
     """List snapshots in the backup directory, newest first."""
-    d = Path(settings.BACKUP_DIR)
+    d = _backup_dir()
     if not d.exists():
         return []
     items = [
