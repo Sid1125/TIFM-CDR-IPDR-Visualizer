@@ -1,526 +1,641 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ARGUS — Advanced Records &amp; Geospatial Unified Surveillance</title>
-  <meta name="description" content="ARGUS is a full-stack, air-gapped telecom forensics platform for law enforcement: CDR/IPDR ingestion, session reconstruction, movement mapping, spatiotemporal inference, and court-ready reporting.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="icon" type="image/png" href="backend/static/logo-mark.png">
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>ARGUS - Advanced Records &amp; Geospatial Unified Surveillance</title>
+ <meta name="description" content="ARGUS is a full-stack, air-gapped telecom forensics platform for law enforcement: CDR/IPDR ingestion, session reconstruction, movement mapping, spatiotemporal inference, and court-ready reporting.">
+ <link rel="preconnect" href="https://fonts.googleapis.com">
+ <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+ <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+ <link rel="stylesheet" href="styles.css">
+ <link rel="icon" type="image/png" href="backend/static/logo-mark.png">
 </head>
 <body>
+ <div id="scroll-progress"></div>
 
-  <nav id="navbar">
-    <div class="nav-inner">
-      <a href="#" class="logo">ARGUS</a>
-      <ul class="nav-links">
-        <li><a href="#how">How it works</a></li>
-        <li><a href="#features">Features</a></li>
-        <li><a href="#architecture">Architecture</a></li>
-        <li><a href="#stats">Metrics</a></li>
-        <li><a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank">GitHub</a></li>
-      </ul>
-      <button id="menu-toggle" aria-label="Menu">Menu</button>
-    </div>
-  </nav>
+ <nav id="navbar">
+ <div class="nav-inner">
+ <a href="#" class="logo">ARGUS</a>
+ <ul class="nav-links">
+ <li><a href="#how">How it works</a></li>
+ <li><a href="#features">Features</a></li>
+ <li><a href="#architecture">Architecture</a></li>
+ <li><a href="#stats">Metrics</a></li>
+ <li><a href="docs.html">Docs</a></li>
+ <li><a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank">GitHub</a></li>
+ </ul>
+ <button id="menu-toggle" aria-label="Menu">Menu</button>
+ </div>
+ </nav>
 
-  <section id="hero">
-    <div class="hero-inner">
-      <div class="hero-logo">
-        <img src="backend/static/logo-readme.png" alt="ARGUS" class="hero-img">
-      </div>
-      <div class="hero-desc">
-        <p>A full-stack telecom forensics platform for law enforcement. Ingest CDR, IPDR, tower and subscriber data at 1–5M+ record scale, reconstruct sessions and movement, surface leads through a spatiotemporal inference engine and fine-tuned AI — and walk out with a court-ready, chain-of-custody dossier. Fully offline, air-gapped by design.</p>
-      </div>
-      <div class="hero-btns">
-        <a href="#features" class="btn btn-primary">Explore features</a>
-        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank" class="btn btn-outline">View on GitHub</a>
-      </div>
-    </div>
-  </section>
+ <section id="hero">
+ <canvas id="hero-canvas" aria-hidden="true"></canvas>
+ <div class="hero-inner">
+ <div class="hero-copy">
+ <div class="hero-kicker">
+ <span>Air-gapped telecom forensics</span>
+ <span>Evidence-grade intelligence</span>
+ </div>
+ <div class="hero-logo">
+ <img src="backend/static/logo-mark.png" alt="ARGUS Logo" class="hero-img">
+ </div>
+ <h1 class="hero-title">ARGUS</h1>
+ <div class="hero-tagline">Advanced Records &amp; Geospatial Unified Surveillance</div>
+ <div class="hero-desc">
+ <p>A full-stack telecom forensics platform for law enforcement. Ingest CDR, IPDR, tower and subscriber data at 1-5M+ record scale, reconstruct sessions and movement, surface leads through a spatiotemporal inference engine and fine-tuned AI - and walk out with a court-ready, chain-of-custody dossier. Fully offline, air-gapped by design.</p>
+ </div>
+ <div class="hero-btns">
+ <a href="#features" class="btn btn-primary">Explore features</a>
+ <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank" class="btn btn-outline">View on GitHub</a>
+ </div>
+ </div>
 
-  <section id="how">
-    <div class="section-header">
-      <h2>How it works</h2>
-      <div class="sep"><span></span><i></i><span></span></div>
-      <p class="section-sub">Four stages from raw telecom dumps to evidence that stands up in court.</p>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">01</div>
-        <h3>Ingest</h3>
-        <p>Upload CDR, IPDR, tower registry, tower dumps, and subscriber (SDR) data — CSV, XLS, XLSX or TXT. Operator-aware column mapping handles real ISP dump formats, with preview, append-or-replace modes, and a validation report of every coerced or dropped row.</p>
-      </div>
-      <div class="step-line"></div>
-      <div class="step">
-        <div class="step-num">02</div>
-        <h3>Analyze</h3>
-        <p>Force-directed network graphs, six tower-map modes, entity timelines with Gantt session bars, and 20 chart types. Two-layer service attribution — longest-prefix CIDR over 62 providers plus a 264-rule port table shared by both engines.</p>
-      </div>
-      <div class="step-line"></div>
-      <div class="step">
-        <div class="step-num">03</div>
-        <h3>Investigate</h3>
-        <p>The inference engine scores subjects 0–100 and flags impossible travel, SIM clones, convoys, hidden links, beaconing, and VPN usage. Cross-case linking spots reoffenders. A fine-tuned local LLM answers questions and drafts reports — no cloud.</p>
-      </div>
-      <div class="step-line"></div>
-      <div class="step">
-        <div class="step-num">04</div>
-        <h3>Report</h3>
-        <p>Pin findings, chart snapshots and flagged records into a per-case evidence folder, then generate an official, print-to-PDF case dossier — letterhead, persons of interest, key findings, methodology — with every action on an append-only audit trail.</p>
-      </div>
-    </div>
-  </section>
+ <div class="hero-visual" aria-hidden="true">
+ <div class="intel-panel">
+ <div class="panel-top">
+ <span class="panel-dot"></span>
+ <span>Case Signal Board</span>
+ <strong>LIVE</strong>
+ </div>
+ <div class="map-frame">
+ <div class="map-grid"></div>
+ <span class="tower tower-a"></span>
+ <span class="tower tower-b"></span>
+ <span class="tower tower-c"></span>
+ <span class="route route-one"></span>
+ <span class="route route-two"></span>
+ <span class="scan-ring"></span>
+ </div>
+ <div class="intel-list">
+ <div><span>Risk score</span><strong>87</strong></div>
+ <div><span>Co-location hits</span><strong>14</strong></div>
+ <div><span>Impossible travel</span><strong>3</strong></div>
+ </div>
+ <div class="trace-bars">
+ <span style="--h:62%"></span>
+ <span style="--h:38%"></span>
+ <span style="--h:78%"></span>
+ <span style="--h:44%"></span>
+ <span style="--h:91%"></span>
+ <span style="--h:55%"></span>
+ <span style="--h:70%"></span>
+ </div>
+ </div>
+ </div>
+ </div>
+ <div class="hero-metrics">
+ <span>1-5M+ record cases</span>
+ <span>26 API routers</span>
+ <span>47 ES modules</span>
+ <span>Offline local AI</span>
+ </div>
+ </section>
 
-  <section id="features">
-    <div class="section-header">
-      <h2>Features</h2>
-      <div class="sep"><span></span><i></i><span></span></div>
-      <p class="section-sub">Twenty-two functional areas purpose-built for forensic investigation workflows.</p>
-    </div>
+ <section id="how">
+ <div class="section-header">
+ <h2>How it works</h2>
+ <div class="sep"><span></span><i></i><span></span></div>
+ <p class="section-sub">Four stages from raw telecom dumps to evidence that stands up in court.</p>
+ </div>
+ <div class="steps">
+ <div class="step">
+ <div class="step-num">01</div>
+ <h3>Ingest</h3>
+ <p>Upload CDR, IPDR, tower registry, tower dumps, and subscriber (SDR) data - CSV, XLS, XLSX or TXT. Operator-aware column mapping handles real ISP dump formats, with preview, append-or-replace modes, and a validation report of every coerced or dropped row.</p>
+ </div>
+ <div class="step-line"></div>
+ <div class="step">
+ <div class="step-num">02</div>
+ <h3>Analyze</h3>
+ <p>Force-directed network graphs, six tower-map modes, entity timelines with Gantt session bars, and 20 chart types. Two-layer service attribution - longest-prefix CIDR over 62 providers plus a 264-rule port table shared by both engines.</p>
+ </div>
+ <div class="step-line"></div>
+ <div class="step">
+ <div class="step-num">03</div>
+ <h3>Investigate</h3>
+ <p>The inference engine scores subjects 0-100 and flags impossible travel, SIM clones, convoys, hidden links, beaconing, and VPN usage. Cross-case linking spots reoffenders. A fine-tuned local LLM answers questions and drafts reports - no cloud.</p>
+ </div>
+ <div class="step-line"></div>
+ <div class="step">
+ <div class="step-num">04</div>
+ <h3>Report</h3>
+ <p>Pin findings, chart snapshots and flagged records into a per-case evidence folder, then generate an official, print-to-PDF case dossier - letterhead, persons of interest, key findings, methodology - with every action on an append-only audit trail.</p>
+ </div>
+ </div>
+ </section>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Data Ingestion</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>CDR / IPDR Upload</h4>
-          <p>Voice, SMS and IP-session records. CSV, XLS, XLSX, TXT. Preview before commit, append or replace per upload, all data scoped per case.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Operator Column Mapping</h4>
-          <p>Aliased headers from Airtel/Jio/Vi/BSNL-style dumps resolve onto canonical fields, with an editable mapping UI and row-by-row date parsing.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Import Validation Report</h4>
-          <p>Every upload reports rows imported, dropped and date-coerced — with example dropped rows — so silent misparsing can't happen.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Permanent Tower Repository</h4>
-          <p>Global tower master auto-harvested from every upload. Upsert semantics never clobber coordinates; offline reverse-geocoding fills city/state.</p>
-        </div>
-        <div class="feat-card" data-delay="4">
-          <div class="fc-accent"></div>
-          <h4>Subscriber (SDR) Data</h4>
-          <p>Enrich subjects with subscriber profiles, global by MSISDN. Identity cards appear on profiles and flow into dossier persons-of-interest.</p>
-        </div>
-      </div>
-    </div>
+ <section id="features">
+ <div class="section-header">
+ <h2>Features</h2>
+ <div class="sep"><span></span><i></i><span></span></div>
+ <p class="section-sub">Twenty-two functional areas purpose-built for forensic investigation workflows.</p>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Dashboard</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>KPI Summary</h4>
-          <p>Records, reconstructed sessions, top contact, top service, unique subjects, geo-fenced counts and activity spikes — at a glance.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Data Quality Score</h4>
-          <p>0–100 completeness score with a transparent penalty breakdown — missing towers, coordinates, durations, invalid timestamps.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Period Comparison</h4>
-          <p>Compare two date ranges: volume deltas, new/lost/shared contacts, subjects, towers, and service-usage changes.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Cross-Case Hits Panel</h4>
-          <p>Subjects from this case that also appear in other cases surface on the dashboard the moment the case opens.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Data Ingestion</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>CDR / IPDR Upload</h4>
+ <p>Voice, SMS and IP-session records. CSV, XLS, XLSX, TXT. Preview before commit, append or replace per upload, all data scoped per case.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Operator Column Mapping</h4>
+ <p>Aliased headers from Airtel/Jio/Vi/BSNL-style dumps resolve onto canonical fields, with an editable mapping UI and row-by-row date parsing.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Import Validation Report</h4>
+ <p>Every upload reports rows imported, dropped and date-coerced - with example dropped rows - so silent misparsing can't happen.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Permanent Tower Repository</h4>
+ <p>Global tower master auto-harvested from every upload. Upsert semantics never clobber coordinates; offline reverse-geocoding fills city/state.</p>
+ </div>
+ <div class="feat-card" data-delay="4">
+ <div class="fc-accent"></div>
+ <h4>Subscriber (SDR) Data</h4>
+ <p>Enrich subjects with subscriber profiles, global by MSISDN. Identity cards appear on profiles and flow into dossier persons-of-interest.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Network Graph</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>Server-Built Bounded Graph</h4>
-          <p>D3 force layout over a top-N heaviest-edge subgraph with true full-coverage node weights — never assembles 500k records in the browser.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Canvas at Scale</h4>
-          <p>Large networks switch to a canvas force renderer: zoom, pan, hover, search-highlight and per-node drag stay smooth into the thousands of nodes.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>CDR/IPDR Separation</h4>
-          <p>Call and IP networks render as disjoint components with distinct colours. No false cross-attribution, ever.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Centrality &amp; Communities</h4>
-          <p>PageRank, degree/betweenness leaderboards, greedy-modularity communities and structural bridges via NetworkX.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Dashboard</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>KPI Summary</h4>
+ <p>Records, reconstructed sessions, top contact, top service, unique subjects, geo-fenced counts and activity spikes - at a glance.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Data Quality Score</h4>
+ <p>0-100 completeness score with a transparent penalty breakdown - missing towers, coordinates, durations, invalid timestamps.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Period Comparison</h4>
+ <p>Compare two date ranges: volume deltas, new/lost/shared contacts, subjects, towers, and service-usage changes.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Cross-Case Hits Panel</h4>
+ <p>Subjects from this case that also appear in other cases surface on the dashboard the moment the case opens.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Tower Map — 6 Modes</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>Movement Path</h4>
-          <p>Chronological legs graded by estimated travel mode (walking → road → rail → air → impossible), with direction arrows and a playback scrubber.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Heatmap &amp; Zones</h4>
-          <p>Gaussian density surface weighted by visit count, plus operational-zone circles — every location stays clickable.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Meetings &amp; Co-location</h4>
-          <p>Server-side exact co-location detection across the whole case, colour-coded by time gap with High/Medium/Low confidence.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Triangulation</h4>
-          <p>Tech-aware coverage cells (1–15 km) with inverse-variance weighted position fixes, uncertainty circles and Turf.js overlap polygons.</p>
-        </div>
-        <div class="feat-card" data-delay="4">
-          <div class="fc-accent"></div>
-          <h4>Inference Overlays &amp; Geofence</h4>
-          <p>Impossible-travel legs, co-presence pairs and home/work anchors drawn on the map; draw a polygon to list every subject inside it.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Network Graph</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>Server-Built Bounded Graph</h4>
+ <p>D3 force layout over a top-N heaviest-edge subgraph with true full-coverage node weights - never assembles 500k records in the browser.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Canvas at Scale</h4>
+ <p>Large networks switch to a canvas force renderer: zoom, pan, hover, search-highlight and per-node drag stay smooth into the thousands of nodes.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>CDR/IPDR Separation</h4>
+ <p>Call and IP networks render as disjoint components with distinct colours. No false cross-attribution, ever.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Centrality &amp; Communities</h4>
+ <p>PageRank, degree/betweenness leaderboards, greedy-modularity communities and structural bridges via NetworkX.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Timeline &amp; Session Intelligence</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>Entity Timeline</h4>
-          <p>Lazy, paginated entity cards with activity-density strips, Gantt session bars coloured by service (100+), and side-by-side comparison.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Session Reconstruction</h4>
-          <p>IPDR rows bucket into concurrent (peer, activity-family) tracks split on family-adaptive idle gaps — interleaved apps stay separate sessions.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Service Attribution</h4>
-          <p>Two-layer engine: longest-prefix CIDR over 62 providers, a shared 264-rule port table, behavioural fingerprinting and QUIC awareness.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Evidence-Grade Tooltips</h4>
-          <p>Every session bar explains itself: confidence, evidence tree (infrastructure / ports / behaviour / signals), alternatives, and an integrity hash.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Tower Map - 6 Modes</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>Movement Path</h4>
+ <p>Chronological legs graded by estimated travel mode (walking -> road -> rail -> air -> impossible), with direction arrows and a playback scrubber.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Heatmap &amp; Zones</h4>
+ <p>Gaussian density surface weighted by visit count, plus operational-zone circles - every location stays clickable.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Meetings &amp; Co-location</h4>
+ <p>Server-side exact co-location detection across the whole case, colour-coded by time gap with High/Medium/Low confidence.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Triangulation</h4>
+ <p>Tech-aware coverage cells (1-15 km) with inverse-variance weighted position fixes, uncertainty circles and Turf.js overlap polygons.</p>
+ </div>
+ <div class="feat-card" data-delay="4">
+ <div class="fc-accent"></div>
+ <h4>Inference Overlays &amp; Geofence</h4>
+ <p>Impossible-travel legs, co-presence pairs and home/work anchors drawn on the map; draw a polygon to list every subject inside it.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Inference Engine</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>Composite Risk Score</h4>
-          <p>Per-subject 0–100 scoring with a transparent factor breakdown. Independent CDR and IPDR leaderboards, watchlist hits forced to Critical.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Movement &amp; Co-presence</h4>
-          <p>Impossible travel, home/work anchors, mobility footprint, convoy detection, and "met but never called" hidden links.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Identity &amp; Device</h4>
-          <p>SIM swap, clone and burner detection with clone corroboration (impossible travel + multi-handset), keyed on MSISDN.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Behavioural &amp; VPN</h4>
-          <p>Activity bursts (z-score), odd-hours share, periodic-contact cadence, going-dark shifts, beaconing, and scored VPN/proxy likelihood.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Timeline &amp; Session Intelligence</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>Entity Timeline</h4>
+ <p>Lazy, paginated entity cards with activity-density strips, Gantt session bars coloured by service (100+), and side-by-side comparison.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Session Reconstruction</h4>
+ <p>IPDR rows bucket into concurrent (peer, activity-family) tracks split on family-adaptive idle gaps - interleaved apps stay separate sessions.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Service Attribution</h4>
+ <p>Two-layer engine: longest-prefix CIDR over 62 providers, a shared 264-rule port table, behavioural fingerprinting and QUIC awareness.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Evidence-Grade Tooltips</h4>
+ <p>Every session bar explains itself: confidence, evidence tree (infrastructure / ports / behaviour / signals), alternatives, and an integrity hash.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Investigation Workflow</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>Story — Narrative &amp; Timeline</h4>
-          <p>An auto-written case narrative plus one unified, day-grouped feed merging calls, movement, meetings, identity changes, cross-case links and AI findings.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Evidence Folder</h4>
-          <p>Pin findings, chart snapshots, graph captures and flagged records into a per-case folder with a dedicated tab — it all flows into the dossier.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Court-Ready Dossier</h4>
-          <p>Official print-to-PDF report: agency letterhead, classification banners, executive summary, POI cards, key findings, charts, methodology appendix.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Chain-of-Custody Audit</h4>
-          <p>Append-only audit log of every login, upload, export, dossier and view — who, from where, against which case — surfaced in an admin panel.</p>
-        </div>
-        <div class="feat-card" data-delay="4">
-          <div class="fc-accent"></div>
-          <h4>Workspace &amp; Intel Tags</h4>
-          <p>Hypotheses with supported/refuted status, labelled relationships between subjects, and global intel tags that follow an identifier across cases.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Inference Engine</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>Composite Risk Score</h4>
+ <p>Per-subject 0-100 scoring with a transparent factor breakdown. Independent CDR and IPDR leaderboards, watchlist hits forced to Critical.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Movement &amp; Co-presence</h4>
+ <p>Impossible travel, home/work anchors, mobility footprint, convoy detection, and "met but never called" hidden links.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Identity &amp; Device</h4>
+ <p>SIM swap, clone and burner detection with clone corroboration (impossible travel + multi-handset), keyed on MSISDN.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Behavioural &amp; VPN</h4>
+ <p>Activity bursts (z-score), odd-hours share, periodic-contact cadence, going-dark shifts, beaconing, and scored VPN/proxy likelihood.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Field Analysis Pack</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>CDR Analysis Reports</h4>
-          <p>Per-subject report pack: first/last calls, single-call days, day/night split, ISD and other-state calls, OFF periods, IMEI/IMSI summaries, bank-SMS.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Group Compare</h4>
-          <p>Pick N subjects and get common contacts, towers, cell-IDs, locations and IMEIs, plus a who-called-whom matrix.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Tower Dump Analysis</h4>
-          <p>Numbers present across multiple crime scenes, elimination lists, under-tower listings, and SIM/IMEI multiplicity.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Telecom Reference</h4>
-          <p>Offline lookups: number series → operator/circle, ISD codes → country, IMEI TAC → make/model. No internet required.</p>
-        </div>
-        <div class="feat-card" data-delay="4">
-          <div class="fc-accent"></div>
-          <h4>Legal Framework (Laws)</h4>
-          <p>Searchable Indian legal reference for CDR/IPDR work — BNSS, Telecom Act 2023, IT Act, BSA §63 certificates, retention and privacy safeguards.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Investigation Workflow</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>Story - Narrative &amp; Timeline</h4>
+ <p>An auto-written case narrative plus one unified, day-grouped feed merging calls, movement, meetings, identity changes, cross-case links and AI findings.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Evidence Folder</h4>
+ <p>Pin findings, chart snapshots, graph captures and flagged records into a per-case folder with a dedicated tab - it all flows into the dossier.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Court-Ready Dossier</h4>
+ <p>Official print-to-PDF report: agency letterhead, classification banners, executive summary, POI cards, key findings, charts, methodology appendix.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Chain-of-Custody Audit</h4>
+ <p>Append-only audit log of every login, upload, export, dossier and view - who, from where, against which case - surfaced in an admin panel.</p>
+ </div>
+ <div class="feat-card" data-delay="4">
+ <div class="fc-accent"></div>
+ <h4>Workspace &amp; Intel Tags</h4>
+ <p>Hypotheses with supported/refuted status, labelled relationships between subjects, and global intel tags that follow an identifier across cases.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Cross-Case &amp; AI</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>Cross-Case Linking</h4>
-          <p>Reoffenders detected by number, IMEI, IMSI or IP (low-confidence flagged). List and link-graph views, per-case rollups, open-in-case jumps.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Fine-Tuned Local AI</h4>
-          <p>QLoRA fine-tuned Qwen2.5-3B with 3,218 training examples and five-agent orchestration — Q&amp;A and report drafting, fully offline.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Investigation Command Center</h4>
-          <p>One click runs a 12-module PoliceInvestigator: findings, identity, anomalies, sessions, network hierarchy, location, call details, temporal.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>AI Insights &amp; Leads</h4>
-          <p>Ranked investigation leads, z-score activity spikes, subject summaries and suggested questions — with useful/false-positive feedback capture.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Field Analysis Pack</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>CDR Analysis Reports</h4>
+ <p>Per-subject report pack: first/last calls, single-call days, day/night split, ISD and other-state calls, OFF periods, IMEI/IMSI summaries, bank-SMS.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Group Compare</h4>
+ <p>Pick N subjects and get common contacts, towers, cell-IDs, locations and IMEIs, plus a who-called-whom matrix.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Tower Dump Analysis</h4>
+ <p>Numbers present across multiple crime scenes, elimination lists, under-tower listings, and SIM/IMEI multiplicity.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Telecom Reference</h4>
+ <p>Offline lookups: number series -> operator/circle, ISD codes -> country, IMEI TAC -> make/model. No internet required.</p>
+ </div>
+ <div class="feat-card" data-delay="4">
+ <div class="fc-accent"></div>
+ <h4>Legal Framework (Laws)</h4>
+ <p>Searchable Indian legal reference for CDR/IPDR work - BNSS, Telecom Act 2023, IT Act, BSA Sec. 63 certificates, retention and privacy safeguards.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Security &amp; Administration</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>Hardened Sessions</h4>
-          <p>PBKDF2-SHA256 (210k iterations), HttpOnly cookies, sliding expiry, multi-session tracking with revoke-everywhere.</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>AFK Auto-Logout</h4>
-          <p>Four-stage idle status (Active → Idle → Expiring → Expired) with automatic session revocation after 10 minutes.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Admin User Management</h4>
-          <p>Create, edit, deactivate and reset users with investigator/admin roles — plus the filterable audit-log panel.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>Case Management</h4>
-          <p>Every record scoped to a case. Create, switch, reset and delete cases; towers stay global; data persists across sessions.</p>
-        </div>
-      </div>
-    </div>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Cross-Case &amp; AI</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>Cross-Case Linking</h4>
+ <p>Reoffenders detected by number, IMEI, IMSI or IP (low-confidence flagged). List and link-graph views, per-case rollups, open-in-case jumps.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Fine-Tuned Local AI</h4>
+ <p>QLoRA fine-tuned Qwen2.5-3B with 3,218 training examples and five-agent orchestration - Q&amp;A and report drafting, fully offline.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Investigation Command Center</h4>
+ <p>One click runs a 12-module PoliceInvestigator: findings, identity, anomalies, sessions, network hierarchy, location, call details, temporal.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>AI Insights &amp; Leads</h4>
+ <p>Ranked investigation leads, z-score activity spikes, subject summaries and suggested questions - with useful/false-positive feedback capture.</p>
+ </div>
+ </div>
+ </div>
 
-    <div class="feature-group">
-      <div class="fg-title">
-        <span class="fg-line"></span>
-        <h3>Scale &amp; Deployment</h3>
-      </div>
-      <div class="fg-grid">
-        <div class="feat-card" data-delay="0">
-          <div class="fc-accent"></div>
-          <h4>1–5M+ Record Cases</h4>
-          <p>Bounded client mirror with server-side authoritative analytics, background full-load, and indexed longest-prefix IP matching (~14 µs/row).</p>
-        </div>
-        <div class="feat-card" data-delay="1">
-          <div class="fc-accent"></div>
-          <h4>Materialised Analytics</h4>
-          <p>Event-driven, versioned analytics cache with incremental updates on append — dashboards and reports open instantly on revisit.</p>
-        </div>
-        <div class="feat-card" data-delay="2">
-          <div class="fc-accent"></div>
-          <h4>Optional Accelerators</h4>
-          <p>Offline-first capability layer: PostgreSQL with SQLite fallback, optional Redis cache tier, Celery jobs, trigram/FTS5 search, partitioning.</p>
-        </div>
-        <div class="feat-card" data-delay="3">
-          <div class="fc-accent"></div>
-          <h4>One-File Windows Installer</h4>
-          <p>PyInstaller + Inno Setup build: self-contained ARGUS.exe, zero configuration, air-gapped capable, ~122 MB installer.</p>
-        </div>
-        <div class="feat-card" data-delay="4">
-          <div class="fc-accent"></div>
-          <h4>Modular ES-Module Frontend</h4>
-          <p>47 native ES modules — core, services, and one controller per feature — with no build toolchain, loading directly in the browser.</p>
-        </div>
-      </div>
-    </div>
-  </section>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Security &amp; Administration</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>Hardened Sessions</h4>
+ <p>PBKDF2-SHA256 (210k iterations), HttpOnly cookies, sliding expiry, multi-session tracking with revoke-everywhere.</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>AFK Auto-Logout</h4>
+ <p>Four-stage idle status (Active -> Idle -> Expiring -> Expired) with automatic session revocation after 10 minutes.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Admin User Management</h4>
+ <p>Create, edit, deactivate and reset users with investigator/admin roles - plus the filterable audit-log panel.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>Case Management</h4>
+ <p>Every record scoped to a case. Create, switch, reset and delete cases; towers stay global; data persists across sessions.</p>
+ </div>
+ </div>
+ </div>
 
-  <section id="architecture">
-    <div class="section-header">
-      <h2>Architecture</h2>
-      <div class="sep"><span></span><i></i><span></span></div>
-      <p class="section-sub">Three-layer design built for air-gapped, self-contained deployment.</p>
-    </div>
-    <div class="arch-grid">
-      <div class="arch-card">
-        <div class="arch-top">
-          <span class="arch-num">01</span>
-          <div class="arch-line"></div>
-        </div>
-        <h3>Data Layer</h3>
-        <p>PostgreSQL primary with automatic SQLite fallback. SQLAlchemy ORM across 15 models. Optional Redis cache tier and Celery workers. Trigram and FTS5-accelerated search, opt-in partitioning.</p>
-        <div class="arch-chips">
-          <span>PostgreSQL</span><span>SQLite</span><span>Redis</span><span>Celery</span>
-        </div>
-      </div>
-      <div class="arch-card">
-        <div class="arch-top">
-          <span class="arch-num">02</span>
-          <div class="arch-line"></div>
-        </div>
-        <h3>Analysis Layer</h3>
-        <p>FastAPI with 26 routers and 24 services. Pandas ingestion, NetworkX graph analytics, an in-process event bus driving materialised analytics, and a shared attribution knowledge base consumed by both engines.</p>
-        <div class="arch-chips">
-          <span>FastAPI</span><span>Pandas</span><span>NetworkX</span><span>D3.js</span>
-        </div>
-      </div>
-      <div class="arch-card">
-        <div class="arch-top">
-          <span class="arch-num">03</span>
-          <div class="arch-line"></div>
-        </div>
-        <h3>Intelligence Layer</h3>
-        <p>QLoRA fine-tuned Qwen2.5-3B, five-agent orchestration, a 12-module PoliceInvestigator, and the spatiotemporal inference engine. Court-ready dossier generation with chain-of-custody references.</p>
-        <div class="arch-chips">
-          <span>Qwen2.5-3B</span><span>QLoRA</span><span>Transformers</span>
-        </div>
-      </div>
-    </div>
-  </section>
+ <div class="feature-group">
+ <div class="fg-title">
+ <span class="fg-line"></span>
+ <h3>Scale &amp; Deployment</h3>
+ </div>
+ <div class="fg-grid">
+ <div class="feat-card" data-delay="0">
+ <div class="fc-accent"></div>
+ <h4>1-5M+ Record Cases</h4>
+ <p>Bounded client mirror with server-side authoritative analytics, background full-load, and indexed longest-prefix IP matching (~14 microseconds/row).</p>
+ </div>
+ <div class="feat-card" data-delay="1">
+ <div class="fc-accent"></div>
+ <h4>Materialised Analytics</h4>
+ <p>Event-driven, versioned analytics cache with incremental updates on append - dashboards and reports open instantly on revisit.</p>
+ </div>
+ <div class="feat-card" data-delay="2">
+ <div class="fc-accent"></div>
+ <h4>Optional Accelerators</h4>
+ <p>Offline-first capability layer: PostgreSQL with SQLite fallback, optional Redis cache tier, Celery jobs, trigram/FTS5 search, partitioning.</p>
+ </div>
+ <div class="feat-card" data-delay="3">
+ <div class="fc-accent"></div>
+ <h4>One-File Windows Installer</h4>
+ <p>PyInstaller + Inno Setup build: self-contained ARGUS.exe, zero configuration, air-gapped capable, ~122 MB installer.</p>
+ </div>
+ <div class="feat-card" data-delay="4">
+ <div class="fc-accent"></div>
+ <h4>Modular ES-Module Frontend</h4>
+ <p>47 native ES modules - core, services, and one controller per feature - with no build toolchain, loading directly in the browser.</p>
+ </div>
+ </div>
+ </div>
+ </section>
 
-  <section id="stats">
-    <div class="section-header">
-      <h2>Metrics</h2>
-      <div class="sep"><span></span><i></i><span></span></div>
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card"><span class="stat-num" data-target="26">0</span><span class="stat-label">API Routers</span></div>
-      <div class="stat-card"><span class="stat-num" data-target="24">0</span><span class="stat-label">Services</span></div>
-      <div class="stat-card"><span class="stat-num" data-target="47">0</span><span class="stat-label">Frontend Modules</span></div>
-      <div class="stat-card"><span class="stat-num" data-target="242">0</span><span class="stat-label">Backend Tests</span></div>
-      <div class="stat-card"><span class="stat-num" data-target="62">0</span><span class="stat-label">Provider DB</span></div>
-      <div class="stat-card"><span class="stat-num" data-target="264">0</span><span class="stat-label">Port Rules</span></div>
-      <div class="stat-card"><span class="stat-num" data-target="3218">0</span><span class="stat-label">AI Training Examples</span></div>
-      <div class="stat-card"><span class="stat-num" data-target="22">0</span><span class="stat-label">Functional Areas</span></div>
-    </div>
-  </section>
+ <section id="architecture">
+ <div class="section-header">
+ <h2>Architecture</h2>
+ <div class="sep"><span></span><i></i><span></span></div>
+ <p class="section-sub">Three-layer design built for air-gapped, self-contained deployment.</p>
+ </div>
+ <div class="arch-grid">
+ <div class="arch-card">
+ <div class="arch-top">
+ <span class="arch-num">01</span>
+ <div class="arch-line"></div>
+ </div>
+ <h3>Data Layer</h3>
+ <p>PostgreSQL primary with automatic SQLite fallback. SQLAlchemy ORM across 15 models. Optional Redis cache tier and Celery workers. Trigram and FTS5-accelerated search, opt-in partitioning.</p>
+ <div class="arch-chips">
+ <span>PostgreSQL</span><span>SQLite</span><span>Redis</span><span>Celery</span>
+ </div>
+ </div>
+ <div class="arch-card">
+ <div class="arch-top">
+ <span class="arch-num">02</span>
+ <div class="arch-line"></div>
+ </div>
+ <h3>Analysis Layer</h3>
+ <p>FastAPI with 26 routers and 24 services. Pandas ingestion, NetworkX graph analytics, an in-process event bus driving materialised analytics, and a shared attribution knowledge base consumed by both engines.</p>
+ <div class="arch-chips">
+ <span>FastAPI</span><span>Pandas</span><span>NetworkX</span><span>D3.js</span>
+ </div>
+ </div>
+ <div class="arch-card">
+ <div class="arch-top">
+ <span class="arch-num">03</span>
+ <div class="arch-line"></div>
+ </div>
+ <h3>Intelligence Layer</h3>
+ <p>QLoRA fine-tuned Qwen2.5-3B, five-agent orchestration, a 12-module PoliceInvestigator, and the spatiotemporal inference engine. Court-ready dossier generation with chain-of-custody references.</p>
+ <div class="arch-chips">
+ <span>Qwen2.5-3B</span><span>QLoRA</span><span>Transformers</span>
+ </div>
+ </div>
+ </div>
+ </section>
 
-  <section id="cta">
-    <div class="cta-inner">
-      <h2>Analyze · Correlate · Protect</h2>
-      <div class="sep"><span></span><i></i><span></span></div>
-      <p>Self-contained Windows installer. Zero configuration. Air-gapped capable.</p>
-      <div class="cta-btns">
-        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank" class="btn btn-navy">View on GitHub</a>
-        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer#readme" target="_blank" class="btn btn-ghost">Read the docs</a>
-      </div>
-    </div>
-  </section>
+ <section id="stats">
+ <div class="section-header">
+ <h2>Metrics</h2>
+ <div class="sep"><span></span><i></i><span></span></div>
+ </div>
+ <div class="stats-grid">
+ <div class="stat-card">
+ <span class="stat-num" data-target="26">0</span>
+ <span class="stat-label">API Routers</span>
+ <div class="stat-sparkline">
+ <svg viewBox="0 0 100 30" class="sparkline">
+ <path d="M 0 25 Q 15 15, 30 22 T 60 8 T 90 18 T 100 12"></path>
+ </svg>
+ </div>
+ </div>
+ <div class="stat-card">
+ <span class="stat-num" data-target="24">0</span>
+ <span class="stat-label">Services</span>
+ <div class="stat-sparkline">
+ <svg viewBox="0 0 100 30" class="sparkline">
+ <path d="M 0 20 Q 20 8, 40 24 T 80 12 T 100 6"></path>
+ </svg>
+ </div>
+ </div>
+ <div class="stat-card">
+ <span class="stat-num" data-target="47">0</span>
+ <span class="stat-label">Frontend Modules</span>
+ <div class="stat-sparkline">
+ <svg viewBox="0 0 100 30" class="sparkline">
+ <path d="M 0 28 L 20 18 L 40 24 L 60 8 L 80 14 L 100 2"></path>
+ </svg>
+ </div>
+ </div>
+ <div class="stat-card">
+ <span class="stat-num" data-target="242">0</span>
+ <span class="stat-label">Backend Tests</span>
+ <div class="stat-sparkline">
+ <svg viewBox="0 0 100 30" class="sparkline">
+ <path d="M 0 24 Q 15 18, 30 10 T 60 14 T 85 6 T 100 2"></path>
+ </svg>
+ </div>
+ </div>
+ <div class="stat-card">
+ <span class="stat-num" data-target="62">0</span>
+ <span class="stat-label">Provider DB</span>
+ <div class="stat-sparkline">
+ <svg viewBox="0 0 100 30" class="sparkline">
+ <path d="M 0 18 Q 25 26, 50 12 T 75 22 T 100 16"></path>
+ </svg>
+ </div>
+ </div>
+ <div class="stat-card">
+ <span class="stat-num" data-target="264">0</span>
+ <span class="stat-label">Port Rules</span>
+ <div class="stat-sparkline">
+ <svg viewBox="0 0 100 30" class="sparkline">
+ <path d="M 0 22 L 20 18 L 40 12 L 60 20 L 80 6 L 100 10"></path>
+ </svg>
+ </div>
+ </div>
+ <div class="stat-card">
+ <span class="stat-num" data-target="3218">0</span>
+ <span class="stat-label">AI Training Examples</span>
+ <div class="stat-sparkline">
+ <svg viewBox="0 0 100 30" class="sparkline">
+ <path d="M 0 28 Q 20 20, 40 22 T 80 8 T 100 2"></path>
+ </svg>
+ </div>
+ </div>
+ <div class="stat-card">
+ <span class="stat-num" data-target="22">0</span>
+ <span class="stat-label">Functional Areas</span>
+ <div class="stat-sparkline">
+ <svg viewBox="0 0 100 30" class="sparkline">
+ <path d="M 0 20 Q 20 18, 40 15 T 80 10 T 100 12"></path>
+ </svg>
+ </div>
+ </div>
+ </div>
+ </section>
 
-  <footer>
-    <div class="footer-inner">
-      <div class="footer-col">
-        <div class="footer-brand">ARGUS</div>
-        <p class="footer-desc">Advanced Records &amp; Geospatial Unified Surveillance. Empowering law enforcement with intelligence.</p>
-      </div>
-      <div class="footer-col">
-        <h4>Links</h4>
-        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank">Repository</a>
-        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer#readme" target="_blank">Documentation</a>
-        <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer/issues" target="_blank">Report issue</a>
-      </div>
-      <div class="footer-col">
-        <h4>Stack</h4>
-        <span>Python · FastAPI · PostgreSQL</span>
-        <span>D3.js · Leaflet · Turf.js · Chart.js</span>
-        <span>Qwen2.5-3B · NetworkX</span>
-        <span>PyInstaller · Inno Setup</span>
-      </div>
-    </div>
-    <div class="footer-bottom">Empowering Law Enforcement with Intelligence</div>
-  </footer>
+ <section id="cta">
+ <div class="cta-inner">
+ <h2>Analyze / Correlate / Protect</h2>
+ <div class="sep"><span></span><i></i><span></span></div>
+ <p>Self-contained Windows installer. Zero configuration. Air-gapped capable.</p>
+ <div class="cta-btns">
+ <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank" class="btn btn-navy">View on GitHub</a>
+ <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer#readme" target="_blank" class="btn btn-ghost">Read the docs</a>
+ </div>
+ </div>
+ </section>
 
-  <script src="app.js"></script>
+ <footer>
+ <div class="footer-inner">
+ <div class="footer-col">
+ <div class="footer-brand">ARGUS</div>
+ <p class="footer-desc">Advanced Records &amp; Geospatial Unified Surveillance. Empowering law enforcement with intelligence.</p>
+ </div>
+ <div class="footer-col">
+ <h4>Links</h4>
+ <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer" target="_blank">Repository</a>
+ <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer#readme" target="_blank">Documentation</a>
+ <a href="https://github.com/Sid1125/TIFM-CDR-IPDR-Visualizer/issues" target="_blank">Report issue</a>
+ </div>
+ <div class="footer-col">
+ <h4>Stack</h4>
+ <span>Python / FastAPI / PostgreSQL</span>
+ <span>D3.js / Leaflet / Turf.js / Chart.js</span>
+ <span>Qwen2.5-3B / NetworkX</span>
+ <span>PyInstaller / Inno Setup</span>
+ </div>
+ </div>
+ <div class="footer-bottom">Empowering Law Enforcement with Intelligence</div>
+ </footer>
+
+ <script src="app.js"></script>
 </body>
 </html>
