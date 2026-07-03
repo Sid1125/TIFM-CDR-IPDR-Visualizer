@@ -908,6 +908,14 @@ button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
 .story-narr-h{margin:0 0 8px;font-size:.95rem;color:var(--accent);text-transform:uppercase;letter-spacing:.6px}
 .story-narr-list{margin:0;padding-left:18px;font-size:.86rem;line-height:1.7}
 .story-narr-list li{margin-bottom:4px}
+/* Day-grouped narrative paragraphs */
+.story-narr-paras{font-size:.86rem;line-height:1.75}
+.story-narr-paras p{margin:0 0 10px}
+.story-para-intro{padding-bottom:8px;border-bottom:1px dotted var(--line)}
+.story-para-day h5{margin:10px 0 3px;font-size:.78rem;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.story-para-day p{margin:0 0 8px}
+.story-para-more{color:var(--muted);font-style:italic;font-size:.8rem}
+.story-para-flags{margin-top:8px;padding-top:8px;border-top:1px dotted var(--line)}
 .story-tl{position:relative;padding-left:8px}
 .story-day{font-weight:700;font-size:.8rem;color:var(--text);margin:14px 0 8px;padding-bottom:3px;border-bottom:1px solid var(--line)}
 .story-ev{display:flex;gap:10px;padding:5px 0;position:relative}

@@ -23,6 +23,7 @@ export const EVK={
   call:{c:'#3a7d5a',g:'☎',l:'Call'},
   sms:{c:'#4a929c',g:'✉',l:'SMS'},
   data:{c:'#7b4f9c',g:'⇄',l:'Data'},
+  activity:{c:'#1f7a8c',g:'▶',l:'Activity event'},
   move:{c:'#b07d2b',g:'▲',l:'Movement'},
   meeting:{c:'#b94a48',g:'⚑',l:'Meeting'},
   identity:{c:'#8b5cf6',g:'↻',l:'Identity change'},

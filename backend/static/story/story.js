@@ -10,6 +10,7 @@ import { state } from '../core/state.js';
 import { subjLabel, subjLabelTxt } from '../core/subjects.js';
 import { rowsFor, towerMeta } from '../data/records.js';
 import { recordSvcAttr } from '../services/attribution.js';
+import { reconstructSessions } from '../services/sessions.js';
 import { buildIdentityProfile } from '../services/identity.js';
 import { getInfReport, INF } from '../services/inference.js';
 import { ensureMeetingsLoaded, meetingsCache } from '../services/meetings.js';
@@ -38,6 +39,19 @@ export async function buildCaseEvents(subject){
     const ipr=owned.filter(r=>r.type==='IPDR').sort((a,b)=>new Date(a.ts)-new Date(b.ts));
     if(ipr.length){const svcCount={};ipr.forEach(r=>{const s=recordSvcAttr(r)||r.svc||'Unknown';svcCount[s]=(svcCount[s]||0)+1;});const top=Object.entries(svcCount).sort((a,b)=>b[1]-a[1])[0];
       ev.push({ts:new Date(ipr[0].ts),kind:'data',title:'Internet activity begins',detail:ipr.length+' data session'+(ipr.length===1?'':'s')+(top?'; dominant: '+top[0]:''),sub:subject});}
+    // Activity events: the synthesized per-session reads ("Probable WhatsApp Voice Call · 86%").
+    // Bounded to the notable ones — confident enough AND long/heavy enough to narrate.
+    try{
+      reconstructSessions(subject)
+        .filter(s=>s.eventTitle&&(s.eventConfidence||0)>=55&&((s.duration||0)>=60||(s.records||0)>=5))
+        .slice(0,120)
+        .forEach(s=>{
+          const durTxt=s.duration>=3600?(s.duration/3600).toFixed(1)+' h':s.duration>=60?Math.round(s.duration/60)+' min':(s.duration||0)+' s';
+          ev.push({ts:new Date(s.start),kind:'activity',title:s.eventTitle,
+            detail:durTxt+' · '+(s.eventActivity||'')+' · '+(s.eventConfidence||0)+'% confidence'+(s.provider?' · '+s.provider:''),
+            sub:subject,end:s.end,conf:s.eventConfidence,dur:s.duration});
+        });
+    }catch(e){}
     // Distinct-tower first visits (bounded)
     const towFirst={};owned.filter(r=>r.tow).forEach(r=>{const t=new Date(r.ts);if(!towFirst[r.tow]||t<towFirst[r.tow])towFirst[r.tow]=t;});
     const tm=towerMeta?towerMeta():{};
@@ -78,6 +92,62 @@ export async function getStoryXcase(){
   return _storyXcaseCache[k];
 }
 
+// ── Narrative synthesis: events -> day-grouped prose paragraphs ──
+const _dayKey=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const _dayLabel=ts=>new Date(ts).toLocaleDateString([], {year:'numeric',month:'long',day:'numeric'});
+const _hm=ts=>new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+const _durTxt=s=>s>=3600?(s/3600).toFixed(1)+' h':s>=60?Math.round(s/60)+' min':s+' s';
+const _list=(items,max)=>{const shown=items.slice(0,max);return shown.join(', ')+(items.length>max?' and '+(items.length-max)+' more':'')};
+
+// One prose paragraph for one day of one subject's life in the case.
+function _dayParagraph(dayEvents,dayRecords){
+  const parts=[];
+  // Voice/SMS from the raw CDR rows of that day (the milestone feed only marks FIRST contact).
+  const cdr=dayRecords.filter(r=>r.type==='CDR');
+  if(cdr.length){
+    const isSms=r=>((r.cll||'')+'').toUpperCase().includes('SMS');
+    const calls=cdr.filter(r=>!isSms(r)),sms=cdr.filter(isSms);
+    if(calls.length){
+      const byPeer={};calls.forEach(r=>{if(r.cnt)byPeer[r.cnt]=(byPeer[r.cnt]||0)+1});
+      const peers=Object.entries(byPeer).sort((a,b)=>b[1]-a[1]);
+      const totalMin=Math.round(calls.reduce((s,r)=>s+(r.dur||0),0)/60);
+      let s='made or received <b>'+calls.length+'</b> call'+(calls.length===1?'':'s')
+        +(totalMin?' ('+totalMin+' min total)':'');
+      if(peers.length)s+=', most frequently with <b>'+esc(peers[0][0])+'</b>'+(peers[0][1]>1?' ('+peers[0][1]+' calls)':'');
+      parts.push(s);
+    }
+    if(sms.length)parts.push('exchanged <b>'+sms.length+'</b> SMS message'+(sms.length===1?'':'s'));
+  }
+  // Activity events: group identical titles into one clause each.
+  const acts=dayEvents.filter(e=>e.kind==='activity');
+  if(acts.length){
+    const byTitle={};
+    acts.forEach(e=>{(byTitle[e.title]=byTitle[e.title]||[]).push(e)});
+    Object.entries(byTitle).forEach(([title,list])=>{
+      const lower=title.charAt(0).toLowerCase()+title.slice(1);
+      const best=list.reduce((a,b)=>(b.conf||0)>(a.conf||0)?b:a,list[0]);
+      const longest=list.reduce((m,e)=>Math.max(m,e.dur||0),0);
+      if(list.length===1){
+        const e=list[0];
+        parts.push('at <b>'+_hm(e.ts)+'</b>'+(e.end?'–'+_hm(e.end):'')+', a <b>'+esc(lower)+'</b>'
+          +(e.dur?' ('+_durTxt(e.dur)+', '+(e.conf||0)+'% confidence)':' ('+(e.conf||0)+'% confidence)'));
+      }else{
+        parts.push('<b>'+list.length+'</b> sessions read as <b>'+esc(lower)+'</b> between <b>'+_hm(list[0].ts)+'</b> and <b>'+_hm(list[list.length-1].ts)+'</b>'
+          +(longest?' (longest '+_durTxt(longest)+', up to '+(best.conf||0)+'% confidence)':''));
+      }
+    });
+  }
+  // Meetings, movement, identity changes of that day.
+  dayEvents.filter(e=>e.kind==='meeting').slice(0,3).forEach(m=>parts.push('was <b>co-located with '+esc(m.cnt||'?')+'</b> at '+_hm(m.ts)+' ('+esc(m.detail||'')+')'));
+  const moves=dayEvents.filter(e=>e.kind==='move');
+  if(moves.length)parts.push('appeared at '+(moves.length===1?'a new tower':moves.length+' new towers')+': '+_list(moves.map(m=>esc(m.title.replace('First seen at tower ',''))),3));
+  dayEvents.filter(e=>e.kind==='identity').forEach(c=>parts.push('<b>'+esc(c.title.toLowerCase())+'</b> ('+esc(c.detail||'')+')'));
+  if(!parts.length)return null;
+  // Assemble: "The subject <part>; <part>; and <part>."
+  let body=parts.length===1?parts[0]:parts.slice(0,-1).join('; ')+'; and '+parts[parts.length-1];
+  return 'The subject '+body+'.';
+}
+
 export function buildStoryNarrative(subject,events){
   if(subject==='__all__'){
     const meetings=events.filter(e=>e.kind==='meeting').length,ids=events.filter(e=>e.kind==='identity').length,xc=events.filter(e=>e.kind==='crosscase').length,ai=events.filter(e=>e.kind==='ai').length;
@@ -87,25 +157,44 @@ export function buildStoryNarrative(subject,events){
     p+='Select a subject above to read their individual story.';
     return '<p>'+p+'</p>';
   }
-  const lines=[];
+  const paras=[];
+  // Intro paragraph: who, when, principal contacts, footprint, cross-case.
   const first=events.find(e=>e.kind==='first');
-  if(first)lines.push('<b>'+subjLabel(subject)+'</b> first appears in this case on <b>'+_fmtDT(first.ts)+'</b> ('+esc(first.detail)+').');
-  const ids=events.filter(e=>e.kind==='identity');
-  ids.forEach(c=>lines.push('On <b>'+_fmtDT(c.ts)+'</b>, '+esc(c.title.toLowerCase())+' &mdash; '+esc(c.detail)+'.'));
   const contacts=events.filter(e=>e.kind==='call');
-  if(contacts.length){const top=contacts[0];lines.push('Communication with <b>'+esc(top.cnt)+'</b> began on <b>'+_fmtDT(top.ts)+'</b>'+(contacts.length>1?', among '+contacts.length+' principal contacts':'')+'.');}
-  const data=events.find(e=>e.kind==='data');
-  if(data)lines.push('Internet activity '+(first&&data.ts-first.ts>3600000?'shifted online':'is present')+' from <b>'+_fmtDT(data.ts)+'</b> ('+esc(data.detail)+').');
   const moves=events.filter(e=>e.kind==='move');
-  if(moves.length)lines.push('The subject was active across <b>'+moves.length+(moves.length>=8?'+':'')+'</b> distinct towers'+(moves[0]?', first at '+esc(moves[0].title.replace('First seen at tower ',''))+' on '+_fmtDT(moves[0].ts):'')+'.');
-  const meets=events.filter(e=>e.kind==='meeting');
-  if(meets.length){const m=meets[0];lines.push('A co-location was detected with <b>'+esc(m.cnt)+'</b> on <b>'+_fmtDT(m.ts)+'</b> ('+esc(m.detail)+')'+(meets.length>1?', one of '+meets.length+' meetings':'')+'.');}
   const xcs=events.filter(e=>e.kind==='crosscase');
-  if(xcs.length)lines.push('<b>Cross-case:</b> this subject also appears in '+xcs.length+' other case'+(xcs.length===1?'':'s')+' &mdash; '+xcs.map(x=>esc(x.title.replace('Also appears in case ',''))).slice(0,4).join(', ')+'.');
+  let intro='';
+  if(first)intro+='<b>'+subjLabel(subject)+'</b> first appears in this case on <b>'+_fmtDT(first.ts)+'</b> ('+esc(first.detail)+'). ';
+  if(contacts.length)intro+='Principal contacts: '+_list(contacts.map(c=>'<b>'+esc(c.cnt)+'</b>'),4)+'. ';
+  if(moves.length)intro+='Their movement footprint covers <b>'+moves.length+(moves.length>=8?'+':'')+'</b> distinct towers. ';
+  if(xcs.length)intro+='<b>Cross-case:</b> the subject also appears in '+xcs.length+' other case'+(xcs.length===1?'':'s')+' ('+_list(xcs.map(x=>esc(x.title.replace('Also appears in case ',''))),3)+'). ';
+  if(intro)paras.push('<p class="story-para-intro">'+intro+'</p>');
+  // Day paragraphs: every day that has narratable events or records, busiest days kept
+  // when there are too many to read.
+  const owned=state.data.records.filter(r=>r.ts&&(r.sub===subject||r.msisdn===subject));
+  const recsByDay={};owned.forEach(r=>{(recsByDay[_dayKey(r.ts)]=recsByDay[_dayKey(r.ts)]||[]).push(r)});
+  const evByDay={};events.filter(e=>['activity','meeting','move','identity'].includes(e.kind)).forEach(e=>{(evByDay[_dayKey(e.ts)]=evByDay[_dayKey(e.ts)]||[]).push(e)});
+  const allDays=[...new Set([...Object.keys(recsByDay),...Object.keys(evByDay)])].sort();
+  let days=allDays;
+  const MAX_DAYS=10;
+  if(allDays.length>MAX_DAYS){
+    // Keep the busiest days, in chronological order, plus first + last for the arc.
+    const weight=d=>((recsByDay[d]||[]).length)+((evByDay[d]||[]).length)*5;
+    const busiest=allDays.slice().sort((a,b)=>weight(b)-weight(a)).slice(0,MAX_DAYS-2);
+    days=[...new Set([allDays[0],...busiest,allDays[allDays.length-1]])].sort();
+  }
+  let skipped=0;
+  days.forEach(d=>{
+    const para=_dayParagraph(evByDay[d]||[],recsByDay[d]||[]);
+    if(!para){skipped++;return}
+    paras.push('<div class="story-para-day"><h5>'+esc(_dayLabel((evByDay[d]||recsByDay[d])[0].ts))+'</h5><p>'+para+'</p></div>');
+  });
+  if(allDays.length>days.length)paras.push('<p class="story-para-more">'+(allDays.length-days.length+skipped)+' further active day'+((allDays.length-days.length+skipped)===1?'':'s')+' omitted for brevity — the full detail is in the timeline below.</p>');
+  // Flags paragraph: AI findings summarized last.
   const ais=events.filter(e=>e.kind==='ai');
-  ais.forEach(a=>lines.push('<b>AI:</b> '+esc(a.title)+' ('+esc(a.detail)+').'));
-  if(!lines.length)return '<p class="story-muted">Not enough data to reconstruct a narrative for this subject.</p>';
-  return '<ol class="story-narr-list">'+lines.map(l=>'<li>'+l+'</li>').join('')+'</ol>';
+  if(ais.length)paras.push('<p class="story-para-flags"><b>Flags:</b> '+_list(ais.map(a=>esc(a.title)),5)+'.</p>');
+  if(!paras.length)return '<p class="story-muted">Not enough data to reconstruct a narrative for this subject.</p>';
+  return '<div class="story-narr-paras">'+paras.join('')+'</div>';
 }
 
 async function renderStory(){
