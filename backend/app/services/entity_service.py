@@ -297,9 +297,21 @@ def build_entities(cdr_records, ipdr_records):
     for ident in list(uf.parent):
         groups[uf.find(ident)].append(ident)
 
+    # Bucket the binding pairs by entity root ONCE. The per-entity link list used to rescan the
+    # whole global pair table for every entity — O(entities × pairs), which on a large multi-case
+    # dataset (esp. with a dense SIM-box mesh producing tens of thousands of pairs) ran for
+    # minutes and timed the request out. Now each entity reads only its own pairs: O(pairs) total.
+    pairs_by_root = defaultdict(list)
+    for (ia, ib), count in pair_evidence.items():
+        if ia in hubs or ib in hubs:
+            continue  # a pair through a hub was never merged; it isn't binding evidence
+        ra = uf.find(ia)
+        if ra == uf.find(ib):
+            pairs_by_root[ra].append((ia, ib, count))
+
     entities = []
     phone_to_entity = {}
-    for members in groups.values():
+    for root, members in groups.items():
         members.sort()
         phones = sorted(v for t, v in members if t == "phone")
         imsis = sorted(v for t, v in members if t == "imsi")
@@ -323,10 +335,8 @@ def build_entities(cdr_records, ipdr_records):
         # link — type, witnessing record count, the co-occurrence time window, the endpoints'
         # fan-out, and a confidence tier — so every merge is auditable, not asserted.
         links = []
-        member_set = set(members)
         max_internal_fanout = 0
-        for (ia, ib), count in pair_evidence.items():
-            if ia in member_set and ib in member_set:
+        for (ia, ib, count) in pairs_by_root.get(root, ()):
                 fanout = max(
                     max((len(v) for v in type_partners[ia].values()), default=1),
                     max((len(v) for v in type_partners[ib].values()), default=1),
