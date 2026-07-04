@@ -201,7 +201,7 @@ async function _renderXcEntities(){
       +'<span class="xc-sub-meta">'+n(h.record_count)+' rec &middot; '+h.cases.length+' cases</span></div>'
       +'<div class="xc-ent-finding">'+esc(h.finding||'')+'</div>'
       +'<div class="xc-ent-cases">'+Object.entries(h.per_case||{}).map(([cid,ids])=>
-        '<span class="xc-ent-case"><b>Case '+esc(cid)+'</b>: '+ids.slice(0,4).map(x=>esc(x.value)).join(', ')+(ids.length>4?' +'+(ids.length-4):'')+'</span>').join('')+'</div>'
+        '<span class="xc-ent-case"><b>'+esc((h.case_names&&h.case_names[cid])||('Case '+cid))+'</b>: '+ids.slice(0,4).map(x=>esc(x.value)).join(', ')+(ids.length>4?' +'+(ids.length-4):'')+'</span>').join('')+'</div>'
       +'</div>')).join('');
   box.querySelectorAll('.xc-ent-card').forEach(c=>c.onclick=()=>window.showEntity&&window.showEntity(c.dataset.eid));
 }

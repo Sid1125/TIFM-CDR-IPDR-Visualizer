@@ -208,6 +208,9 @@ def subject_cross_case(db: Session, case_id: str, subject: str, with_activity: b
     if not case_id or not subject:
         return {"subject": subject, "kind": None, "matches": []}
 
+    # Checked across BOTH record types: an IPDR-only case (no CDR rows at all) still has phone
+    # subjects via IPDRRecord.msisdn — a CDR-only check would silently classify every subject as
+    # "kind: None" there and cross-case matching would never fire for that case.
     is_phone = (
         db.query(CDRRecord.id)
         .filter(
@@ -218,6 +221,11 @@ def subject_cross_case(db: Session, case_id: str, subject: str, with_activity: b
                 CDRRecord.msisdn == subject,
             ),
         )
+        .first()
+        is not None
+    ) or (
+        db.query(IPDRRecord.id)
+        .filter(IPDRRecord.case_id == case_id, IPDRRecord.msisdn == subject)
         .first()
         is not None
     )
@@ -411,13 +419,26 @@ def case_cross_case_overview(db: Session, case_id: str, limit: int = 100) -> dic
 
     hits = []
 
-    # --- phones: current case owner numbers + the handsets/SIMs behind each ---
+    # --- phones: current case owner numbers + the handsets/SIMs behind each. Seeded from BOTH
+    # CDR (a_party_number) and IPDR (msisdn) — an IPDR-only case (no CDR rows) would otherwise
+    # never populate cur_numbers and its subjects could never surface a cross-case hit here.
     subj_imeis: dict = defaultdict(set)
     subj_imsis: dict = defaultdict(set)
     cur_numbers: set = set()
     for num, imei, imsi in (
         db.query(CDRRecord.a_party_number, CDRRecord.imei, CDRRecord.imsi)
         .filter(CDRRecord.case_id == case_id, CDRRecord.a_party_number.isnot(None))
+        .distinct()
+        .all()
+    ):
+        cur_numbers.add(num)
+        if imei:
+            subj_imeis[num].add(imei)
+        if imsi:
+            subj_imsis[num].add(imsi)
+    for num, imei, imsi in (
+        db.query(IPDRRecord.msisdn, IPDRRecord.imei, IPDRRecord.imsi)
+        .filter(IPDRRecord.case_id == case_id, IPDRRecord.msisdn.isnot(None))
         .distinct()
         .all()
     ):

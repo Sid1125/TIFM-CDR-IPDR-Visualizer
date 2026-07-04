@@ -26,6 +26,7 @@ from datetime import datetime
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.models.case import Case
 from app.models.cdr import CDRRecord
 from app.models.entity import (Entity, EntityIdentifier, EntityMergeDecision,
                                EntityRelationship, EntitySyncState)
@@ -467,6 +468,21 @@ def ego_graph(db: Session, scope: str, uid: str, limit: int = 80):
 # ---------------------------------------------------------------------------
 # Cross-case entity intelligence
 # ---------------------------------------------------------------------------
+def _case_names(db: Session, case_ids) -> dict:
+    """case_id (string, as stored on records) -> display name. Case.id is an integer PK but
+    case_id columns are stored as strings, so cast both ways rather than assuming format."""
+    ids = []
+    for c in case_ids:
+        try:
+            ids.append(int(c))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return {}
+    rows = db.query(Case.id, Case.name).filter(Case.id.in_(ids)).all()
+    return {str(i): name for i, name in rows}
+
+
 def entity_cross_case(db: Session, limit: int = 100):
     """Entities (global resolution scope) that span more than one case — 'this ENTITY appears
     in another case', with the per-case identifier breakdown that justifies it. This is the
@@ -476,6 +492,10 @@ def entity_cross_case(db: Session, limit: int = 100):
     rows = (db.query(Entity)
             .filter(Entity.case_scope == "")
             .order_by(Entity.record_count.desc()).all())
+    all_cases: set = set()
+    for row in rows:
+        all_cases |= set(json.loads(row.payload or "{}").get("cases") or [])
+    case_names = _case_names(db, all_cases)
     hits = []
     for row in rows:
         e = entity_payload(row)
@@ -509,6 +529,7 @@ def entity_cross_case(db: Session, limit: int = 100):
                      "reviewed_status": row.reviewed_status,
                      "record_count": row.record_count,
                      "flags": e.get("flags", []), "cases": cases,
+                     "case_names": {c: case_names.get(c, f"Case {c}") for c in cases},
                      "per_case": per_case, "finding": finding})
         if len(hits) >= limit:
             break
