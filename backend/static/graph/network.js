@@ -11,9 +11,66 @@ import { state } from '../core/state.js';
 import { API } from '../core/api.js';
 import { isSuspect, subjTag, subjLabelTxt } from '../core/subjects.js';
 import { showProfile } from '../records/profile.js';
+import { showEntity } from '../entities/entities.js';
 import { registerTab } from '../core/router.js';
 
 let curGraphNodes=null,curGraphLinks=null,curGraphSim=null,curCentrality=null;
+
+// ── Group-by-entity: collapse identifiers resolved to the same person into one node ──
+// Identifier -> entity map from /entities (cached per case). Phones/IMSIs/IMEIs always map;
+// an IP maps only when it belongs to exactly ONE entity — a shared CGNAT address seen on
+// several people stays an individual node rather than wrongly fusing their networks.
+const ENTITY_COLOR='#1f7a8c';
+let _entCache={caseId:undefined,map:null,label:null,flags:null};
+async function _entityMap(){
+  const cid=state.data.caseId||'';
+  if(_entCache.caseId===cid&&_entCache.map)return _entCache;
+  const res=await API.get('/entities/'+(cid?'?case_id='+encodeURIComponent(cid):''));
+  const map={},label={},flags={},ipOwner={};
+  (res.entities||[]).forEach(e=>{
+    [...e.phones,...e.imsis,...e.imeis].forEach(v=>map[v]=e.id);
+    (e.ips||[]).forEach(i=>{ipOwner[i.ip]=(i.ip in ipOwner&&ipOwner[i.ip]!==e.id)?'__shared__':e.id;});
+    label[e.id]=e.label;flags[e.id]=e.flags||[];
+  });
+  Object.entries(ipOwner).forEach(([ip,eid])=>{if(eid!=='__shared__')map[ip]=eid;});
+  _entCache={caseId:cid,map,label,flags};
+  return _entCache;
+}
+// Rewrite (nodes, links) so all identifiers of one entity become a single super-node;
+// intra-entity edges (a person calling their own other number) collapse away.
+function _groupByEntity(nodes,links,{map,label,flags}){
+  const byKey={};const outNodes=[];
+  const keyOf=id=>map[id]||id;
+  for(const n of nodes){
+    const k=keyOf(n.id);
+    let m=byKey[k];
+    if(!m){
+      m=byKey[k]=k.startsWith('ent_')
+        ?{id:k,label:label[k]||k,weight:0,kind:'entity',members:[],flags:flags[k]||[]}
+        :{...n,weight:0};
+      outNodes.push(m);
+    }
+    m.weight+=n.weight;
+    if(m.kind==='entity')m.members.push(n.id);
+  }
+  const byEdge={};const outLinks=[];
+  for(const l of links){
+    const s=keyOf(l.source),t=keyOf(l.target);
+    if(s===t)continue;
+    const k=s<t?s+'|'+t:t+'|'+s;
+    let e=byEdge[k];
+    if(!e){e=byEdge[k]={key:k,source:s,target:t,weight:0};outLinks.push(e);}
+    e.weight+=l.weight;
+  }
+  return {nodes:outNodes,links:outLinks};
+}
+function _entHover(d,links){
+  const shown=d.members.slice(0,8).map(esc).join(', ')+(d.members.length>8?' +'+(d.members.length-8)+' more':'');
+  const fl=(d.flags||[]).length?'<br><span style="font-size:0.62rem;color:#8b5cf6">'+d.flags.map(esc).join(' · ')+'</span>':'';
+  return `<strong>&#128100; ${esc(d.label)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${ENTITY_COLOR};color:#fff">ENTITY</span>${fl}<br>`
+    +`${d.members.length} identifier${d.members.length===1?'':'s'}: <span style="font-size:0.7rem">${shown}</span><br>Total weight: ${d.weight}<br>`
+    +`<button class="btn btn-sm" onclick="showEntity('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">Open entity</button>`;
+}
 // Cleanup for the canvas graph's window-level drag listeners, so they never stack across reloads.
 let _gCanvasDragCleanup=null;
 // Network Intelligence sidebar panel — surfaces the server's full-graph centrality leaderboards
@@ -70,9 +127,13 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
   (state.watchlist||[]).forEach(e=>{const g=e.group_name||'Default';if(!_grpColor[g])_grpColor[g]=_grpPalette[_gi++%_grpPalette.length];});
   const _stroke=id=>{const e=(state.watchlist||[]).find(x=>x.value===id);return e?(_grpColor[e.group_name||'Default']||'#e03131'):'#fff';};
   const textColor=(getComputedStyle(document.body).getPropertyValue('--text')||'#333').trim()||'#333';
-  const nodeR=d=>Math.max(2.5,Math.min(14,d.weight*0.18));
+  const nodeR=d=>Math.max(2.5,Math.min(14,d.weight*0.18))+(d.kind==='entity'?1.5:0);
   let transform=d3.zoomIdentity, hl='';
-  const match=d=>{const id=(d.id||d);return id.toLowerCase().includes(hl);};
+  const match=d=>{
+    if(typeof d!=='object')return String(d).toLowerCase().includes(hl);
+    return d.id.toLowerCase().includes(hl)
+      ||(d.kind==='entity'&&(((d.label||'').toLowerCase().includes(hl))||d.members.some(m=>m.toLowerCase().includes(hl))));
+  };
   function draw(){
     ctx.save();
     ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -86,12 +147,12 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
     for(const d of nodes){
       const dim=hl&&!match(d);
       ctx.globalAlpha=dim?0.12:1;ctx.beginPath();ctx.arc(d.x,d.y,nodeR(d),0,6.2832);
-      ctx.fillStyle=d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'#2c6f79');ctx.fill();
+      ctx.fillStyle=d.id===subject?'#b94a48':(d.kind==='entity'?'#1f7a8c':d.kind==='ipdr'?'#7b4f9c':'#2c6f79');ctx.fill();
       if(isSuspect(d.id)){ctx.lineWidth=2.5/transform.k;ctx.strokeStyle=_stroke(d.id);ctx.stroke();}
     }
     if(transform.k>1.5){
       ctx.globalAlpha=1;ctx.fillStyle=textColor;ctx.font=(10/transform.k)+'px sans-serif';
-      for(const d of nodes){if(hl&&!match(d))continue;ctx.fillText(d.id.length>16?d.id.slice(0,16)+'…':d.id,d.x+nodeR(d)+2/transform.k,d.y+3/transform.k);}
+      for(const d of nodes){if(hl&&!match(d))continue;const nm=d.kind==='entity'?((d.label||d.id)+(d.members.length>1?' ('+d.members.length+')':'')):d.id;ctx.fillText(nm.length>16?nm.slice(0,16)+'…':nm,d.x+nodeR(d)+2/transform.k,d.y+3/transform.k);}
     }
     ctx.restore();
   }
@@ -174,7 +235,7 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
     // release the pin so forces relax around the dropped node; if it wasn't really moved, treat the
     // gesture as a click and open the profile.
     const d=dragNode;d.fx=null;d.fy=null;dragNode=null;canvas.style.cursor='grab';
-    if(!d._moved)showProfile(d.id);
+    if(!d._moved){if(d.kind==='entity')showEntity(d.id);else showProfile(d.id);}
   };
   canvas.addEventListener('mousedown',onDown);
   window.addEventListener('mousemove',onMove);
@@ -184,7 +245,7 @@ function _renderGraphCanvas(nodes,links,subject,w,h){
     if(dragNode)return;  // don't fight the drag cursor/hover while dragging
     const rc=canvas.getBoundingClientRect();const d=nodeAt(ev.clientX-rc.left,ev.clientY-rc.top);
     canvas.style.cursor=d?'pointer':'grab';
-    if(d)D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>Total weight: ${d.weight}<br><button class="btn btn-sm" onclick="showSubjectRecords('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">View Records</button>`;
+    if(d)D.graphDetails.innerHTML=d.kind==='entity'?_entHover(d,links):`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>Total weight: ${d.weight}<br><button class="btn btn-sm" onclick="showSubjectRecords('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">View Records</button>`;
   });
   D.graphSearch._handler&&D.graphSearch.removeEventListener('input',D.graphSearch._handler);
   D.graphSearch._handler=()=>{hl=D.graphSearch.value.trim().toLowerCase();draw();};
@@ -214,11 +275,22 @@ export async function renderGraph(){
   }catch(e){console.error('graph load',e);D.graphStats.textContent='Failed to load graph.';return;}
   D.graphSvg.innerHTML='<svg width="100%" height="100%"></svg>';
   const svg=d3.select(D.graphSvg).select('svg'),w=D.graphSvg.clientWidth||800,h=D.graphSvg.clientHeight||500;
-  const links=(payload.edges||[]).map(e=>({key:e.source+'|'+e.target,source:e.source,target:e.target,weight:e.weight}));
-  const nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight,kind:n.kind||'cdr'}));
+  let links=(payload.edges||[]).map(e=>({key:e.source+'|'+e.target,source:e.source,target:e.target,weight:e.weight}));
+  let nodes=(payload.nodes||[]).map(n=>({id:n.id,weight:n.weight,kind:n.kind||'cdr'}));
   if(!nodes.length){D.graphStats.textContent='No connections'+(subject?' for this subject':'')+'.';return;}
+  // Group by entity: collapse every identifier resolved to one person into a single node.
+  let grouped=false;
+  const groupBox=document.getElementById('graphGroupEntities');
+  if(groupBox&&groupBox.checked){
+    try{
+      const ent=await _entityMap();
+      const g=_groupByEntity(nodes,links,ent);
+      nodes=g.nodes;links=g.links;grouped=true;
+    }catch(e){console.warn('entity grouping unavailable',e);}
+  }
   const moreEdges=(payload.total_edges||links.length)-(payload.shown_edges||links.length);
-  D.graphStats.textContent=`${nodes.length} nodes, ${links.length} links`+(moreEdges>0?` (top ${links.length} of ${payload.total_edges})`:'')+(payload.total_nodes?` · ${payload.total_nodes} nodes total`:'');
+  const entCount=grouped?nodes.filter(n=>n.kind==='entity').length:0;
+  D.graphStats.textContent=`${nodes.length} nodes${grouped?` (${entCount} entities)`:''}, ${links.length} links`+(moreEdges>0&&!grouped?` (top ${links.length} of ${payload.total_edges})`:'')+(payload.total_nodes?` · ${payload.total_nodes} nodes total`:'')+(grouped?' · grouped by entity':'');
   renderNetworkIntel();  // full-graph centrality leaderboards in the sidebar (fire-and-forget)
 
   // Large network → canvas renderer (scales to thousands of nodes); small → the SVG path below.
@@ -244,8 +316,9 @@ export async function renderGraph(){
   function _nodeStroke(d){const e=(state.watchlist||[]).find(x=>x.value===d.id);if(!e)return '#fff';return _grpColor[e.group_name||'Default']||'#e03131';}
 
   const link=g.append('g').selectAll('line').data(links).join('line').attr('stroke','#dccfc0').attr('stroke-width',d=>Math.max(0.5,Math.min(6,d.weight*0.5))).attr('stroke-opacity',0.6);
-  const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))).style('fill',d=>d.id===subject?'#b94a48':(d.kind==='ipdr'?'#7b4f9c':'var(--accent)')).attr('stroke',d=>_nodeStroke(d)).attr('stroke-width',d=>isSuspect(d.id)?3.5:1.5).style('cursor','pointer')
+  const node=g.append('g').selectAll('circle').data(nodes).join('circle').attr('r',d=>Math.max(4,Math.min(16,d.weight*0.2))+(d.kind==='entity'?2:0)).style('fill',d=>d.id===subject?'#b94a48':(d.kind==='entity'?ENTITY_COLOR:d.kind==='ipdr'?'#7b4f9c':'var(--accent)')).attr('stroke',d=>_nodeStroke(d)).attr('stroke-width',d=>isSuspect(d.id)?3.5:1.5).style('cursor','pointer')
     .on('mouseover',(e,d)=>{
+      if(d.kind==='entity'){D.graphDetails.innerHTML=_entHover(d,links);return;}
       const deg=curCentrality?curCentrality.degree.find(x=>x[0]===d.id):null;
       D.graphDetails.innerHTML=`<strong>${esc(d.id)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${d.kind==='ipdr'?'#7b4f9c':'var(--accent)'};color:#fff">${d.kind==='ipdr'?'IPDR':'CDR'}</span><br>
         Total weight: ${d.weight}<br>
@@ -261,19 +334,25 @@ export async function renderGraph(){
       // froze (nodes undraggable once the initial layout cooled).
       .on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;d._sx=e.x;d._sy=e.y;d._moved=false})
       .on('drag',(e,d)=>{d._moved=true;d.fx=e.x;d.fy=e.y})
-      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;const dx=e.x-(d._sx||0),dy=e.y-(d._sy||0);if(!d._moved||dx*dx+dy*dy<36)showProfile(d.id);}));
+      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;const dx=e.x-(d._sx||0),dy=e.y-(d._sy||0);if(!d._moved||dx*dx+dy*dy<36){if(d.kind==='entity')showEntity(d.id);else showProfile(d.id);}}));
 
   const showTags=!!(D.graphShowTags&&D.graphShowTags.checked);
-  const label=g.append('g').selectAll('text').data(nodes).join('text').text(d=>{const base=d.id.length>12?d.id.slice(0,12)+'...':d.id;if(showTags){const t=subjTag(d.id);if(t)return base+' ('+(t.length>18?t.slice(0,18)+'…':t)+')';}return base;}).attr('font-size','9').attr('dx',d=>Math.max(5,d.weight*0.2+5))   .attr('dy',3).attr('class','graph-label').style('pointer-events','none');
+  const label=g.append('g').selectAll('text').data(nodes).join('text').text(d=>{
+    if(d.kind==='entity'){const nm=d.label||d.id;return '\u{1F464} '+(nm.length>14?nm.slice(0,14)+'…':nm)+(d.members.length>1?' ('+d.members.length+')':'');}
+    const base=d.id.length>12?d.id.slice(0,12)+'...':d.id;if(showTags){const t=subjTag(d.id);if(t)return base+' ('+(t.length>18?t.slice(0,18)+'…':t)+')';}return base;}).attr('font-size','9').attr('dx',d=>Math.max(5,d.weight*0.2+5))   .attr('dy',3).attr('class','graph-label').style('pointer-events','none');
 
   sim.on('tick',()=>{link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);node.attr('cx',d=>d.x).attr('cy',d=>d.y);label.attr('x',d=>d.x).attr('y',d=>d.y)});
 
   // Search
   D.graphSearch._handler&&D.graphSearch.removeEventListener('input',D.graphSearch._handler);
+  // Search matches an entity node by its label or ANY member identifier, not just the node id.
+  const _nodeMatch=(d,q)=>d.id.toLowerCase().includes(q)
+    ||(d.kind==='entity'&&((d.label||'').toLowerCase().includes(q)||d.members.some(m=>m.toLowerCase().includes(q))));
+  const _endMatch=(x,q)=>{const nd=typeof x==='object'?x:{id:String(x)};return _nodeMatch(nd,q);};
   D.graphSearch._handler=()=>{
     const q=D.graphSearch.value.trim().toLowerCase();
-    node.attr('opacity',d=>!q||d.id.toLowerCase().includes(q)?1:0.1);
-    link.attr('opacity',d=>!q||(d.source.id||d.source).toLowerCase().includes(q)||(d.target.id||d.target).toLowerCase().includes(q)?0.4:0.05);
+    node.attr('opacity',d=>!q||_nodeMatch(d,q)?1:0.1);
+    link.attr('opacity',d=>!q||_endMatch(d.source,q)||_endMatch(d.target,q)?0.4:0.05);
   };
   D.graphSearch.addEventListener('input',D.graphSearch._handler);
 
@@ -286,6 +365,7 @@ export async function renderGraph(){
   }
 }
 if(D.graphLimit)D.graphLimit.addEventListener('change',renderGraph);
+{const gb=document.getElementById('graphGroupEntities');if(gb)gb.addEventListener('change',renderGraph);}
 D.graphReset.addEventListener('click',()=>location.reload());
 D.graphCenter.addEventListener('click',()=>{const svg=d3.select(D.graphSvg).select('svg');svg.transition().duration(500).call(d3.zoom().transform,d3.zoomIdentity)});
 if(D.graphShowTags)D.graphShowTags.addEventListener('change',renderGraph);

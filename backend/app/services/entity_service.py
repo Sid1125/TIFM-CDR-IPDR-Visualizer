@@ -115,7 +115,6 @@ def build_entities(cdr_records, ipdr_records):
         for i in range(len(ids)):
             for j in range(i + 1, len(ids)):
                 if ids[i] != ids[j]:
-                    uf.union(ids[i], ids[j])
                     pair_evidence[tuple(sorted((ids[i], ids[j])))] += 1
         b = getattr(record, "b_party_number", None)
         a = getattr(record, "a_party_number", None) or getattr(record, "msisdn", None)
@@ -130,12 +129,35 @@ def build_entities(cdr_records, ipdr_records):
         for i in range(len(ids)):
             for j in range(i + 1, len(ids)):
                 if ids[i] != ids[j]:
-                    uf.union(ids[i], ids[j])
                     pair_evidence[tuple(sorted((ids[i], ids[j])))] += 1
         src = getattr(record, "source_ip", None)
         owner = getattr(record, "msisdn", None)
         if src and owner:
             phone_ips[("phone", owner)][src] += 1
+
+    # Fan-out guard against over-merging. A real device holds a handful of SIMs and a SIM
+    # sits in a handful of devices over its life, so a genuine person's identifiers form a
+    # small tight cluster. An identifier that co-occurs with MANY distinct others of a given
+    # type is not a person — it's a placeholder/invalid value (blank/"0"/all-same-digit IMEI),
+    # a test SIM, or a shared device-farm handset. Union-find is transitive, so unioning
+    # through one such hub would fuse hundreds of unrelated subscribers into a single blob
+    # (observed: one bad IMEI merging 320 phones). Identifiers whose distinct-partner count
+    # for any single type exceeds this cap are treated as non-identifying: we don't merge
+    # THROUGH them (their own records still stand alone). Court-explainable and conservative —
+    # it only ever prevents merges, never invents one.
+    HUB_FANOUT = 12
+    type_partners = defaultdict(lambda: defaultdict(set))  # ident -> {type -> {partner values}}
+    for (ia, ib) in pair_evidence:
+        type_partners[ia][ib[0]].add(ib[1])
+        type_partners[ib][ia[0]].add(ia[1])
+
+    def _is_hub(ident):
+        return any(len(vals) > HUB_FANOUT for vals in type_partners[ident].values())
+
+    hubs = {ident for ident in type_partners if _is_hub(ident)}
+    for (ia, ib) in pair_evidence:
+        if ia not in hubs and ib not in hubs:
+            uf.union(ia, ib)
 
     # Group identifiers into entities.
     groups = defaultdict(list)

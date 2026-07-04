@@ -9,7 +9,7 @@
 import { esc, n, fmt, _fmtDT } from '../core/utils.js';
 import { state } from '../core/state.js';
 import { API } from '../core/api.js';
-import { registerTab } from '../core/router.js';
+import { registerTab, switchTab } from '../core/router.js';
 import { svcColor } from '../core/constants.js';
 
 let _entities=[],_edges=[],_selected=null,_labels={};
@@ -115,5 +115,16 @@ async function _renderDetail(id){
     +'</div></div>';
   box.querySelectorAll('.ent-link[data-ent]').forEach(a=>a.onclick=()=>{_selected=a.dataset.ent;_renderList();_renderDetail(a.dataset.ent);});
 }
+
+// Deep-link: open the Entities tab focused on one entity (used by the Graph tab's
+// entity nodes, and available to inline handlers via the window bridge below).
+export async function showEntity(id){
+  switchTab('entities');
+  _selected=id;
+  if(!_entities.length)await renderEntities();
+  _renderList();
+  _renderDetail(id);
+}
+Object.assign(window,{showEntity});
 
 registerTab('entities', renderEntities);

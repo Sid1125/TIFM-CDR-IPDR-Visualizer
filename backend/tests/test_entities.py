@@ -103,6 +103,27 @@ class EntityResolution(unittest.TestCase):
         self.assertTrue(e["first_seen"].startswith("2026-01-01"))
         self.assertTrue(e["last_seen"].startswith("2026-04-01"))
 
+    def test_placeholder_identifier_does_not_over_merge(self):
+        # One shared/placeholder IMEI ("0") stamped on 40 otherwise-unrelated phones must
+        # NOT fuse them into a single entity (the union-find over-merge hazard). Each phone
+        # stays its own entity; the hub identifier doesn't bridge them.
+        recs = [cdr(msisdn=f"90000{i:03d}", imsi=f"SIM{i}", imei="0",
+                    a_party_number=f"90000{i:03d}") for i in range(40)]
+        r = build_entities(recs, [])
+        self.assertGreaterEqual(len(r["entities"]), 40)
+        biggest = max(r["entities"], key=lambda e: len(e["phones"]))
+        self.assertEqual(len(biggest["phones"]), 1)
+
+    def test_legit_small_cluster_still_merges_under_the_cap(self):
+        # A real multi-SIM/multi-device person (a few identifiers) must still resolve to ONE
+        # entity — the guard only trips on high fan-out, not on normal multiplicity.
+        recs = [cdr(msisdn="111", imsi="SIM1", imei="DEV1"),
+                cdr(msisdn="111", imsi="SIM2", imei="DEV1"),
+                cdr(msisdn="111", imsi="SIM2", imei="DEV2"),
+                cdr(msisdn="222", imsi="SIM2", imei="DEV2")]  # 222 shares SIM2/DEV2 -> same person
+        r = build_entities(recs, [])
+        self.assertEqual(len(r["entities"]), 1)
+
     def test_stable_ids(self):
         recs = [cdr(msisdn="111", imsi="SIM1", imei="DEV1")]
         a = build_entities(recs, [])["entities"][0]["id"]
