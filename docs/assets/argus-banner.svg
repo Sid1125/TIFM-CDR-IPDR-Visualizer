@@ -51,10 +51,10 @@
 
   <!-- wordmark + taglines -->
   <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
-    <text x="250" y="150" font-size="82" font-weight="800" letter-spacing="10" fill="#f5f7f9">ARGUS</text>
-    <text x="254" y="188" font-size="21" font-weight="600" letter-spacing="1.5" fill="#8da0b7">Advanced Records &amp; Geospatial Unified Surveillance</text>
-    <rect x="254" y="206" width="150" height="3" rx="1.5" fill="url(#steel)"/>
-    <text x="254" y="240" font-size="18" fill="#c3cede">Air-gapped telecom forensics &#160;&#183;&#160; Evidence-grade intelligence</text>
-    <text x="254" y="286" font-size="14" letter-spacing="0.4" fill="#6b839e">CDR &#183; IPDR &#183; Tower geolocation &#8594; sessions &#8594; events &#8594; entities &#8594; court-ready evidence</text>
+    <text x="292" y="150" font-size="82" font-weight="800" letter-spacing="10" fill="#f5f7f9">ARGUS</text>
+    <text x="296" y="188" font-size="21" font-weight="600" letter-spacing="1.5" fill="#8da0b7">Advanced Records &amp; Geospatial Unified Surveillance</text>
+    <rect x="296" y="206" width="150" height="3" rx="1.5" fill="url(#steel)"/>
+    <text x="296" y="240" font-size="18" fill="#c3cede">Air-gapped telecom forensics &#160;&#183;&#160; Evidence-grade intelligence</text>
+    <text x="296" y="286" font-size="14" letter-spacing="0.4" fill="#6b839e">CDR &#183; IPDR &#183; Tower geolocation &#8594; sessions &#8594; events &#8594; entities &#8594; court-ready evidence</text>
   </g>
 </svg>
