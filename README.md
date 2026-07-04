@@ -1,21 +1,44 @@
 <div align="center">
-  <img src="backend/static/logo-readme.png" alt="Project ARGUS" width="320"/>
+  <img src="docs/assets/argus-banner.svg" alt="Project ARGUS — Advanced Records & Geospatial Unified Surveillance" width="100%"/>
 </div>
 
-<h1 align="center">Project ARGUS</h1>
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-0d1b2a?style=for-the-badge&logo=python&logoColor=8da0b7" alt="Python"/>
+  <img src="https://img.shields.io/badge/FastAPI-1a3050?style=for-the-badge&logo=fastapi&logoColor=8da0b7" alt="FastAPI"/>
+  <img src="https://img.shields.io/badge/PostgreSQL-0d1b2a?style=for-the-badge&logo=postgresql&logoColor=8da0b7" alt="PostgreSQL"/>
+  <img src="https://img.shields.io/badge/D3.js-1a3050?style=for-the-badge&logo=d3dotjs&logoColor=8da0b7" alt="D3.js"/>
+  <img src="https://img.shields.io/badge/Leaflet-0d1b2a?style=for-the-badge&logo=leaflet&logoColor=8da0b7" alt="Leaflet"/>
+</p>
 
-A full-stack telecom forensics platform for analysing **Call Detail Records (CDR)**, **IP
-Data Records (IPDR)** and **cell-tower locations**. It reconstructs communication and
-internet sessions, maps movement, attributes traffic to services/providers, and runs a
-spatiotemporal inference engine that surfaces investigative leads — all organised per case.
+<p align="center">
+  <img src="https://img.shields.io/badge/tests-271_passing-3f6485?style=flat-square" alt="tests"/>
+  <img src="https://img.shields.io/badge/frontend-47_ES_modules-3f6485?style=flat-square" alt="modules"/>
+  <img src="https://img.shields.io/badge/build-air--gapped_.exe-3f6485?style=flat-square" alt="build"/>
+  <img src="https://img.shields.io/badge/no_build_step-vanilla_JS-6b839e?style=flat-square" alt="vanilla"/>
+  <img src="https://img.shields.io/badge/database-Postgres_%2F_SQLite-6b839e?style=flat-square" alt="database"/>
+</p>
+
+<p align="center"><b>Air-gapped telecom forensics · Evidence-grade intelligence.</b></p>
+
+<p align="center">
+A full-stack platform for analysing <b>Call Detail Records (CDR)</b>, <b>IP Data Records (IPDR)</b>
+and <b>cell-tower geolocation</b>. It reconstructs communication and internet sessions, maps
+movement, attributes traffic to services and providers, resolves identifiers into people, and
+turns raw telecom dumps into <b>evidence that stands up in court</b> — all organised per case,
+fully offline.
+</p>
 
 > **CDR and IPDR are analysed separately.** A CDR subject is a **phone number**; an IPDR
-> subject is an **IP address**. The two streams are never cross-attributed.
+> subject is an **IP address**. Call and IP networks render as disjoint graph components —
+> **no false cross-attribution, ever.**
 
 ---
 
 ## Table of contents
+- [The pipeline](#the-pipeline)
 - [Features](#features)
+- [Architecture](#architecture)
+- [Entity resolution](#entity-resolution)
 - [Tech stack](#tech-stack)
 - [Prerequisites](#prerequisites)
 - [Quick start (setup script)](#quick-start-setup-script)
@@ -34,21 +57,155 @@ spatiotemporal inference engine that surfaces investigative leads — all organi
 
 ---
 
+## The pipeline
+
+ARGUS moves from *classifying packets* to *reconstructing what happened*. Every stage adds
+meaning to the one before, and every conclusion carries its evidence and its uncertainty.
+
+```mermaid
+flowchart LR
+  R["📇 CDR / IPDR<br/>rows"] --> S["🧩 Session<br/>reconstruction"]
+  S --> E["▶ Activity<br/>events"]
+  E --> N["🔗 Entity<br/>resolution"]
+  N --> C["📊 Confidence<br/>model"]
+  C --> V["⚖ Evidence<br/>explanation"]
+  classDef stage fill:#0d1b2a,stroke:#6b839e,stroke-width:2px,color:#f5f7f9;
+  class R,S,E,N,C,V stage;
+```
+
+> *"Probable WhatsApp voice call · 21:31–21:58 · 9998887777 ↔ WhatsApp (Meta) · 86%"* —
+> not ten thousand rows of `UDP 3478`.
+
+---
+
 ## Features
 
-- **Dashboard** — case hero summary, key metrics (10+ KPI cards), network/service/activity panels.
-- **Network Graph** — D3 force-directed contact graph with centrality & community detection, behavioural traffic classification, IP range analysis, 40+ provider DB.
-- **Tower Map** — Leaflet map: movement path (with per-leg distance / time / speed / travel-mode hover), **tower-frequency heatmap** (L.circleMarker), operational zones, co-location, meetings, **inference overlays** (impossible travel, convoys, home/work anchors) and an interactive **geofence**.
-- **Timeline** — session-reconstructed, entity-grouped timeline.
-- **Charts / Services / Correlation / Records** — 12+ chart types, service distribution with evidence scorecards, port-level attribution, cross-subject correlation, and a full searchable record table.
-- **Inferences** — automated **spatiotemporal + network analytics**, all on one tab, CDR and IPDR kept strictly separate:
-  - **Composite risk scoring** — every CDR phone subject and IPDR IP subject ranked **0–100** with banding (low → critical) and a transparent, hover-able **factor breakdown**; two independent leaderboards that never share a subject.
-  - **CDR (phone subjects):** impossible-travel / SIM-clone, SIM-swap & burner handsets, **multi-SIM identity resolution**, convoys & "met but never called" hidden links, **call-graph structure** (brokers, cut-points, one-way ties, relay chains, predicted hidden links), **behavioural shifts** (escalation, dormancy → reactivation, newest first-contacts), scheduled-contact cadence, odd-hours, **movement** (home/work anchors, mobility class, longest dwell) and **shared travel routes**.
-  - **IPDR (IP subjects):** VPN / proxy, **data volume & exfiltration**, **beaconing** (automated check-ins), and **rare destinations** — with the destination server and provider.
-  - **Watchlist** (flag numbers/IPs → forced to Critical) and one-click **Markdown case-report export**.
-- **Service / app attribution** — two-layer engine (provider IP-range match + port classification) with ~240-port PORT_MAP, port-range matching (Teams, Steam, FaceTime, Discord ranges), longest-prefix matching, indexed lookup scaling to ~100k rows, pluggable live provider-range feeds, and GENERIC_SVC frontend fallback for mail/DNS/infrastructure ports.
-- **AI Insights** — optional fine-tuned Qwen2.5-3B-Instruct (LoRA) or local Ollama for report generation, Q&A, and single-pass fine-tuned inference.
-- **Cases & Auth** — multi-case workspaces; PBKDF2-authenticated sessions with sliding expiry.
+<table>
+<tr>
+<td width="33%" valign="top">
+
+**📊 Dashboard**
+Case hero summary, 10+ KPI cards, network / service / activity panels, data-quality score.
+
+</td>
+<td width="33%" valign="top">
+
+**🕸 Network Graph**
+D3 force layout, PageRank / betweenness / community detection, **group-by-entity** collapse, canvas mode for 10k+ nodes.
+
+</td>
+<td width="33%" valign="top">
+
+**🗺 Tower Map**
+Leaflet movement path with per-leg speed / travel-mode, tower heatmap, geofence, co-location, impossible-travel & convoy overlays.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**⏱ Timeline & Story**
+Session-reconstructed, entity-grouped timeline; day-by-day **narrative paragraphs** an investigator can read aloud.
+
+</td>
+<td valign="top">
+
+**🔗 Entities**
+Identifiers → **people**: phones, SIMs, devices, IPs, apps, locations, cases — with a confidence tier and a plain-language *why* on every link.
+
+</td>
+<td valign="top">
+
+**🧠 Inferences**
+Composite 0–100 risk scoring, SIM-swap / burner / clone detection, beaconing, exfiltration, rare destinations — CDR and IPDR kept strictly apart.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**🎯 Service attribution**
+Two-layer engine (provider IP-range + ~250-port table), QUIC-aware, historical IP ownership, ASN enrichment, behavioural fingerprints.
+
+</td>
+<td valign="top">
+
+**⚖ Evidence & Reports**
+Findings review lifecycle (system → confirmed / rejected), server-persisted board, selective court-ready report builder.
+
+</td>
+<td valign="top">
+
+**🤖 AI Insights** *(optional)*
+Fine-tuned Qwen2.5-3B (QLoRA) or local Ollama for report generation and case Q&A — never required, fully offline-capable.
+
+</td>
+</tr>
+</table>
+
+---
+
+## Architecture
+
+Three layers, built for air-gapped, self-contained deployment — no external service is ever required.
+
+```mermaid
+flowchart TB
+  subgraph FE["🖥 Frontend · 47 native ES modules, no build step"]
+    UI["SPA served by FastAPI StaticFiles"]
+    VIZ["D3 · Chart.js · Leaflet · Turf"]
+  end
+  subgraph API["⚙ Backend · FastAPI + SQLAlchemy"]
+    ROUTERS["Case-scoped routers"]
+    ENGINES["Attribution · Sessions · Events · Entities · Inference"]
+    CACHE["Materialised analytics cache<br/>(event-driven invalidation)"]
+  end
+  subgraph DATA["🗄 Storage"]
+    PG[("PostgreSQL<br/>primary")]
+    SQLITE[("SQLite<br/>air-gapped fallback")]
+  end
+  FE --> API
+  API --> DATA
+  ENGINES --> CACHE
+  classDef fe fill:#1a3050,stroke:#8da0b7,color:#f5f7f9;
+  classDef be fill:#0d1b2a,stroke:#6b839e,color:#f5f7f9;
+  classDef db fill:#3f6485,stroke:#8da0b7,color:#f5f7f9;
+  class UI,VIZ fe; class ROUTERS,ENGINES,CACHE be; class PG,SQLITE db;
+```
+
+Ships as a self-contained **`ARGUS.exe`** (PyInstaller + Inno Setup, ~122 MB installer): zero
+configuration, runs on bundled SQLite, opens in its own standalone window. Drop a `.env` next
+to it to point at PostgreSQL for large-scale deployments.
+
+---
+
+## Entity resolution
+
+Identifiers become **entities** — the probable person (or device cluster / SIM-box) behind them.
+Merging is transitive and **court-explainable**: a shared IMEI + new SIM is a swap, a shared SIM
++ new device is a device change — both stay one entity, flagged, with the witnessing record
+counts as evidence.
+
+```mermaid
+flowchart TD
+  P["📱 Phone / MSISDN"] -->|same-record<br/>co-occurrence| U{{"Union-find<br/>+ adaptive fan-out guard"}}
+  I["🔑 IMSI / SIM"] --> U
+  M["📟 IMEI / device"] --> U
+  U -->|tight cluster| EN["🔗 Entity<br/>person · cluster · SIM-box"]
+  IP["🌐 IP address"] -.->|attribute only,<br/>never a merge key| EN
+  U -->|high fan-out identifier| OBS["👁 Observation only<br/>placeholder / shared value —<br/>kept, not merged through"]
+  classDef id fill:#1a3050,stroke:#8da0b7,color:#f5f7f9;
+  classDef core fill:#0d1b2a,stroke:#6b839e,color:#f5f7f9;
+  classDef out fill:#3f6485,stroke:#8da0b7,color:#f5f7f9;
+  class P,I,M,IP id; class U core; class EN,OBS out;
+```
+
+> **Over-linking is worse than under-linking.** A single placeholder identifier (blank / `0`
+> IMEI) fanning out to hundreds is treated as a non-identifying *observation*, never merged
+> through — so it can't fuse strangers into a fake "mastermind." The fan-out cut-off is learned
+> from each case's own distribution (Tukey fence), not a fixed constant.
+
+---
 
 ## Tech stack
 
@@ -56,9 +213,10 @@ spatiotemporal inference engine that surfaces investigative leads — all organi
 |-------|-----------|
 | Backend | Python 3.10+, FastAPI, SQLAlchemy, Pandas, NetworkX |
 | Database | PostgreSQL (primary) — automatic SQLite fallback only if unreachable |
-| Frontend | Vanilla-JS SPA served by FastAPI (no build step) |
+| Frontend | Vanilla-JS SPA, **47 native ES modules**, served by FastAPI (no build step) |
 | Visualisation | D3.js v7, Chart.js 4, Leaflet 1.9 (+ draw), Turf.js |
-| Auth | Session cookies, PBKDF2-SHA256 (210k iterations) |
+| Auth | Session cookies, PBKDF2-SHA256 (210k iterations), sliding expiry |
+| Packaging | PyInstaller + Inno Setup → self-contained `ARGUS.exe` |
 | AI (optional) | Fine-tuned Qwen2.5-3B-Instruct (QLoRA 4-bit) + local Ollama |
 
 ---

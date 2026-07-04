@@ -1,0 +1,66 @@
+<svg width="1280" height="340" viewBox="0 0 1280 340" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Project ARGUS — Advanced Records and Geospatial Unified Surveillance">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b1622"/>
+      <stop offset="0.55" stop-color="#0d1b2a"/>
+      <stop offset="1" stop-color="#1a3050"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8da0b7"/>
+      <stop offset="1" stop-color="#3f6485"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#6b839e" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#6b839e" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="340" fill="url(#bg)"/>
+
+  <!-- faint coordinate grid, left-to-right fade -->
+  <g stroke="#6b839e" stroke-opacity="0.07">
+    <path d="M0 68H1280M0 136H1280M0 204H1280M0 272H1280"/>
+    <path d="M160 0V340M320 0V340M480 0V340M640 0V340M800 0V340M960 0V340M1120 0V340"/>
+  </g>
+
+  <!-- right-side network motif: nodes + links (the contact graph) -->
+  <g>
+    <g stroke="url(#steel)" stroke-opacity="0.5" stroke-width="1.4">
+      <path d="M980 90L1060 150M1060 150L1150 110M1060 150L1120 220M1060 150L980 210M980 210L920 150M1120 220L1180 170M980 90L920 150"/>
+    </g>
+    <g fill="#8da0b7">
+      <circle cx="980" cy="90" r="6"/>
+      <circle cx="1150" cy="110" r="5"/>
+      <circle cx="1120" cy="220" r="6"/>
+      <circle cx="980" cy="210" r="5"/>
+      <circle cx="920" cy="150" r="5"/>
+      <circle cx="1180" cy="170" r="4"/>
+    </g>
+    <!-- central hub node (the resolved entity) with glow -->
+    <circle cx="1060" cy="150" r="60" fill="url(#glow)" filter="url(#soft)"/>
+    <circle cx="1060" cy="150" r="11" fill="#e7edf4"/>
+    <circle cx="1060" cy="150" r="17" fill="none" stroke="#8da0b7" stroke-opacity="0.6"/>
+  </g>
+
+  <!-- Argus shield / watchful-eye mark -->
+  <g transform="translate(96 104)">
+    <path d="M64 0 L120 20 V70 C120 108 96 134 64 148 C32 134 8 108 8 70 V20 Z"
+          fill="#0d1b2a" stroke="url(#steel)" stroke-width="3"/>
+    <ellipse cx="64" cy="74" rx="40" ry="26" fill="none" stroke="#8da0b7" stroke-width="3"/>
+    <circle cx="64" cy="74" r="13" fill="url(#steel)"/>
+    <circle cx="64" cy="74" r="5" fill="#0d1b2a"/>
+    <circle cx="59" cy="69" r="2.4" fill="#e7edf4"/>
+  </g>
+
+  <!-- wordmark + taglines -->
+  <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+    <text x="250" y="150" font-size="82" font-weight="800" letter-spacing="10" fill="#f5f7f9">ARGUS</text>
+    <text x="254" y="188" font-size="21" font-weight="600" letter-spacing="1.5" fill="#8da0b7">Advanced Records &amp; Geospatial Unified Surveillance</text>
+    <rect x="254" y="206" width="150" height="3" rx="1.5" fill="url(#steel)"/>
+    <text x="254" y="240" font-size="18" fill="#c3cede">Air-gapped telecom forensics &#160;&#183;&#160; Evidence-grade intelligence</text>
+    <text x="254" y="286" font-size="14" letter-spacing="0.4" fill="#6b839e">CDR &#183; IPDR &#183; Tower geolocation &#8594; sessions &#8594; events &#8594; entities &#8594; court-ready evidence</text>
+  </g>
+</svg>
