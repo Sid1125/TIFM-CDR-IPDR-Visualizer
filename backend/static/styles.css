@@ -1089,7 +1089,13 @@ body.dark .law-card>summary:hover{background:rgba(255,255,255,.04)}
 .ent-avatar{font-size:1rem}
 .ent-avatar.big{font-size:1.7rem}
 .ent-flag{font-size:.6rem;text-transform:uppercase;letter-spacing:.4px;color:var(--fc);border:1px solid var(--fc);border-radius:8px;padding:0 6px}
+.ent-type{font-size:.68rem;font-weight:600;letter-spacing:.3px;margin:1px 0 4px}
 .ent-chips{display:flex;gap:10px;font-size:.74rem;color:var(--muted);margin-bottom:3px}
+.ent-conf{font-size:.58rem;font-weight:700;letter-spacing:.4px;color:#fff;background:var(--cc);border-radius:4px;padding:1px 6px;flex:none}
+.ent-linktype{font-size:.66rem;color:var(--accent);white-space:nowrap}
+.ent-evid{flex-direction:column;align-items:stretch !important;gap:2px}
+.ent-evid-main{display:flex;align-items:center;gap:8px}
+.ent-evid-why{font-size:.68rem;color:var(--muted);padding-left:2px}
 .ent-detail{border:1px solid var(--line);border-radius:8px;background:var(--surface);min-height:300px}
 .ent-person{padding:16px 18px}
 .ent-person-h{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap}

@@ -27,18 +27,19 @@ async function _entityMap(){
   if(_entCache.caseId===cid&&_entCache.map)return _entCache;
   const res=await API.get('/entities/'+(cid?'?case_id='+encodeURIComponent(cid):''));
   const map={},label={},flags={},ipOwner={};
+  const type={};
   (res.entities||[]).forEach(e=>{
     [...e.phones,...e.imsis,...e.imeis].forEach(v=>map[v]=e.id);
     (e.ips||[]).forEach(i=>{ipOwner[i.ip]=(i.ip in ipOwner&&ipOwner[i.ip]!==e.id)?'__shared__':e.id;});
-    label[e.id]=e.label;flags[e.id]=e.flags||[];
+    label[e.id]=e.label;flags[e.id]=e.flags||[];type[e.id]=e.entity_type_label||'Entity';
   });
   Object.entries(ipOwner).forEach(([ip,eid])=>{if(eid!=='__shared__')map[ip]=eid;});
-  _entCache={caseId:cid,map,label,flags};
+  _entCache={caseId:cid,map,label,flags,type};
   return _entCache;
 }
 // Rewrite (nodes, links) so all identifiers of one entity become a single super-node;
 // intra-entity edges (a person calling their own other number) collapse away.
-function _groupByEntity(nodes,links,{map,label,flags}){
+function _groupByEntity(nodes,links,{map,label,flags,type}){
   const byKey={};const outNodes=[];
   const keyOf=id=>map[id]||id;
   for(const n of nodes){
@@ -46,7 +47,7 @@ function _groupByEntity(nodes,links,{map,label,flags}){
     let m=byKey[k];
     if(!m){
       m=byKey[k]=k.startsWith('ent_')
-        ?{id:k,label:label[k]||k,weight:0,kind:'entity',members:[],flags:flags[k]||[]}
+        ?{id:k,label:label[k]||k,weight:0,kind:'entity',members:[],flags:flags[k]||[],typeLabel:(type&&type[k])||'Entity'}
         :{...n,weight:0};
       outNodes.push(m);
     }
@@ -67,7 +68,7 @@ function _groupByEntity(nodes,links,{map,label,flags}){
 function _entHover(d,links){
   const shown=d.members.slice(0,8).map(esc).join(', ')+(d.members.length>8?' +'+(d.members.length-8)+' more':'');
   const fl=(d.flags||[]).length?'<br><span style="font-size:0.62rem;color:#8b5cf6">'+d.flags.map(esc).join(' · ')+'</span>':'';
-  return `<strong>&#128100; ${esc(d.label)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${ENTITY_COLOR};color:#fff">ENTITY</span>${fl}<br>`
+  return `<strong>&#128279; ${esc(d.label)}</strong> <span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${ENTITY_COLOR};color:#fff">${esc((d.typeLabel||'ENTITY').toUpperCase())}</span>${fl}<br>`
     +`${d.members.length} identifier${d.members.length===1?'':'s'}: <span style="font-size:0.7rem">${shown}</span><br>Total weight: ${d.weight}<br>`
     +`<button class="btn btn-sm" onclick="showEntity('${esc(d.id)}')" style="font-size:0.65rem;margin-top:4px">Open entity</button>`;
 }

@@ -130,6 +130,45 @@ class EntityResolution(unittest.TestCase):
         b = build_entities(list(reversed(recs * 3)), [])["entities"][0]["id"]
         self.assertEqual(a, b)
 
+    def test_link_carries_typed_confidence_evidence(self):
+        # Repeated tight co-occurrence -> HIGH confidence, typed, with a time window.
+        recs = [cdr(msisdn="111", imsi="SIM1", imei="DEV1",
+                    start_time=datetime(2026, 3, d, 10, 0)) for d in range(1, 15)]
+        e = build_entities(recs, [])["entities"][0]
+        by_type = {l["type"]: l for l in e["links"]}
+        self.assertIn("Number ↔ SIM", by_type)
+        self.assertIn("Number ↔ Device", by_type)
+        self.assertIn("SIM ↔ Device", by_type)
+        link = by_type["Number ↔ SIM"]
+        self.assertEqual(link["confidence"], "HIGH")
+        self.assertGreaterEqual(link["records"], 14)
+        self.assertTrue(link["first_seen"].startswith("2026-03-01"))
+        self.assertTrue(link["last_seen"].startswith("2026-03-14"))
+
+    def test_individual_vs_cluster_classification(self):
+        indiv = build_entities([cdr(msisdn="111", imsi="SIM1", imei="DEV1")], [])["entities"][0]
+        self.assertEqual(indiv["entity_type"], "individual")
+        self.assertEqual(indiv["entity_type_label"], "Individual (probable)")
+        # A device carrying many SIMs (high internal reuse, under the hub cap) is a cluster,
+        # never "person" — flagged device_reuse.
+        recs = []
+        for i in range(6):
+            recs.append(cdr(msisdn="111", imsi=f"S{i}", imei="DEVX",
+                            start_time=datetime(2026, 3, 1 + i, 9, 0)))
+        cluster = build_entities(recs, [])["entities"][0]
+        self.assertEqual(cluster["entity_type"], "identity_cluster")
+        self.assertIn("device_reuse", cluster["flags"])
+
+    def test_weak_link_through_shared_identifier_is_low(self):
+        # SIM shared across several devices (fanout>6) -> its links are LOW as identity.
+        recs = [cdr(msisdn=f"n{i}", imsi="SHARED", imei=f"D{i}") for i in range(8)]
+        r = build_entities(recs, [])
+        # hub guard keeps them separate; any surviving link touching SHARED is not HIGH
+        for e in r["entities"]:
+            for l in e["links"]:
+                if "imsi:SHARED" in (l["a"], l["b"]):
+                    self.assertNotEqual(l["confidence"], "HIGH")
+
 
 if __name__ == "__main__":
     unittest.main()

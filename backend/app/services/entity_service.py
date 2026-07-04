@@ -76,18 +76,74 @@ def _idents(record):
     return out
 
 
+_LINK_TYPE = {
+    frozenset(("phone", "imsi")): "Number ↔ SIM",
+    frozenset(("phone", "imei")): "Number ↔ Device",
+    frozenset(("imsi", "imei")): "SIM ↔ Device",
+}
+
+
+def _link_type(a_type, b_type):
+    return _LINK_TYPE.get(frozenset((a_type, b_type)), "Identifier link")
+
+
+def _link_confidence(records, fanout):
+    """Confidence a binding is genuine identity evidence, not coincidence.
+    records = witnessing co-occurrence rows; fanout = the larger distinct-partner count of the
+    two endpoints (a link through a widely-shared identifier is weak as identity even if the
+    two were seen together often). HIGH needs repeated co-occurrence AND a tight identifier;
+    a shared-ish identifier caps the link at MEDIUM/LOW however many records back it."""
+    if fanout > 6:
+        return "LOW"
+    if records >= 10 and fanout <= 2:
+        return "HIGH"
+    if records >= 3 and fanout <= 4:
+        return "MEDIUM"
+    if records >= 25:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _entity_classification(phones, imsis, imeis, max_internal_fanout):
+    """What KIND of thing this cluster is — never assume 'person'. Large membership or an
+    internally high-reuse identifier means a device farm / shared handset / organisation /
+    unknown cluster, not an individual. Returns (type_key, human_label)."""
+    total = len(phones) + len(imsis) + len(imeis)
+    if len(phones) >= 8 or len(imeis) >= 8 or len(imsis) >= 12 or max_internal_fanout >= 6:
+        return "identity_cluster", "Linked identity cluster"
+    if total <= 1:
+        return "identifier", "Single identifier"
+    if len(phones) <= 1 and len(imeis) <= 3 and len(imsis) <= 4:
+        return "individual", "Individual (probable)"
+    return "linked_identity", "Linked identity"
+
+
 def build_entities(cdr_records, ipdr_records):
     """Resolve records into entities. Returns a list of entity dicts, each carrying its
     member identifiers, observed IPs/towers/cases, activity window, per-pair binding
     evidence, flags, and inter-entity communication edges."""
     uf = _UnionFind()
     pair_evidence = Counter()      # (identA, identB) -> co-occurrence record count
+    pair_window = {}               # (identA, identB) -> [first, last] co-occurrence times
     ident_records = defaultdict(int)
     ident_cases = defaultdict(set)
     ident_window = {}              # ident -> [first, last]
     phone_ips = defaultdict(Counter)     # phone -> {ip: count} (attributes, not keys)
     phone_towers = defaultdict(Counter)  # ident -> {tower: count}
     calls = Counter()              # (a_phone, b_phone) -> count (entity edges later)
+
+    def _record_pair(a, b, ts):
+        key = tuple(sorted((a, b)))
+        pair_evidence[key] += 1
+        if ts:
+            w = pair_window.get(key)
+            if w is None:
+                pair_window[key] = [ts, ts]
+            else:
+                if ts < w[0]:
+                    w[0] = ts
+                if ts > w[1]:
+                    w[1] = ts
 
     def observe(ident, record):
         ident_records[ident] += 1
@@ -112,10 +168,11 @@ def build_entities(cdr_records, ipdr_records):
         for ident in ids:
             observe(ident, record)
             uf.find(ident)  # register even a lone identifier — it's still an entity
+        ts = getattr(record, "start_time", None)
         for i in range(len(ids)):
             for j in range(i + 1, len(ids)):
                 if ids[i] != ids[j]:
-                    pair_evidence[tuple(sorted((ids[i], ids[j])))] += 1
+                    _record_pair(ids[i], ids[j], ts)
         b = getattr(record, "b_party_number", None)
         a = getattr(record, "a_party_number", None) or getattr(record, "msisdn", None)
         if a and b and a != b:
@@ -126,10 +183,11 @@ def build_entities(cdr_records, ipdr_records):
         for ident in ids:
             observe(ident, record)
             uf.find(ident)
+        ts = getattr(record, "start_time", None)
         for i in range(len(ids)):
             for j in range(i + 1, len(ids)):
                 if ids[i] != ids[j]:
-                    pair_evidence[tuple(sorted((ids[i], ids[j])))] += 1
+                    _record_pair(ids[i], ids[j], ts)
         src = getattr(record, "source_ip", None)
         owner = getattr(record, "msisdn", None)
         if src and owner:
@@ -186,13 +244,30 @@ def build_entities(cdr_records, ipdr_records):
             if w:
                 first = w[0] if first is None or w[0] < first else first
                 last = w[1] if last is None or w[1] > last else last
-        # Binding evidence within this entity (which pair, how many witnessing records).
+        # Binding evidence within this entity: each identifier pair carries WHY we believe the
+        # link — type, witnessing record count, the co-occurrence time window, the endpoints'
+        # fan-out, and a confidence tier — so every merge is auditable, not asserted.
         links = []
         member_set = set(members)
+        max_internal_fanout = 0
         for (ia, ib), count in pair_evidence.items():
             if ia in member_set and ib in member_set:
-                links.append({"a": f"{ia[0]}:{ia[1]}", "b": f"{ib[0]}:{ib[1]}", "records": count})
-        links.sort(key=lambda l: -l["records"])
+                fanout = max(
+                    max((len(v) for v in type_partners[ia].values()), default=1),
+                    max((len(v) for v in type_partners[ib].values()), default=1),
+                )
+                max_internal_fanout = max(max_internal_fanout, fanout)
+                win = pair_window.get(tuple(sorted((ia, ib))))
+                links.append({
+                    "a": f"{ia[0]}:{ia[1]}", "b": f"{ib[0]}:{ib[1]}",
+                    "type": _link_type(ia[0], ib[0]),
+                    "records": count,
+                    "first_seen": win[0].isoformat() if win else None,
+                    "last_seen": win[1].isoformat() if win else None,
+                    "fanout": fanout,
+                    "confidence": _link_confidence(count, fanout),
+                })
+        links.sort(key=lambda l: (-{"HIGH": 3, "MEDIUM": 2, "LOW": 1}[l["confidence"]], -l["records"]))
         flags = []
         if len(imsis) > 1 and imeis:
             flags.append("sim_swap")       # one device carried more than one SIM
@@ -202,11 +277,16 @@ def build_entities(cdr_records, ipdr_records):
             flags.append("multiple_numbers")
         if len(cases) > 1:
             flags.append("multi_case")
+        if max_internal_fanout >= 6:
+            flags.append("device_reuse")   # an identifier shared widely inside the cluster
+        type_key, type_label = _entity_classification(phones, imsis, imeis, max_internal_fanout)
         ip_list = [{"ip": ip, "records": cnt,
                     "kind": _ip_kind(ip) or "public"} for ip, cnt in ips.most_common(20)]
         entities.append({
             "id": eid,
             "label": phones[0] if phones else (imsis[0] if imsis else (imeis[0] if imeis else "?")),
+            "entity_type": type_key,
+            "entity_type_label": type_label,
             "phones": phones, "imsis": imsis, "imeis": imeis,
             "ips": ip_list,
             "towers": [{"tower_id": t, "records": c} for t, c in towers.most_common(10)],
