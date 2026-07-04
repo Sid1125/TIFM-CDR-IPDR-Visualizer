@@ -104,6 +104,80 @@ def _link_confidence(records, fanout):
     return "LOW"
 
 
+def _adaptive_hub_fanout(type_partners, floor=8, ceil=150, default=12, min_sample=20):
+    """The dataset defines what 'abnormal fan-out' means, instead of a fixed cap.
+
+    A fixed threshold mis-serves both extremes: in a rural case one device carrying 12 SIMs is
+    highly unusual and should be questioned, while in a SIM-box/fraud case 40 SIMs per device is
+    normal and shouldn't be torn apart. So we learn the threshold from the distribution of
+    per-identifier fan-out in THIS case using a Tukey far-outlier fence (Q3 + 3·IQR): anything
+    beyond the case's own upper fence is anomalous FOR THIS CASE. A blank/placeholder identifier
+    (fanning out to hundreds) sits far past the fence in any case and is still caught; a SIM-box's
+    own normal reuse level moves the fence up so its devices are kept as one cluster, not shredded.
+    A percentile was rejected — on a small bimodal sample it just returns the outlier itself; the
+    IQR fence is derived from the bulk of the distribution and is unmoved by the extreme tail.
+    Clamped to a [floor, ceil] band (floor protects legit multi-SIM people in a quiet case; ceil
+    stops a degenerate sample producing an absurd threshold), with a fixed default when there's
+    too little data to learn from. Returns the chosen threshold — surfaced in the API so the
+    number is never a black box."""
+    fanouts = []
+    for parts in type_partners.values():
+        m = max((len(v) for v in parts.values()), default=0)
+        if m >= 2:
+            fanouts.append(m)
+    if len(fanouts) < min_sample:
+        return default
+    fanouts.sort()
+    n = len(fanouts)
+
+    def _q(p):
+        return fanouts[min(n - 1, int(round(p * (n - 1))))]
+
+    q1, q3 = _q(0.25), _q(0.75)
+    fence = q3 + 3 * (q3 - q1)
+    return max(floor, min(ceil, fence))
+
+
+_LINK_NOUN = {"phone": "phone number", "imsi": "SIM", "imei": "device (IMEI)"}
+
+
+def _fmt_day(dt):
+    return dt.strftime("%d %b %Y") if dt else None
+
+
+def _explain_link(a_type, b_type, count, window, fanout, confidence):
+    """Plain-language, fully deterministic 'why linked' explanation — no model, just the facts
+    the merge rests on, phrased for an investigator or a court. E.g.:
+      "This phone number and SIM appeared together in 9,003 telecom records between
+       01 Jun 2026 and 30 Jun 2026. Across the case these two identifiers were only ever
+       observed with each other — a strong identity relationship." """
+    a_noun = _LINK_NOUN.get(a_type, a_type)
+    b_noun = _LINK_NOUN.get(b_type, b_type)
+    rec_word = "record" if count == 1 else "records"
+    when = ""
+    if window:
+        f, l = _fmt_day(window[0]), _fmt_day(window[1])
+        if f and l:
+            when = f" on {f}" if f == l else f" between {f} and {l}"
+    s1 = f"This {a_noun} and {b_noun} appeared together in {count:,} telecom {rec_word}{when}."
+    # Second sentence: how exclusive the pairing is, tied to the confidence tier.
+    if fanout <= 1:
+        strength = {"HIGH": "a strong identity relationship",
+                    "MEDIUM": "a probable link",
+                    "LOW": "a weak link — too few records to be certain"}.get(confidence, "a link")
+        s2 = f"Across the case these two identifiers were only ever observed with each other — {strength}."
+    elif fanout <= 6:
+        others = fanout - 1
+        s2 = (f"They were seen together repeatedly, though the identifiers also appear with "
+              f"{others} other{'s' if others != 1 else ''} — "
+              + ("a probable link an investigator should confirm." if confidence != "LOW"
+                 else "a weak link, treat with caution."))
+    else:
+        s2 = (f"One of these identifiers is shared across {fanout} different identifiers, so it is "
+              "weak as identity evidence and is kept as an observation, not a merge.")
+    return s1 + " " + s2
+
+
 def _entity_classification(phones, imsis, imeis, max_internal_fanout):
     """What KIND of thing this cluster is — never assume 'person'. Large membership or an
     internally high-reuse identifier means a device farm / shared handset / organisation /
@@ -200,17 +274,18 @@ def build_entities(cdr_records, ipdr_records):
     # a test SIM, or a shared device-farm handset. Union-find is transitive, so unioning
     # through one such hub would fuse hundreds of unrelated subscribers into a single blob
     # (observed: one bad IMEI merging 320 phones). Identifiers whose distinct-partner count
-    # for any single type exceeds this cap are treated as non-identifying: we don't merge
+    # for any single type exceeds the threshold are treated as non-identifying: we don't merge
     # THROUGH them (their own records still stand alone). Court-explainable and conservative —
     # it only ever prevents merges, never invents one.
-    HUB_FANOUT = 12
     type_partners = defaultdict(lambda: defaultdict(set))  # ident -> {type -> {partner values}}
     for (ia, ib) in pair_evidence:
         type_partners[ia][ib[0]].add(ib[1])
         type_partners[ib][ia[0]].add(ia[1])
 
+    hub_fanout = _adaptive_hub_fanout(type_partners)
+
     def _is_hub(ident):
-        return any(len(vals) > HUB_FANOUT for vals in type_partners[ident].values())
+        return any(len(vals) > hub_fanout for vals in type_partners[ident].values())
 
     hubs = {ident for ident in type_partners if _is_hub(ident)}
     for (ia, ib) in pair_evidence:
@@ -258,6 +333,7 @@ def build_entities(cdr_records, ipdr_records):
                 )
                 max_internal_fanout = max(max_internal_fanout, fanout)
                 win = pair_window.get(tuple(sorted((ia, ib))))
+                conf = _link_confidence(count, fanout)
                 links.append({
                     "a": f"{ia[0]}:{ia[1]}", "b": f"{ib[0]}:{ib[1]}",
                     "type": _link_type(ia[0], ib[0]),
@@ -265,7 +341,8 @@ def build_entities(cdr_records, ipdr_records):
                     "first_seen": win[0].isoformat() if win else None,
                     "last_seen": win[1].isoformat() if win else None,
                     "fanout": fanout,
-                    "confidence": _link_confidence(count, fanout),
+                    "confidence": conf,
+                    "explanation": _explain_link(ia[0], ib[0], count, win, fanout, conf),
                 })
         links.sort(key=lambda l: (-{"HIGH": 3, "MEDIUM": 2, "LOW": 1}[l["confidence"]], -l["records"]))
         flags = []
@@ -316,7 +393,10 @@ def build_entities(cdr_records, ipdr_records):
         edge_counter[key] += count
     edges = [{"a": a, "b": b, "calls": c} for (a, b), c in edge_counter.most_common()]
 
-    return {"entities": entities, "edges": edges}
+    return {"entities": entities, "edges": edges,
+            "meta": {"hub_fanout_threshold": hub_fanout,
+                     "entity_count": len(entities),
+                     "cluster_count": sum(1 for e in entities if e["entity_type"] == "identity_cluster")}}
 
 
 def resolve_entities(db, case_id=None):

@@ -159,6 +159,59 @@ class EntityResolution(unittest.TestCase):
         self.assertEqual(cluster["entity_type"], "identity_cluster")
         self.assertIn("device_reuse", cluster["flags"])
 
+    def test_adaptive_threshold_learns_from_distribution(self):
+        # A SIM-box case: many devices each carrying ~15 SIMs is NORMAL here, so the learned
+        # threshold rises and those devices are not treated as placeholder hubs. A blank "0"
+        # IMEI stamped on everything still fans out far beyond the case's 99th percentile and
+        # is still caught. Threshold is surfaced in meta.
+        recs = []
+        for dev in range(30):
+            for sim in range(15):  # 15 SIMs per device — the case's normal reuse level
+                recs.append(cdr(msisdn=f"n{dev}_{sim}", imsi=f"S{dev}_{sim}", imei=f"DEV{dev}",
+                                start_time=datetime(2026, 3, 1 + (sim % 27), 9, 0)))
+        # one placeholder IMEI on 200 unrelated numbers
+        for i in range(200):
+            recs.append(cdr(msisdn=f"z{i}", imsi=f"ZS{i}", imei="0"))
+        r = build_entities(recs, [])
+        thr = r["meta"]["hub_fanout_threshold"]
+        self.assertGreaterEqual(thr, 15)          # learned the SIM-box normal, not the fixed 12
+        self.assertLess(thr, 150)
+        # placeholder didn't create a mega-blob: no entity swallowed the 200 z-numbers
+        biggest = max(r["entities"], key=lambda e: len(e["phones"]))
+        self.assertLess(len(biggest["phones"]), 200)
+        # a genuine device's 15 SIMs DID resolve into one cluster (threshold respected the norm)
+        clusters = [e for e in r["entities"] if len(e["imsis"]) >= 15]
+        self.assertTrue(clusters)
+
+    def test_low_reuse_case_keeps_a_sane_floor(self):
+        # A quiet case (everyone fanout 1) must not learn a threshold so low it flags normal
+        # multiplicity — the floor protects legit multi-SIM/device people.
+        recs = [cdr(msisdn=f"n{i}", imsi=f"S{i}", imei=f"D{i}") for i in range(40)]
+        # one legit 3-SIM person
+        recs += [cdr(msisdn="star", imsi="SA", imei="DX"),
+                 cdr(msisdn="star", imsi="SB", imei="DX"),
+                 cdr(msisdn="star", imsi="SC", imei="DX")]
+        r = build_entities(recs, [])
+        self.assertGreaterEqual(r["meta"]["hub_fanout_threshold"], 8)
+        star = next(e for e in r["entities"] if "star" in e["phones"])
+        self.assertEqual(len(star["imsis"]), 3)   # still one person, not split
+
+    def test_link_explanation_is_deterministic_prose(self):
+        recs = [cdr(msisdn="111", imsi="SIM1", imei="DEV1",
+                    start_time=datetime(2026, 6, d, 10, 0)) for d in range(1, 16)]
+        e = build_entities(recs, [])["entities"][0]
+        link = next(l for l in e["links"] if l["type"] == "Number ↔ SIM")
+        exp = link["explanation"]
+        self.assertIn("appeared together", exp)
+        self.assertIn("phone number", exp)
+        self.assertIn("SIM", exp)
+        self.assertIn("15 telecom records", exp)
+        self.assertIn("Jun 2026", exp)
+        self.assertIn("strong identity relationship", exp)
+        # exact same inputs -> exact same sentence (no randomness)
+        e2 = build_entities(list(recs), [])["entities"][0]
+        self.assertEqual(exp, next(l for l in e2["links"] if l["type"] == "Number ↔ SIM")["explanation"])
+
     def test_weak_link_through_shared_identifier_is_low(self):
         # SIM shared across several devices (fanout>6) -> its links are LOW as identity.
         recs = [cdr(msisdn=f"n{i}", imsi="SHARED", imei=f"D{i}") for i in range(8)]

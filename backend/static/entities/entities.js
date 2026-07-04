@@ -14,7 +14,7 @@ import { API } from '../core/api.js';
 import { registerTab, switchTab } from '../core/router.js';
 import { svcColor } from '../core/constants.js';
 
-let _entities=[],_edges=[],_selected=null,_labels={};
+let _entities=[],_edges=[],_selected=null,_labels={},_meta={};
 
 const FLAG_META={
   sim_swap:{l:'SIM swap',c:'#8b5cf6',t:'One device carried more than one SIM'},
@@ -47,12 +47,14 @@ async function renderEntities(){
   let res;
   try{res=await API.get('/entities/'+(state.data.caseId?'?case_id='+encodeURIComponent(state.data.caseId):''));}
   catch(e){list.innerHTML='<div class="story-muted" style="padding:30px">Entity resolution failed: '+esc(e.message||'')+'</div>';return;}
-  _entities=res.entities||[];_edges=res.edges||[];
+  _entities=res.entities||[];_edges=res.edges||[];_meta=res.meta||{};
   _labels={};_entities.forEach(e=>_labels[e.id]=e.label);
   const sum=document.getElementById('entSummary');
   if(sum){const flagged=_entities.filter(e=>e.flags&&e.flags.length).length;
     const clusters=_entities.filter(e=>e.entity_type==='identity_cluster').length;
-    sum.textContent=_entities.length+' resolved '+(_entities.length===1?'entity':'entities')+' · '+_edges.length+' links'+(clusters?' · '+clusters+' cluster'+(clusters===1?'':'s'):'')+(flagged?' · '+flagged+' flagged':'');}
+    const thr=_meta.hub_fanout_threshold;
+    sum.innerHTML=_entities.length+' resolved '+(_entities.length===1?'entity':'entities')+' · '+_edges.length+' links'+(clusters?' · '+clusters+' cluster'+(clusters===1?'':'s'):'')+(flagged?' · '+flagged+' flagged':'')
+      +(thr?' <span class="ent-thr" title="Learned from this case: an identifier linked to more than this many distinct others is treated as a shared/placeholder value and not merged through. Derived from the case’s own fan-out distribution, not a fixed cap.">merge cut-off: '+thr+'</span>':'');}
   _renderList();
   const search=document.getElementById('entSearch');
   if(search&&!search._wired){search._wired=true;search.addEventListener('input',_renderList);}
@@ -104,15 +106,13 @@ async function _renderDetail(id){
   const apps=(e.services||[]).map(s=>'<div class="ent-row"><span class="ent-dot" style="background:'+svcColor((s.service||'').replace('Likely ',''))+'"></span><span class="ent-val">'+esc(s.service)+'</span><span class="ent-count">'+n(s.records)+' rec · '+s.confidence+'%</span></div>').join('');
   const locs=(e.towers||[]).map(t=>'<div class="ent-row"><span class="ent-val">'+esc(t.tower_id)+'</span>'+(t.city?'<span class="story-muted">'+esc([t.city,t.state].filter(Boolean).join(', '))+'</span>':'')+'<span class="ent-count">'+n(t.records)+' rec</span></div>').join('');
   const cases=e.cases.map(c=>'<div class="ent-row"><span class="ent-val">'+esc(c)+'</span></div>').join('');
-  // Binding evidence: typed link, confidence tier, witnessing record count + time span — WHY
-  // ARGUS believes these identifiers are one entity, auditable per link.
+  // Binding evidence: typed link, confidence tier, and a plain-language explanation of WHY
+  // ARGUS believes these identifiers are one entity — auditable, court-readable, per link.
   const links=(e.links||[]).slice(0,14).map(l=>{
-    const span=l.first_seen?_fmtDT(l.first_seen)+(l.last_seen&&l.last_seen!==l.first_seen?' → '+_fmtDT(l.last_seen):''):'';
     return '<div class="ent-row ent-evid"><div class="ent-evid-main">'+confChip(l.confidence)
       +'<span class="ent-linktype">'+esc(l.type||'')+'</span>'
       +'<span class="ent-val">'+esc(l.a)+' ↔ '+esc(l.b)+'</span></div>'
-      +'<div class="ent-evid-why">'+n(l.records)+' witnessing record'+(l.records===1?'':'s')
-      +(span?' · '+span:'')+(l.fanout>2?' · fan-out '+l.fanout:'')+'</div></div>';
+      +(l.explanation?'<div class="ent-evid-why">'+esc(l.explanation)+'</div>':'')+'</div>';
   }).join('');
   const edges=(e.edges||[]).slice(0,15).map(ed=>{
     const other=ed.a===e.id?ed.b:ed.a;

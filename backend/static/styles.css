@@ -1095,7 +1095,8 @@ body.dark .law-card>summary:hover{background:rgba(255,255,255,.04)}
 .ent-linktype{font-size:.66rem;color:var(--accent);white-space:nowrap}
 .ent-evid{flex-direction:column;align-items:stretch !important;gap:2px}
 .ent-evid-main{display:flex;align-items:center;gap:8px}
-.ent-evid-why{font-size:.68rem;color:var(--muted);padding-left:2px}
+.ent-evid-why{font-size:.72rem;color:var(--text);opacity:.82;padding:3px 2px 1px;line-height:1.5}
+.ent-thr{font-size:.68rem;color:var(--muted);border:1px dashed var(--line);border-radius:5px;padding:0 6px;margin-left:4px;cursor:help}
 .ent-detail{border:1px solid var(--line);border-radius:8px;background:var(--surface);min-height:300px}
 .ent-person{padding:16px 18px}
 .ent-person-h{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
