@@ -37,7 +37,7 @@ import { provideDetectMeetings } from './analytics/correlation.js';  // self-reg
 import { renderTimeline } from './timeline/timeline.js';  // self-registers the Timeline tab
 import { detectMeetings, ensureMeetingsLoaded, meetingTotals, meetingsCache } from './services/meetings.js';
 import { EVK, evLoad, evSave, updateEvidenceCount, pinEvidence, unpinEvidenceBySig, renderEvidence, captureSvgToEvidence, refreshCapButtons, installChartCaptureButtons, renderEvidenceTab, provideWorkspaceHooks } from './workspace/evidence.js';
-import { renderCrossCaseHits, fillProfileCrossCase } from './analytics/crosscase.js';  // self-registers the Cross-Case tab
+import { renderCrossCaseHits, fillProfileCrossCase, provideCaseNav } from './analytics/crosscase.js';  // self-registers the Cross-Case tab
 import { buildIdentityProfile } from './services/identity.js';
 import { getInfReport, INF } from './services/inference.js';
 import { renderStoryTimeline, resetStory } from './story/story.js';  // self-registers the Story tab
@@ -451,6 +451,7 @@ provideInfReport(getInfReport);  // map inference overlays reach getInfReport (i
 provideDetectMeetings(detectMeetings);  // correlation meeting detection (dashboard engine still in app.js)
 provideLoadSuspects(loadSuspects);  // inferences watchlist ops reach the suspect-group loader
 provideCaseReload(loadCaseData);  // upload reloads the case after a successful import
+provideCaseNav({setActiveCase,loadCaseData,loadCases});  // cross-case "open in case" navigation
 wireDelegation();  // central data-act delegation (dormant until features register actions)
 if(!D.loginUser.value)D.loginUser.value='admin';
 checkAuth();

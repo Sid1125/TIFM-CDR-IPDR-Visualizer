@@ -63,14 +63,20 @@ export async function fillProfileCrossCase(sub){
   }catch(e){el.innerHTML='<h4>Cross-case links</h4><div style="font-size:0.74rem;color:var(--danger)">Lookup failed.</div>';}
 }
 
+// Case-lifecycle functions still live in app.js (not yet extracted); injected at boot via
+// provideCaseNav — same hook pattern as provideCaseReload/provideWorkspaceHooks. Without this,
+// openInCase threw ReferenceError under ES modules (setActiveCase is no longer a global).
+let _caseNav=null;
+export function provideCaseNav(fns){_caseNav=fns;}
+
 // Jump to another case and reopen the subject's profile there.
 async function openInCase(caseId,sub){
-  if(!caseId)return;
+  if(!caseId||!_caseNav)return;
   D.profile.style.display='none';
-  setActiveCase(caseId);
+  _caseNav.setActiveCase(caseId);
   if(D.caseSelector){try{D.caseSelector.value=String(caseId);}catch(e){}}
-  await loadCaseData();
-  await loadCases();
+  await _caseNav.loadCaseData();
+  await _caseNav.loadCases();
   if(sub)showProfile(sub);
 }
 
@@ -109,7 +115,9 @@ function renderCrossCaseReport(rep){
   if(!s.recurring_subjects){
     el.innerHTML='<div class="xc-empty"><div style="font-size:1.3rem;margin-bottom:8px;color:var(--text)">No cross-case links</div>'
       +'<div>None of <b>'+esc(cur.name||'this case')+'</b>&rsquo;s subjects appear in any other loaded case.</div>'
-      +'<div style="margin-top:6px;color:var(--muted);font-size:0.8rem;max-width:520px">As more cases are loaded, prior occurrences of these subjects &mdash; matched by phone number, handset IMEI, SIM IMSI, or IP &mdash; will surface here.</div></div>';
+      +'<div style="margin-top:6px;color:var(--muted);font-size:0.8rem;max-width:520px">As more cases are loaded, prior occurrences of these subjects &mdash; matched by phone number, handset IMEI, SIM IMSI, or IP &mdash; will surface here.</div></div>'
+      +'<div id="xcEntities"></div>';
+    _renderXcEntities();
     return;
   }
   const mt=s.by_match_type||{};
@@ -167,8 +175,35 @@ function renderCrossCaseReport(rep){
         +'<span class="xc-sub-meta">'+m.record_count+' rec &middot; '+(m.first_seen?fmtd(m.first_seen):'?')+(m.last_seen?' → '+fmtd(m.last_seen):'')+'</span>'+vals+_xcActivity(m.activity,true)+'</div>';
     }).join('')+'</div></div>';
   });
-  h+='</div>';
+  h+='<div id="xcEntities"></div></div>';
   el.innerHTML=h;
+  _renderXcEntities();
+}
+
+// Entity-level cross-case intelligence: not "this phone exists in another case" but "this
+// ENTITY appears in another case" — the same device/SIM binding different numbers across
+// cases still surfaces as one hit, with the per-case identifier breakdown as evidence.
+async function _renderXcEntities(){
+  const box=document.getElementById('xcEntities');if(!box)return;
+  let data;
+  try{data=await API.get('/entities/cross-case');}catch(e){return;}
+  const hits=(data&&data.hits)||[];
+  const cur=state.data.caseId;
+  const shown=cur?hits.filter(h=>(h.cases||[]).map(String).includes(String(cur))):hits;
+  if(!shown.length)return;
+  box.innerHTML='<h4 class="xc-sec">Recurring entities ('+shown.length+')</h4>'
+    +'<div class="story-muted" style="font-size:.76rem;margin:-4px 0 6px">Resolved across ALL loaded cases: the same person/device cluster seen in more than one case, even where the phone numbers differ. Click to open in the Entities tab.</div>'
+    +shown.slice(0,20).map(h=>(
+      '<div class="xc-ent-card" data-eid="'+esc(h.id)+'" title="Open entity">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>'+esc(h.label)+'</b>'
+      +'<span class="xc-kind">'+esc(h.entity_type_label||'')+'</span>'
+      +(h.confidence!=null?'<span class="xc-conf" style="color:'+(h.confidence>=85?'var(--success)':'var(--warn)')+'">'+h.confidence+'%</span>':'')
+      +'<span class="xc-sub-meta">'+n(h.record_count)+' rec &middot; '+h.cases.length+' cases</span></div>'
+      +'<div class="xc-ent-finding">'+esc(h.finding||'')+'</div>'
+      +'<div class="xc-ent-cases">'+Object.entries(h.per_case||{}).map(([cid,ids])=>
+        '<span class="xc-ent-case"><b>Case '+esc(cid)+'</b>: '+ids.slice(0,4).map(x=>esc(x.value)).join(', ')+(ids.length>4?' +'+(ids.length-4):'')+'</span>').join('')+'</div>'
+      +'</div>')).join('');
+  box.querySelectorAll('.xc-ent-card').forEach(c=>c.onclick=()=>window.showEntity&&window.showEntity(c.dataset.eid));
 }
 if(D.xcRefreshBtn)D.xcRefreshBtn.addEventListener('click',()=>{xcView==='graph'?renderCrossCaseGraph():renderCrossCaseTab();});
 

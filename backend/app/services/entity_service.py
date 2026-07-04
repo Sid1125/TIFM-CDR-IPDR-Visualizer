@@ -83,6 +83,12 @@ _LINK_TYPE = {
 }
 
 
+def pair_key(a, b):
+    """Stable, order-independent key for an identifier pair — the handle investigator merge
+    decisions hang on ('type:value|type:value', sides sorted)."""
+    return "|".join(sorted(f"{t}:{v}" for t, v in (a, b)))
+
+
 def _link_type(a_type, b_type):
     return _LINK_TYPE.get(frozenset((a_type, b_type)), "Identifier link")
 
@@ -192,10 +198,15 @@ def _entity_classification(phones, imsis, imeis, max_internal_fanout):
     return "linked_identity", "Linked identity"
 
 
-def build_entities(cdr_records, ipdr_records):
+def build_entities(cdr_records, ipdr_records, rejected_pairs=frozenset(), forced_pairs=frozenset()):
     """Resolve records into entities. Returns a list of entity dicts, each carrying its
     member identifiers, observed IPs/towers/cases, activity window, per-pair binding
-    evidence, flags, and inter-entity communication edges."""
+    evidence, flags, and inter-entity communication edges.
+
+    `rejected_pairs` / `forced_pairs` are investigator merge decisions (pair_key strings):
+    a rejected pair is NEVER unioned (and its co-occurrence is dropped as binding evidence);
+    a forced (confirmed) pair is unioned even through the hub guard — the investigator has
+    judged the shared identifier genuine for these two. Decisions always outrank heuristics."""
     uf = _UnionFind()
     pair_evidence = Counter()      # (identA, identB) -> co-occurrence record count
     pair_window = {}               # (identA, identB) -> [first, last] co-occurrence times
@@ -288,8 +299,18 @@ def build_entities(cdr_records, ipdr_records):
         return any(len(vals) > hub_fanout for vals in type_partners[ident].values())
 
     hubs = {ident for ident in type_partners if _is_hub(ident)}
+
+    def _pair_allowed(ia, ib):
+        """Whether this co-occurrence pair may act as a merge/evidence link, decisions applied."""
+        key = pair_key(ia, ib)
+        if key in rejected_pairs:
+            return False
+        if key in forced_pairs:
+            return True
+        return ia not in hubs and ib not in hubs
+
     for (ia, ib) in pair_evidence:
-        if ia not in hubs and ib not in hubs:
+        if _pair_allowed(ia, ib):
             uf.union(ia, ib)
 
     # Group identifiers into entities.
@@ -303,14 +324,15 @@ def build_entities(cdr_records, ipdr_records):
     # minutes and timed the request out. Now each entity reads only its own pairs: O(pairs) total.
     pairs_by_root = defaultdict(list)
     for (ia, ib), count in pair_evidence.items():
-        if ia in hubs or ib in hubs:
-            continue  # a pair through a hub was never merged; it isn't binding evidence
+        if not _pair_allowed(ia, ib):
+            continue  # blocked by the hub guard or a rejected decision — not binding evidence
         ra = uf.find(ia)
         if ra == uf.find(ib):
             pairs_by_root[ra].append((ia, ib, count))
 
     entities = []
     phone_to_entity = {}
+    ident_to_entity = {}
     for root, members in groups.items():
         members.sort()
         phones = sorted(v for t, v in members if t == "phone")
@@ -344,6 +366,10 @@ def build_entities(cdr_records, ipdr_records):
                 max_internal_fanout = max(max_internal_fanout, fanout)
                 win = pair_window.get(tuple(sorted((ia, ib))))
                 conf = _link_confidence(count, fanout)
+                explanation = _explain_link(ia[0], ib[0], count, win, fanout, conf)
+                reviewed = pair_key(ia, ib) in forced_pairs
+                if reviewed:
+                    explanation += " An investigator reviewed and confirmed this merge."
                 links.append({
                     "a": f"{ia[0]}:{ia[1]}", "b": f"{ib[0]}:{ib[1]}",
                     "type": _link_type(ia[0], ib[0]),
@@ -352,7 +378,9 @@ def build_entities(cdr_records, ipdr_records):
                     "last_seen": win[1].isoformat() if win else None,
                     "fanout": fanout,
                     "confidence": conf,
-                    "explanation": _explain_link(ia[0], ib[0], count, win, fanout, conf),
+                    "reviewed": reviewed,
+                    "pair_key": pair_key(ia, ib),
+                    "explanation": explanation,
                 })
         links.sort(key=lambda l: (-{"HIGH": 3, "MEDIUM": 2, "LOW": 1}[l["confidence"]], -l["records"]))
         flags = []
@@ -386,8 +414,54 @@ def build_entities(cdr_records, ipdr_records):
         })
         for p in phones:
             phone_to_entity[p] = eid
+        for ident in members:
+            ident_to_entity[ident] = eid
 
     entities.sort(key=lambda e: -e["record_count"])
+
+    # Suggested merges: co-occurrence pairs the hub guard BLOCKED whose endpoints landed in
+    # different entities. ARGUS never merges these on its own — the shared identifier may be a
+    # placeholder — but an investigator with context can confirm (forcing the union on the next
+    # build) or reject (making the separation durable). Each suggestion states exactly why the
+    # automatic merge was withheld. Deduped per entity pair, strongest evidence kept.
+    best_suggestion = {}
+    for (ia, ib), count in pair_evidence.items():
+        key = pair_key(ia, ib)
+        if key in rejected_pairs or key in forced_pairs:
+            continue
+        if ia not in hubs and ib not in hubs:
+            continue  # was mergeable on its own; not a suggestion
+        ea, eb = ident_to_entity.get(ia), ident_to_entity.get(ib)
+        if not ea or not eb or ea == eb:
+            continue
+        fanout = max(
+            max((len(v) for v in type_partners[ia].values()), default=1),
+            max((len(v) for v in type_partners[ib].values()), default=1),
+        )
+        hub_side = ia if ia in hubs else ib
+        conf = _link_confidence(count, fanout)
+        noun = _LINK_NOUN.get(hub_side[0], hub_side[0])
+        win = pair_window.get(tuple(sorted((ia, ib))))
+        when = ""
+        if win:
+            f, l = _fmt_day(win[0]), _fmt_day(win[1])
+            if f and l:
+                when = f" on {f}" if f == l else f" between {f} and {l}"
+        reason = (f"{ia[0]}:{ia[1]} and {ib[0]}:{ib[1]} appeared together in {count:,} "
+                  f"record{'s' if count != 1 else ''}{when}, but the {noun} {hub_side[1]} is linked to "
+                  f"{max(len(v) for v in type_partners[hub_side].values())} distinct identifiers in this "
+                  "dataset — consistent with a shared or placeholder value — so ARGUS did not merge "
+                  "automatically. Confirm only if independent evidence ties these two together.")
+        ent_pair = tuple(sorted((ea, eb)))
+        cur = best_suggestion.get(ent_pair)
+        if cur is None or count > cur["records"]:
+            best_suggestion[ent_pair] = {
+                "a_entity": ea, "b_entity": eb,
+                "a": f"{ia[0]}:{ia[1]}", "b": f"{ib[0]}:{ib[1]}",
+                "pair_key": key, "records": count, "fanout": fanout,
+                "confidence": conf, "reason": reason,
+            }
+    suggestions = sorted(best_suggestion.values(), key=lambda s: -s["records"])[:100]
 
     # Inter-entity communication edges (calls between phones of resolved entities;
     # counterparts that resolve to no entity stay as 'external' endpoints).
@@ -403,9 +477,10 @@ def build_entities(cdr_records, ipdr_records):
         edge_counter[key] += count
     edges = [{"a": a, "b": b, "calls": c} for (a, b), c in edge_counter.most_common()]
 
-    return {"entities": entities, "edges": edges,
+    return {"entities": entities, "edges": edges, "suggestions": suggestions,
             "meta": {"hub_fanout_threshold": hub_fanout,
                      "entity_count": len(entities),
+                     "suggestion_count": len(suggestions),
                      "cluster_count": sum(1 for e in entities if e["entity_type"] == "identity_cluster")}}
 
 
