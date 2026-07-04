@@ -41,9 +41,14 @@
     </div>
     <nav class="topbar-nav">
       <button class="topbar-tab active" data-tab="dashboard">Dashboard</button>
-      <button class="topbar-tab" data-tab="story">Story</button>
-      <button class="topbar-tab" data-tab="entities" title="Resolved people: phones, SIMs, devices, IPs, apps, locations, cases">Entities</button>
-      <button class="topbar-tab" data-tab="crosscase">Cross-Case</button>
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn">Investigation <span class="caret">&#9662;</span></button>
+        <div class="nav-menu">
+          <button class="topbar-tab" data-tab="story">Story</button>
+          <button class="topbar-tab" data-tab="entities" title="Resolved entities: phones, SIMs, devices, IPs, apps, locations, cases — with why each was linked">Entities</button>
+          <button class="topbar-tab" data-tab="crosscase">Cross-Case</button>
+        </div>
+      </div>
       <button class="topbar-tab" data-tab="evidence">Evidence <span id="evidenceTabCount" class="tab-badge">0</span></button>
       <div class="nav-group">
         <button type="button" class="nav-group-btn">Maps &amp; Network <span class="caret">&#9662;</span></button>
