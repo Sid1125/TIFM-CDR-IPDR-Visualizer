@@ -70,7 +70,7 @@ function _renderList(){
   const q=(document.getElementById('entSearch')?.value||'').trim().toLowerCase();
   const shown=_entities.filter(e=>_matches(e,q)).slice(0,300);
   if(!shown.length){list.innerHTML='<div class="story-muted" style="padding:30px">No entities'+(q?' match “'+esc(q)+'”':'')+'.</div>';return;}
-  list.innerHTML=shown.map(e=>{const tm=typeMeta(e);return
+  list.innerHTML=shown.map(e=>{const tm=typeMeta(e);return (
     '<div class="ent-card'+(_selected===e.id?' sel':'')+'" data-id="'+e.id+'">'
     +'<div class="ent-card-h"><span class="ent-avatar" style="color:'+tm.c+'">'+tm.icon+'</span><b>'+esc(e.label)+'</b>'+flagChips(e.flags)+'</div>'
     +'<div class="ent-type" style="color:'+tm.c+'">'+esc(e.entity_type_label||'')+'</div>'
@@ -82,7 +82,7 @@ function _renderList(){
     +(e.cases.length>1?'<span title="Cases">&#128193; '+e.cases.length+'</span>':'')
     +'</div>'
     +'<div class="evidence-meta">'+n(e.record_count)+' records'+(e.first_seen?' · '+_fmtDT(e.first_seen)+' → '+_fmtDT(e.last_seen):'')+'</div>'
-    +'</div>';}).join('');
+    +'</div>');}).join('');
   list.querySelectorAll('.ent-card').forEach(c=>c.onclick=()=>{_selected=c.dataset.id;_renderList();_renderDetail(c.dataset.id);});
 }
 
