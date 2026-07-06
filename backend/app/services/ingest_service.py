@@ -65,23 +65,33 @@ ALIASES = {
         "technology": ["tech", "rat", "network_type", "bearer"],
     },
     "ipdr": {
+        # "TIME1(dd/MM/yyyy HH:mm:ss)" is the per-session event timestamp in the DoT-mandated
+        # Indian ISP IPDR format; the separate "IST Start/End Time of Public IP allocation" +
+        # "Start/End Date" columns describe the broader NAT/CGNAT public-IP lease window (shared
+        # across many sessions), not this row's own start/end — deliberately NOT aliased here.
         "start_time": ["starttime", "session_start", "datetime", "date_time", "start",
-                       "start_date", "event_time", "timestamp", "date"],
+                       "start_date", "event_time", "timestamp", "date",
+                       "time1_dd_mm_yyyy_hh_mm_ss"],
         "end_time": ["endtime", "session_end", "end", "stop_time"],
         "source_ip": ["sourceip", "src_ip", "source_ip_address", "private_ip", "src", "source_address"],
         "destination_ip": ["destinationip", "dest_ip", "dst_ip", "destination_ip_address",
                            "public_ip", "dst", "destination_address"],
         "source_port": ["sourceport", "src_port", "private_port", "sport"],
         "destination_port": ["destinationport", "dest_port", "dst_port", "public_port", "dport"],
-        "duration_seconds": ["duration", "session_duration", "dur", "duration_sec"],
+        "duration_seconds": ["duration", "session_duration", "dur", "duration_sec",
+                             "session_duration_seconds"],
         "protocol": ["proto", "ip_protocol", "l4_protocol"],
-        "bytes_uploaded": ["bytes_up", "uplink_bytes", "ul_bytes", "upload_bytes", "data_up", "uplink_volume"],
-        "bytes_downloaded": ["bytes_down", "downlink_bytes", "dl_bytes", "download_bytes", "data_down", "downlink_volume"],
-        "msisdn": ["mobile_number", "subscriber", "subscriber_number"],
-        "imei": ["imei_number", "handset", "device_id"],
+        "bytes_uploaded": ["bytes_up", "uplink_bytes", "ul_bytes", "upload_bytes", "data_up",
+                          "uplink_volume", "data_volume_up_link"],
+        "bytes_downloaded": ["bytes_down", "downlink_bytes", "dl_bytes", "download_bytes", "data_down",
+                            "downlink_volume", "data_volume_down_link"],
+        "msisdn": ["mobile_number", "subscriber", "subscriber_number",
+                  "landline_msisdn_mdn_leased_circuit_id_for_internet_access"],
+        "imei": ["imei_number", "handset", "device_id",
+                 "source_mac_id_address_other_device_identification_number"],
         "imsi": ["imsi_number", "sim"],
         "tower_id": ["towerid", "cgi", "site_id", "cell_global_id", "tower"],
-        "cell_id": ["cellid", "ci", "cell"],
+        "cell_id": ["cellid", "ci", "cell", "first_cell_id"],
         "lac": ["location_area_code", "tac"],
         "latitude": ["lat", "tower_lat"],
         "longitude": ["long", "lng", "lon", "tower_long", "tower_lng"],
@@ -175,7 +185,12 @@ def resolve_columns(df_columns, kind: str, override: Optional[dict] = None) -> d
         for canon, actual in override.items():
             if canon in CANONICAL.get(kind, []) and actual in cols:
                 mapping[canon] = actual
-    unmapped_required = [c for c in REQUIRED[kind] if c not in mapping]
+    # end_time is derivable (start_time + duration_seconds) — several real operator formats,
+    # incl. the DoT-standard Indian IPDR export, report only a session start + a duration, no
+    # separate end column. Don't hard-block those; coerce_frame() synthesizes end_time below.
+    derivable_end_time = "start_time" in mapping and "duration_seconds" in mapping
+    unmapped_required = [c for c in REQUIRED[kind] if c not in mapping
+                         and not (c == "end_time" and derivable_end_time)]
     return {
         "mapping": mapping,
         "unmapped_required": unmapped_required,
@@ -227,6 +242,12 @@ def coerce_frame(df: pd.DataFrame, kind: str, mapping: dict) -> tuple[pd.DataFra
                 coerced[col] = failed
                 date_failures += failed
             out[col] = parsed
+
+    # Synthesize end_time when the file only reports a start + a duration (no separate end
+    # column) — e.g. the DoT-standard Indian IPDR export. See derivable_end_time in resolve_columns.
+    if "end_time" not in out.columns and "start_time" in out.columns and "duration_seconds" in out.columns:
+        secs = pd.to_numeric(out["duration_seconds"], errors="coerce")
+        out["end_time"] = out["start_time"] + pd.to_timedelta(secs, unit="s")
 
     # Drop policy: a row with no parseable start_time has no temporal anchor and is useless for
     # analysis — drop it; keep everything else (nulls in non-required fields are fine).
