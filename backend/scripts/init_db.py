@@ -8,7 +8,10 @@ Postgres setup. For SQLite this is a no-op — the file is created automatically
 """
 from __future__ import annotations
 
+import os
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sqlalchemy.engine.url import make_url
 
