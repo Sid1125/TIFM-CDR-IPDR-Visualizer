@@ -71,7 +71,8 @@ def match_profile(db: Session, kind: str, headers) -> Optional[dict]:
 def profile_mapping_for(profile: IngestFormatProfile, headers) -> dict:
     """The profile's stored mapping restricted to headers actually present in this file (matched
     after normalization, so cosmetic header changes don't drop the mapping). Values are rewritten
-    to the file's own spelling of each header. Partial matches thus apply only what still fits."""
+    to the file's own spelling of each header. Partial matches thus apply only what still fits.
+    A list value ("combine these columns", e.g. Call Date + Call Time) keeps its present members."""
     by_norm = {_norm(h): h for h in headers}
     out = {}
     try:
@@ -79,9 +80,14 @@ def profile_mapping_for(profile: IngestFormatProfile, headers) -> dict:
     except Exception:
         return out
     for canon, actual in stored.items():
-        hit = by_norm.get(_norm(actual))
-        if hit is not None:
-            out[canon] = hit
+        if isinstance(actual, list):
+            present = [by_norm[_norm(a)] for a in actual if _norm(a) in by_norm]
+            if present:
+                out[canon] = present if len(present) > 1 else present[0]
+        else:
+            hit = by_norm.get(_norm(actual))
+            if hit is not None:
+                out[canon] = hit
     return out
 
 
@@ -155,6 +161,70 @@ _SEED_PROFILES = [
             "bytes_downloaded": "Data Volume Down Link",
             "cell_id": "First CELL ID",
             "apn": "Access Point Name",
+        },
+    },
+    # DoT Uniform CDR format — 13 fields mandated by the DoT directive of 15 Jan 2020 (disclosed
+    # via an Internet Freedom Foundation RTI). Call Date and Call Time are separate columns, so
+    # start_time is a combine-list; end_time is synthesized from start + duration at ingest.
+    {
+        "kind": "cdr",
+        "name": "DoT Uniform CDR (Indian TSP)",
+        "headers": [
+            "Calling Party Telephone Number", "Called Party Telephone Number",
+            "Call Date", "Call Time", "Call duration (in seconds)",
+            "Complete First Cell ID", "Complete Last Cell ID",
+            "Call Type (IN/OUT/SMS_IN/SMS_OUT)", "IMEI of Party", "IMSI of Party",
+            "Type of Connection (Pre-paid/Post-paid)",
+            "SMS Centre Number / GGSN Address/SGSN address",
+            "First Roaming Network Circle ID",
+        ],
+        "mapping": {
+            "a_party_number": "Calling Party Telephone Number",
+            "b_party_number": "Called Party Telephone Number",
+            "start_time": ["Call Date", "Call Time"],
+            "duration_seconds": "Call duration (in seconds)",
+            "tower_id": "Complete First Cell ID",
+            "call_type": "Call Type (IN/OUT/SMS_IN/SMS_OUT)",
+            "imei": "IMEI of Party",
+            "imsi": "IMSI of Party",
+        },
+    },
+    # Tower dumps are delivered in the same DoT Uniform CDR columns (the tower's traffic slice),
+    # mapped here onto the dump schema: the calling party is the subject present at the tower.
+    {
+        "kind": "dump",
+        "name": "DoT Uniform Tower Dump (Indian TSP)",
+        "headers": [
+            "Calling Party Telephone Number", "Called Party Telephone Number",
+            "Call Date", "Call Time", "Call duration (in seconds)",
+            "Complete First Cell ID", "Complete Last Cell ID",
+            "Call Type (IN/OUT/SMS_IN/SMS_OUT)", "IMEI of Party", "IMSI of Party",
+            "Type of Connection (Pre-paid/Post-paid)",
+            "SMS Centre Number / GGSN Address/SGSN address",
+            "First Roaming Network Circle ID",
+        ],
+        "mapping": {
+            "msisdn": "Calling Party Telephone Number",
+            "other_party": "Called Party Telephone Number",
+            "start_time": ["Call Date", "Call Time"],
+            "tower_id": "Complete First Cell ID",
+            "call_type": "Call Type (IN/OUT/SMS_IN/SMS_OUT)",
+            "imei": "IMEI of Party",
+            "imsi": "IMSI of Party",
+        },
+    },
+    # The de-facto SDR layout used by Indian LEA SDR lookup tools (Number/Name/Address/Date/
+    # Circle/Operator); 'Date' is the SIM activation date. Circle has no canonical field.
+    {
+        "kind": "sdr",
+        "name": "SDR Lookup Standard (Indian LEA)",
+        "headers": ["Number", "Name", "Address", "Date", "Circle", "Operator"],
+        "mapping": {
+            "msisdn": "Number",
+            "name": "Name",
+            "address": "Address",
+            "activation_date": "Date",
+            "operator": "Operator",
         },
     },
 ]

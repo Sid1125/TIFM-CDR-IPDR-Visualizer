@@ -95,14 +95,26 @@ class ProfileServiceTests(unittest.TestCase):
         self.assertEqual(got, {"msisdn": "Phone No", "destination_ip": "Peer IP"})
 
     def test_seed_idempotent_and_matches_dot_format(self):
-        self.assertGreaterEqual(seed_default_profiles(self.db), 1)
+        self.assertGreaterEqual(seed_default_profiles(self.db), 4)  # IPDR + CDR + dump + SDR
         self.assertEqual(seed_default_profiles(self.db), 0)  # second run adds nothing
-        dot = self.db.query(IngestFormatProfile).filter(
-            IngestFormatProfile.created_by == "seed").first()
-        self.assertIsNotNone(dot)
         import json
-        m = match_profile(self.db, "ipdr", json.loads(dot.headers_json))
-        self.assertEqual(m["match"], "exact")
+        for prof in self.db.query(IngestFormatProfile).filter(
+                IngestFormatProfile.created_by == "seed").all():
+            m = match_profile(self.db, prof.kind, json.loads(prof.headers_json))
+            self.assertEqual(m["match"], "exact", prof.name)
+            self.assertEqual(m["profile"].id, prof.id, prof.name)
+
+    def test_combined_columns_survive_profile_roundtrip(self):
+        seed_default_profiles(self.db)
+        cdr = self.db.query(IngestFormatProfile).filter(
+            IngestFormatProfile.kind == "cdr", IngestFormatProfile.created_by == "seed").first()
+        import json
+        headers = json.loads(cdr.headers_json)
+        got = profile_mapping_for(cdr, headers)
+        self.assertEqual(got["start_time"], ["Call Date", "Call Time"])
+        # file that lost the time column: combine degrades to the single present column
+        got = profile_mapping_for(cdr, [h for h in headers if h != "Call Time"])
+        self.assertEqual(got["start_time"], "Call Date")
 
 
 class ResolveLayeringTests(unittest.TestCase):
@@ -126,6 +138,22 @@ class ResolveLayeringTests(unittest.TestCase):
         cols = ["src_ip", "dst_ip", "session_start", "session_end"]
         r = resolve_columns(cols, "ipdr", profile_mapping={"source_ip": "not_in_file"})
         self.assertEqual(r["mapping"]["source_ip"], "src_ip")  # alias kept
+
+    def test_combine_list_mapping_parses_split_datetime(self):
+        import pandas as pd
+        from app.services.ingest_service import coerce_frame
+        cols = ["A No", "B No", "Call Date", "Call Time", "Secs"]
+        r = resolve_columns(cols, "cdr", profile_mapping={
+            "a_party_number": "A No", "b_party_number": "B No",
+            "start_time": ["Call Date", "Call Time"], "duration_seconds": "Secs"})
+        self.assertEqual(r["mapping"]["start_time"], ["Call Date", "Call Time"])
+        self.assertEqual(r["unmapped_required"], [])  # end_time derivable
+        df = pd.DataFrame({"A No": ["111"], "B No": ["222"],
+                           "Call Date": ["02/01/2026"], "Call Time": ["11:30:05"], "Secs": [60]})
+        out, report = coerce_frame(df, "cdr", r["mapping"])
+        self.assertEqual(str(out["start_time"].iloc[0]), "2026-01-02 11:30:05")
+        self.assertEqual(str(out["end_time"].iloc[0]), "2026-01-02 11:31:05")
+        self.assertEqual(report["rows_dropped"], 0)
 
 
 class ProfileApiTests(unittest.TestCase):
@@ -190,6 +218,44 @@ class ProfileApiTests(unittest.TestCase):
         self.assertEqual(body["sources"]["msisdn"], "profile")
         # end_time derivable from start + duration, so nothing required is missing
         self.assertEqual(body["unmapped_required"], [])
+
+    def test_dot_uniform_cdr_upload_end_to_end(self):
+        db = self.Session()
+        try:
+            seed_default_profiles(db)
+        finally:
+            db.close()
+        csv = ("Calling Party Telephone Number,Called Party Telephone Number,Call Date,Call Time,"
+               "Call duration (in seconds),Complete First Cell ID,Complete Last Cell ID,"
+               "Call Type (IN/OUT/SMS_IN/SMS_OUT),IMEI of Party,IMSI of Party,"
+               "Type of Connection (Pre-paid/Post-paid),SMS Centre Number / GGSN Address/SGSN address,"
+               "First Roaming Network Circle ID\n"
+               "9811011111,9822022222,02/01/2026,11:30:05,60,404-10-1234-5678,404-10-1234-5679,"
+               "OUT,358967101234567,405861234567890,Pre-paid,9800000000,DL\n")
+        r = self.client.post("/upload/preview",
+                             files={"file": ("cdr.csv", csv, "text/csv")}, data={"kind": "cdr"})
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertEqual(body["matched_profile"]["match"], "exact")
+        self.assertIn("DoT Uniform CDR", body["matched_profile"]["name"])
+        self.assertEqual(body["mapping"]["start_time"], ["Call Date", "Call Time"])
+        self.assertEqual(body["unmapped_required"], [])
+        r = self.client.post("/upload/cdr",
+                             files={"file": ("cdr.csv", csv, "text/csv")},
+                             data={"case_id": "1", "mode": "replace"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["records_imported"], 1)
+        from app.models.cdr import CDRRecord
+        db = self.Session()
+        try:
+            rec = db.query(CDRRecord).filter(CDRRecord.case_id == "1").one()
+            self.assertEqual(str(rec.start_time), "2026-01-02 11:30:05")
+            self.assertEqual(str(rec.end_time), "2026-01-02 11:31:05")
+            self.assertEqual(rec.a_party_number, "9811011111")
+            self.assertEqual(rec.tower_id, "404-10-1234-5678")
+            self.assertEqual(rec.call_type, "OUT")
+        finally:
+            db.close()
 
     def test_upload_uses_profile_and_bumps_usage(self):
         r = self.client.post("/format-profiles/", json={

@@ -115,8 +115,12 @@ async function populateMapping(modal,kind,file){
     };
     const opt=(canon,muted)=>{
       const cur=mapping[canon]||'';
-      const opts=['<option value=""'+(cur?'':' selected')+'>— none —</option>']
-        .concat(headers.map(h=>'<option value="'+esc(h)+'"'+(h===cur?' selected':'')+'>'+esc(h)+'</option>'));
+      // Array value = combined columns from a format profile (e.g. Call Date + Call Time).
+      // Shown as one locked choice; collectMapping skips it so the profile keeps supplying it.
+      const combo=Array.isArray(cur);
+      const opts=(combo?['<option value="__combo__" selected>'+esc(cur.join(' + '))+' (combined)</option>']:[])
+        .concat(['<option value=""'+((cur&&!combo)?'':combo?'':' selected')+'>— none —</option>'])
+        .concat(headers.map(h=>'<option value="'+esc(h)+'"'+(!combo&&h===cur?' selected':'')+'>'+esc(h)+'</option>'));
       const miss=required.indexOf(canon)>=0&&!cur;
       return '<div style="display:flex;align-items:center;gap:8px;padding:2px 0">'
         +'<span style="width:140px;'+(muted?'color:var(--muted)':'font-weight:600')+(miss?';color:var(--danger)':'')+'">'+esc(canon)+(required.indexOf(canon)>=0?' *':'')+'</span>'
@@ -154,6 +158,11 @@ async function populateMapping(modal,kind,file){
       const name=(box.querySelector('#upProfName').value||'').trim();
       if(!name){msgEl.textContent='Give the format a name first.';return}
       const m=collectMapping(modal)||{};
+      // Untouched combined entries ('__combo__') aren't in the override — carry them into the
+      // saved profile from the preview mapping so e.g. Call Date + Call Time survives a re-save.
+      modal.querySelectorAll('select.upmap').forEach(s=>{
+        if(s.value==='__combo__'&&Array.isArray(mapping[s.dataset.canon]))m[s.dataset.canon]=mapping[s.dataset.canon];
+      });
       if(!Object.keys(m).length){msgEl.textContent='Nothing mapped yet — map at least one column.';return}
       try{
         await API.post('/format-profiles/',{kind,name,headers,mapping:m});
@@ -165,9 +174,11 @@ async function populateMapping(modal,kind,file){
 }
 
 // Read the mapping selects back into a {canonical: header} override object (only non-empty).
+// '__combo__' = an untouched profile-supplied combined mapping — leave it out so the matched
+// profile keeps supplying it at upload time.
 function collectMapping(modal){
   const sels=modal.querySelectorAll('select.upmap');if(!sels.length)return null;
-  const m={};sels.forEach(s=>{if(s.value)m[s.dataset.canon]=s.value});
+  const m={};sels.forEach(s=>{if(s.value&&s.value!=='__combo__')m[s.dataset.canon]=s.value});
   return Object.keys(m).length?m:null;
 }
 async function handleUploadConfirmed(kind,file,route,mode,mapping){

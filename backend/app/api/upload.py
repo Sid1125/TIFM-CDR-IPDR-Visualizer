@@ -413,7 +413,8 @@ async def upload_tower_dump(
 
         df = _read_table(temp_path, file.filename)
         override = _parse_mapping(mapping_json)
-        resolved = resolve_columns(df.columns, "dump", override=override)
+        profile_map, prof_match = _match_format_profile(db, "dump", df.columns)
+        resolved = resolve_columns(df.columns, "dump", override=override, profile_mapping=profile_map)
         if resolved["unmapped_required"]:
             raise HTTPException(
                 status_code=422,
@@ -456,6 +457,9 @@ async def upload_tower_dump(
                            "rows_imported": len(records), "rows_dropped": report["rows_dropped"],
                            "filename": file.filename})
         report["dump_label"] = label
+        if prof_match:
+            from app.services.format_profile_service import touch_profile
+            touch_profile(db, prof_match["profile"].id)
         return UploadResponse(success=True, records_imported=len(records), validation=report)
     except HTTPException:
         db.rollback()
@@ -489,7 +493,8 @@ async def upload_sdr(
 
         df = _read_table(temp_path, file.filename, dtype=str)
         override = _parse_mapping(mapping_json)
-        resolved = resolve_columns(df.columns, "sdr", override=override)
+        profile_map, prof_match = _match_format_profile(db, "sdr", df.columns)
+        resolved = resolve_columns(df.columns, "sdr", override=override, profile_mapping=profile_map)
         if resolved["unmapped_required"]:
             raise HTTPException(
                 status_code=422,
@@ -502,7 +507,9 @@ async def upload_sdr(
             if not msisdn:
                 skipped += 1
                 continue
-            fields = {canon: _to_str(row.get(actual)) for canon, actual in mapping.items()}
+            # combine-lists don't apply to SDR's direct field copy; only plain columns are read
+            fields = {canon: _to_str(row.get(actual))
+                      for canon, actual in mapping.items() if isinstance(actual, str)}
             existing = db.query(Subscriber).filter(Subscriber.msisdn == msisdn).one_or_none()
             if existing is None:
                 existing = Subscriber(msisdn=msisdn)
@@ -520,6 +527,9 @@ async def upload_sdr(
         log_action(db, user, request, "upload", case_id=case_id or None,
                    detail={"kind": "sdr", "rows_imported": imported, "rows_skipped": skipped,
                            "filename": file.filename})
+        if prof_match:
+            from app.services.format_profile_service import touch_profile
+            touch_profile(db, prof_match["profile"].id)
         return UploadResponse(success=True, records_imported=imported,
                               validation={"rows_total": int(len(df)), "rows_imported": imported,
                                           "rows_dropped": skipped, "mapping": mapping})

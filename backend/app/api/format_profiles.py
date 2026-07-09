@@ -53,7 +53,8 @@ class SaveProfileBody(BaseModel):
     kind: str
     name: str
     headers: list[str]
-    mapping: dict[str, str]
+    # A list value means "combine these columns into one field" (e.g. Call Date + Call Time).
+    mapping: dict[str, str | list[str]]
 
 
 @router.post("/")
@@ -70,7 +71,11 @@ def create_or_update_profile(
         raise HTTPException(status_code=400, detail="name is required")
     if not body.headers:
         raise HTTPException(status_code=400, detail="headers are required")
-    mapping = {c: h for c, h in body.mapping.items() if c in CANONICAL[kind] and h in body.headers}
+    def _valid(h):
+        if isinstance(h, list):
+            return len(h) > 0 and all(x in body.headers for x in h)
+        return h in body.headers
+    mapping = {c: h for c, h in body.mapping.items() if c in CANONICAL[kind] and _valid(h)}
     if not mapping:
         raise HTTPException(status_code=400, detail="mapping has no valid canonical->header entries")
     prof = save_profile(db, kind, body.name.strip(), body.headers, mapping,

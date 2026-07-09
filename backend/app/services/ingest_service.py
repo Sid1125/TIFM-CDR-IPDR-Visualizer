@@ -43,21 +43,29 @@ REQUIRED = {
 # always accepted; these cover common operator variations.
 ALIASES = {
     "cdr": {
+        # The *_of_party / calling_party_telephone_number spellings are the DoT Uniform CDR
+        # format (DoT directive of 15 Jan 2020, disclosed via RTI) — the CDR counterpart of the
+        # DoT-standard IPDR export. Its separate Call Date + Call Time columns can't be aliased
+        # 1:1; the seeded format profile combines them (see format_profile_service).
         "a_party_number": ["aparty", "a_party", "caller", "calling_number", "calling_party",
-                           "callingnumber", "originating_number", "from_number", "msisdn_a", "a_no", "anumber"],
+                           "callingnumber", "originating_number", "from_number", "msisdn_a", "a_no", "anumber",
+                           "calling_party_telephone_number"],
         "b_party_number": ["bparty", "b_party", "called", "called_number", "called_party",
-                           "callednumber", "terminating_number", "to_number", "msisdn_b", "b_no", "bnumber"],
+                           "callednumber", "terminating_number", "to_number", "msisdn_b", "b_no", "bnumber",
+                           "called_party_telephone_number"],
         "start_time": ["starttime", "call_date", "call_datetime", "datetime", "date_time", "start",
                        "start_date", "call_start", "event_time", "timestamp", "date"],
         "end_time": ["endtime", "end", "call_end", "stop_time", "disconnect_time"],
         "duration_seconds": ["duration", "call_duration", "dur", "duration_sec", "durationsecs",
-                             "duration_secs", "call_dur"],
+                             "duration_secs", "call_dur", "call_duration_in_seconds"],
         "msisdn": ["mobile_number", "subscriber", "subscriber_number"],
-        "imei": ["imei_number", "handset", "device_id", "imei_no"],
-        "imsi": ["imsi_number", "sim", "imsi_no"],
-        "call_type": ["calltype", "type", "event_type", "service_type"],
+        "imei": ["imei_number", "handset", "device_id", "imei_no", "imei_of_party"],
+        "imsi": ["imsi_number", "sim", "imsi_no", "imsi_of_party"],
+        "call_type": ["calltype", "type", "event_type", "service_type",
+                      "call_type_in_out_sms_in_sms_out"],
         "direction": ["call_direction", "in_out", "io"],
-        "tower_id": ["towerid", "cgi", "site_id", "first_cgi", "cell_global_id", "tower"],
+        "tower_id": ["towerid", "cgi", "site_id", "first_cgi", "cell_global_id", "tower",
+                     "complete_first_cell_id"],
         "cell_id": ["cellid", "ci", "cell"],
         "lac": ["location_area_code", "tac"],
         "latitude": ["lat", "tower_lat", "latitude_deg"],
@@ -99,17 +107,22 @@ ALIASES = {
         "rat": ["radio_access_technology", "network_type", "technology", "bearer"],
     },
     "dump": {
+        # Tower dumps are delivered in the DoT Uniform CDR format (same 13 columns, filtered to
+        # one tower), hence the same DoT spellings here mapped onto the dump schema.
         "msisdn": ["mobile_number", "number", "msisdn", "a_party", "aparty", "calling_number",
-                   "party", "subscriber", "subscriber_number", "caller", "msisdn_a", "a_no"],
+                   "party", "subscriber", "subscriber_number", "caller", "msisdn_a", "a_no",
+                   "calling_party_telephone_number"],
         "other_party": ["b_party", "bparty", "called", "called_number", "other_party", "b_no",
-                        "called_party", "to_number"],
+                        "called_party", "to_number", "called_party_telephone_number"],
         "start_time": ["starttime", "call_date", "datetime", "date_time", "start", "start_date",
                        "event_time", "timestamp", "date", "first_seen"],
         "end_time": ["endtime", "end", "stop_time", "last_seen"],
-        "call_type": ["calltype", "type", "event_type", "service_type"],
-        "imei": ["imei_number", "handset", "device_id", "imei_no"],
-        "imsi": ["imsi_number", "sim", "imsi_no"],
-        "tower_id": ["towerid", "cgi", "site_id", "cell_global_id", "tower", "first_cgi"],
+        "call_type": ["calltype", "type", "event_type", "service_type",
+                      "call_type_in_out_sms_in_sms_out"],
+        "imei": ["imei_number", "handset", "device_id", "imei_no", "imei_of_party"],
+        "imsi": ["imsi_number", "sim", "imsi_no", "imsi_of_party"],
+        "tower_id": ["towerid", "cgi", "site_id", "cell_global_id", "tower", "first_cgi",
+                     "complete_first_cell_id"],
         "cell_id": ["cellid", "ci", "cell"],
         "lac": ["location_area_code", "tac"],
         "latitude": ["lat", "tower_lat"],
@@ -188,7 +201,17 @@ def resolve_columns(df_columns, kind: str, override: Optional[dict] = None,
             sources[canon] = "alias"
     if profile_mapping:
         for canon, actual in profile_mapping.items():
-            if canon in CANONICAL.get(kind, []) and actual in cols:
+            if canon not in CANONICAL.get(kind, []):
+                continue
+            # A list value means "combine these columns" (e.g. the DoT Uniform CDR's separate
+            # Call Date + Call Time). Keep only the columns present in this file.
+            if isinstance(actual, (list, tuple)):
+                present = [a for a in actual if a in cols]
+                if not present:
+                    continue
+                mapping[canon] = present if len(present) > 1 else present[0]
+                sources[canon] = "profile"
+            elif actual in cols:
                 mapping[canon] = actual
                 sources[canon] = "profile"
     if override:
@@ -238,10 +261,18 @@ def coerce_frame(df: pd.DataFrame, kind: str, mapping: dict) -> tuple[pd.DataFra
     and return the canonical frame plus a validation report."""
     kind = kind.lower()
     rows_total = int(len(df))
-    # Build a canonical-only frame.
+    # Build a canonical-only frame. A list value combines several source columns into one field
+    # (space-joined), e.g. the DoT Uniform CDR's separate Call Date + Call Time -> start_time.
     out = pd.DataFrame(index=df.index)
     for canon, actual in mapping.items():
-        out[canon] = df[actual]
+        if isinstance(actual, (list, tuple)):
+            combined = df[actual[0]].fillna("").astype(str).str.strip()
+            for extra in actual[1:]:
+                combined = combined.str.cat(df[extra].fillna("").astype(str).str.strip(), sep=" ")
+            combined = combined.str.strip()
+            out[canon] = combined.where(combined != "", other=None)
+        else:
+            out[canon] = df[actual]
 
     coerced: dict[str, int] = {}
     date_failures = 0
