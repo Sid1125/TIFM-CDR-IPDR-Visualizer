@@ -40,32 +40,37 @@ function _getDashAgg(){
   return dashAgg.v;
 }
 
+// Score = 100 − Σ(share-missing × weight). Weights are each metric's max cost when 100% of
+// rows lack it, so the score is file-size independent (the old per-row × count formula floored
+// ANY large real-world file to 0%). Missing coordinates splits in two: rows that still carry a
+// tower/cell id are RESOLVABLE — uploading a tower master lights them up on the map — and cost
+// little; rows with no tower id at all are anchorless and cost full weight.
 function computeQualityMetrics(){
-  if(!state.data.records.length)return{score:100,missingTower:0,missingCoord:0,missingDur:0,badTs:0,unknownProto:0,total:0,penalties:[]};
-  let missingTower=0,missingCoord=0,missingDur=0,badTs=0,unknownProto=0;
+  if(!state.data.records.length)return{score:100,total:0,penalties:[]};
+  let missingTower=0,coordViaTower=0,coordAnchorless=0,missingDur=0,badTs=0,unknownProto=0;
   state.data.records.forEach(r=>{
     if(!r.tow)missingTower++;
-    if(r.lat==null||r.lng==null)missingCoord++;
+    if(r.lat==null||r.lng==null){if(r.tow)coordViaTower++;else coordAnchorless++;}
     if(!r.dur&&r.dur!==0)missingDur++;
     if(r.ts){const d=new Date(r.ts);if(isNaN(d.getTime()))badTs++}else badTs++;
     if(r.type==='IPDR'&&(!r.prot||r.prot==='Unknown'))unknownProto++;
   });
   const total=state.data.records.length;
-  const pcts={};const penalties=[];
-  const addPenalty=(label,count,perRecord)=>{
+  const penalties=[];
+  const addPenalty=(label,count,weight,hint)=>{
     const pct=total?Math.round(count/total*100):0;
-    const pen=Math.round(count*perRecord);
-    pcts[label]={count,pct,pen};
-    if(pen)penalties.push({label,count,pct,pen,weight:perRecord});
+    const pen=Math.round((count/total)*weight);
+    if(pen||count)penalties.push({label,count,pct,pen,weight,hint});
   };
-  addPenalty('Missing tower',missingTower,5);
-  addPenalty('Missing coordinates',missingCoord,8);
-  addPenalty('Missing duration',missingDur,10);
-  addPenalty('Invalid timestamps',badTs,15);
-  addPenalty('Unknown protocol',unknownProto,3);
+  addPenalty('Missing tower',missingTower,15);
+  addPenalty('No coords (tower known)',coordViaTower,5,'resolvable — upload a tower master CSV');
+  addPenalty('No coords (no tower)',coordAnchorless,20);
+  addPenalty('Missing duration',missingDur,20);
+  addPenalty('Invalid timestamps',badTs,30);
+  addPenalty('Unknown protocol',unknownProto,10);
   const totalPenalty=penalties.reduce((s,p)=>s+p.pen,0);
   const score=Math.max(0,Math.min(100,100-totalPenalty));
-  return{score,missingTower,missingCoord,missingDur,badTs,unknownProto,total,penalties};
+  return{score,total,penalties};
 }
 
 function renderQualityCard(){
@@ -80,10 +85,10 @@ function renderQualityCard(){
   div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><h4 style="margin:0;font-size:0.85rem">Data Quality</h4>
     <span style="font-size:1.2rem;font-weight:700;color:${q.score>80?'var(--success)':q.score>50?'var(--warn)':'var(--danger)'}">${q.score}%</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:8px;font-size:0.72rem;color:var(--muted)">
-      ${q.penalties.map(p=>`<div><span style="color:${p.pen>5?'var(--warn)':''}">-${p.pen}</span> ${p.label}: ${p.count} (${p.pct}%)</div>`).join('')}
+      ${q.penalties.map(p=>`<div title="${p.hint||''}"><span style="color:${p.pen>10?'var(--warn)':''}">-${p.pen}</span> ${p.label}: ${p.count} (${p.pct}%)${p.hint?' <span style="color:var(--success)">ⓘ</span>':''}</div>`).join('')}
     </div>
     <div style="font-size:0.65rem;color:var(--muted);margin-top:4px;padding-top:4px;border-top:1px solid var(--line)">
-      Score = 100 ${q.penalties.map(p=>`- ${p.pen}`).join(' ')} = ${q.score}% (${q.total} records)
+      Score = 100 ${q.penalties.filter(p=>p.pen).map(p=>`- ${p.pen}`).join(' ')} = ${q.score}% (${q.total} records; each penalty = share missing × weight)
     </div>`;
   cards.parentNode.insertBefore(div,cards.nextSibling);
 }

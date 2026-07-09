@@ -26,6 +26,7 @@ from app.services.auth_service import get_current_user
 from app.services.analytics_materialize_service import invalidate
 from app.services.ingest_service import coerce_frame
 from app.services.ingest_service import resolve_columns
+from app.utils.tower_key import norm_tower_key
 from app.utils.validators import ensure_columns
 
 router = APIRouter()
@@ -112,10 +113,11 @@ def _harvest_towers(db: Session, df) -> int:
     if sub.empty:
         return 0
     has_lat, has_lng = "latitude" in sub.columns, "longitude" in sub.columns
-    # tower_id -> (lat, lng); prefer a row that actually has coordinates
+    # normalized tower_id -> (lat, lng); prefer a row that actually has coordinates.
+    # Keys are normalized so "404-10-1234-5678" and "40410 1234 5678" land on ONE repo row.
     seen: dict = {}
     for _, row in sub.iterrows():
-        tid = _to_str(row.get("tower_id"))
+        tid = norm_tower_key(row.get("tower_id"))
         if not tid:
             continue
         lat = _to_float(row.get("latitude")) if has_lat else None
@@ -361,9 +363,12 @@ async def upload_towers(
 
         records = []
         for _, row in df.iterrows():
+            tid = norm_tower_key(row.get("tower_id"))
+            if not tid:
+                continue
             records.append(
                 Tower(
-                    tower_id=str(row["tower_id"]),
+                    tower_id=tid,
                     latitude=None if pd.isna(row.get("latitude")) else float(row["latitude"]),
                     longitude=None if pd.isna(row.get("longitude")) else float(row["longitude"]),
                     city=None if pd.isna(row.get("city")) else str(row["city"]),

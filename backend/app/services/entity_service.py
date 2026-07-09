@@ -39,6 +39,7 @@ from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower
 from app.services.service_attribution_service import _ip_kind
+from app.utils.tower_key import norm_tower_key
 
 
 class _UnionFind:
@@ -244,7 +245,9 @@ def build_entities(cdr_records, ipdr_records, rejected_pairs=frozenset(), forced
                     w[0] = ts
                 if ts > w[1]:
                     w[1] = ts
-        tower = getattr(record, "tower_id", None)
+        # normalized so the same physical cell counts as one tower across differently
+        # punctuated source files (and joins the tower repo, whose keys are normalized)
+        tower = norm_tower_key(getattr(record, "tower_id", None))
         if tower:
             phone_towers[ident][tower] += 1
 
@@ -494,7 +497,12 @@ def resolve_entities(db, case_id=None):
     # Resolve tower ids to places for the top towers (one query, small set).
     tower_ids = {t["tower_id"] for e in result["entities"] for t in e["towers"]}
     if tower_ids:
-        meta = {t.tower_id: t for t in db.query(Tower).filter(Tower.tower_id.in_(tower_ids)).all()}
+        # entity tower keys are already normalized; match repo rows through the same key
+        meta = {}
+        for t in db.query(Tower).all():
+            k = norm_tower_key(t.tower_id)
+            if k in tower_ids:
+                meta[k] = t
         for e in result["entities"]:
             for t in e["towers"]:
                 m = meta.get(t["tower_id"])

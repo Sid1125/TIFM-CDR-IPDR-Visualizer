@@ -104,6 +104,32 @@ class ProfileServiceTests(unittest.TestCase):
             self.assertEqual(m["match"], "exact", prof.name)
             self.assertEqual(m["profile"].id, prof.id, prof.name)
 
+    def test_seed_refresh_updates_seed_owned_only(self):
+        import json
+        seed_default_profiles(self.db)
+        ipdr = self.db.query(IngestFormatProfile).filter(
+            IngestFormatProfile.kind == "ipdr", IngestFormatProfile.created_by == "seed").first()
+        # DoT IPDR seed maps First CELL ID to BOTH tower_id (grouping key) and cell_id
+        m = json.loads(ipdr.mapping_json)
+        self.assertEqual(m["tower_id"], "First CELL ID")
+        self.assertEqual(m["cell_id"], "First CELL ID")
+        # simulate an older release's seed: refresh restores the current mapping
+        del m["tower_id"]
+        ipdr.mapping_json = json.dumps(m)
+        self.db.commit()
+        self.assertEqual(seed_default_profiles(self.db), 1)
+        self.assertIn("tower_id", json.loads(
+            self.db.query(IngestFormatProfile).get(ipdr.id).mapping_json))
+        # investigator-owned profile with the same signature is never clobbered
+        ipdr.created_by = "investigator"
+        m2 = json.loads(ipdr.mapping_json)
+        del m2["tower_id"]
+        ipdr.mapping_json = json.dumps(m2)
+        self.db.commit()
+        self.assertEqual(seed_default_profiles(self.db), 0)
+        self.assertNotIn("tower_id", json.loads(
+            self.db.query(IngestFormatProfile).get(ipdr.id).mapping_json))
+
     def test_combined_columns_survive_profile_roundtrip(self):
         seed_default_profiles(self.db)
         cdr = self.db.query(IngestFormatProfile).filter(

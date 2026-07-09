@@ -159,6 +159,10 @@ _SEED_PROFILES = [
             "duration_seconds": "Session Duration (Seconds)",
             "bytes_uploaded": "Data Volume Up Link",
             "bytes_downloaded": "Data Volume Down Link",
+            # First CELL ID doubles as tower_id: it's the grouping key every location engine
+            # (meetings, co-location, entity towers, map-via-tower-repo) keys on. cell_id keeps
+            # the raw value too. Coordinates come later from a tower master; never required.
+            "tower_id": "First CELL ID",
             "cell_id": "First CELL ID",
             "apn": "Access Point Name",
         },
@@ -231,21 +235,30 @@ _SEED_PROFILES = [
 
 
 def seed_default_profiles(db: Session) -> int:
-    """Insert ship-time known formats that aren't stored yet. Idempotent; returns how many were added."""
-    added = 0
+    """Insert ship-time known formats that aren't stored yet, and refresh ones a newer release
+    improved — but ONLY while a profile is still seed-owned (created_by == 'seed'). The moment an
+    investigator saves their own mapping over it, created_by changes and their version is never
+    clobbered. Idempotent; returns how many profiles were added or refreshed."""
+    changed = 0
     for spec in _SEED_PROFILES:
         sig = compute_signature(spec["headers"])
-        exists = (db.query(IngestFormatProfile.id)
-                  .filter(IngestFormatProfile.kind == spec["kind"],
-                          IngestFormatProfile.signature == sig)
-                  .first())
-        if exists:
+        existing = (db.query(IngestFormatProfile)
+                    .filter(IngestFormatProfile.kind == spec["kind"],
+                            IngestFormatProfile.signature == sig)
+                    .first())
+        if existing is not None:
+            if existing.created_by == "seed" and (
+                    json.loads(existing.mapping_json) != spec["mapping"]
+                    or existing.name != spec["name"]):
+                existing.name = spec["name"]
+                existing.mapping_json = json.dumps(spec["mapping"])
+                changed += 1
             continue
         db.add(IngestFormatProfile(kind=spec["kind"], name=spec["name"], signature=sig,
                                    times_used=0, created_by="seed",
                                    headers_json=json.dumps(spec["headers"]),
                                    mapping_json=json.dumps(spec["mapping"])))
-        added += 1
-    if added:
+        changed += 1
+    if changed:
         db.commit()
-    return added
+    return changed

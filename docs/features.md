@@ -169,7 +169,7 @@ Closing the bread-and-butter gaps vs the commercial i9 CDR Analyzer, in 8 phases
 - **Tech:** `renderCaseSummary()`, `.case-summary-grid` CSS grid, row counting from cached analytics
 
 ### Data Quality Score Card
-- **Description:** Scores the loaded dataset 0-100% based on data completeness penalties: missing tower (-5 each), missing coordinates (-8 each), missing duration (-10 each), invalid timestamps (-15 each), unknown protocols (-3 each). Displays score, classification (Excellent/Good/Fair/Poor), and per-category penalty breakdown.
+- **Description:** Scores the loaded dataset 0-100% as `100 − Σ(share-of-rows-missing × weight)` — file-size independent, so a large real-world export isn't automatically floored to 0%. Weights (max cost at 100% missing): missing tower 15, no coords but tower known 5 (flagged as *resolvable — upload a tower master CSV*), no coords and no tower 20, missing duration 20, invalid timestamps 30, unknown protocol 10. Missing coordinates are deliberately split: a row that still carries a tower/cell id lights up on the map the moment a tower master supplies that tower's coordinates, so it's a small penalty, not a data defect. Displays score and per-category penalty breakdown with row counts and percentages.
 - **Tech:** `computeQualityMetrics()`, `renderQualityCard()`, penalty accumulator with category tracking
 
 ### Cross-Case Hits Panel

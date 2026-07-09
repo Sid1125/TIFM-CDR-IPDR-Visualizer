@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.models.cdr import CDRRecord
 from app.models.ipdr import IPDRRecord
 from app.models.tower import Tower
+from app.utils.tower_key import norm_tower_key
 
 router = APIRouter()
 
@@ -14,12 +15,15 @@ GEO_ROW_CAP = 10_000  # max records per type returned by /geo/records
 
 
 def _load_tower_map(db: Session) -> dict:
-    """Return {tower_id: Tower} for all towers with coordinates."""
+    """Return {normalized tower_id: Tower} for all towers with coordinates. Keyed through
+    norm_tower_key so records whose CGI is punctuated differently from the tower master
+    ("404-10-1234-5678" vs "40410 1234 5678") still resolve."""
     return {
-        t.tower_id: t
+        k: t
         for t in db.query(Tower).filter(
             Tower.latitude.isnot(None), Tower.longitude.isnot(None)
         ).all()
+        if (k := norm_tower_key(t.tower_id)) is not None
     }
 
 
@@ -33,10 +37,13 @@ def _tower_dict(t: Tower) -> dict:
     }
 
 
-def _located_filter(lat_col, tid_col, tower_ids: list):
-    """SQLAlchemy filter: direct lat/lon OR tower_id resolves to coordinates."""
-    if tower_ids:
-        return or_(lat_col.isnot(None), tid_col.in_(tower_ids))
+def _located_filter(lat_col, tid_col, have_towers: bool):
+    """SQLAlchemy filter: direct lat/lon OR a tower_id that MIGHT resolve to repo coordinates.
+    Tower-id matching is normalization-aware, which SQL string equality can't express — so when
+    the repo has any located towers, any row carrying a tower_id is fetched and resolved in
+    Python (unresolvable ones are skipped there). With an empty repo, lat/lon-only fast path."""
+    if have_towers:
+        return or_(lat_col.isnot(None), tid_col.isnot(None))
     return lat_col.isnot(None)
 
 
@@ -45,12 +52,11 @@ def get_geo_records(subject: str = "", case_id: str = "", db: Session = Depends(
     # Pre-load towers with coordinates so CDR/IPDR records that carry only a tower_id
     # (the common operator format) can still be placed on the map.
     tower_map = _load_tower_map(db)
-    tower_ids = list(tower_map.keys())
 
     results = []
 
     cdr_q = db.query(CDRRecord).filter(
-        _located_filter(CDRRecord.latitude, CDRRecord.tower_id, tower_ids)
+        _located_filter(CDRRecord.latitude, CDRRecord.tower_id, bool(tower_map))
     )
     if case_id:
         cdr_q = cdr_q.filter(CDRRecord.case_id == case_id)
@@ -62,8 +68,8 @@ def get_geo_records(subject: str = "", case_id: str = "", db: Session = Depends(
         tid = r.tower_id or ""
         lat, lon = r.latitude, r.longitude
         tower_info = None
-        if tid and tid in tower_map:
-            t = tower_map[tid]
+        t = tower_map.get(norm_tower_key(tid)) if tid else None
+        if t is not None:
             tower_info = _tower_dict(t)
             if lat is None:
                 lat = t.latitude
@@ -94,7 +100,7 @@ def get_geo_records(subject: str = "", case_id: str = "", db: Session = Depends(
         })
 
     ipdr_q = db.query(IPDRRecord).filter(
-        _located_filter(IPDRRecord.latitude, IPDRRecord.tower_id, tower_ids)
+        _located_filter(IPDRRecord.latitude, IPDRRecord.tower_id, bool(tower_map))
     )
     if case_id:
         ipdr_q = ipdr_q.filter(IPDRRecord.case_id == case_id)
@@ -106,8 +112,8 @@ def get_geo_records(subject: str = "", case_id: str = "", db: Session = Depends(
         tid = r.tower_id or ""
         lat, lon = r.latitude, r.longitude
         tower_info = None
-        if tid and tid in tower_map:
-            t = tower_map[tid]
+        t = tower_map.get(norm_tower_key(tid)) if tid else None
+        if t is not None:
             tower_info = _tower_dict(t)
             if lat is None:
                 lat = t.latitude
@@ -150,17 +156,14 @@ def get_subjects(case_id: str = "", db: Session = Depends(get_db)):
     # Subjects that appear in *located* records (direct lat/lon or tower-resolvable).
     # Only the A-party / source_ip (the device whose movement we track) — never the
     # B-party / destination_ip, which is a remote endpoint with no movement to show.
-    tower_ids = [
-        r[0]
-        for r in db.query(Tower.tower_id).filter(
-            Tower.latitude.isnot(None), Tower.longitude.isnot(None)
-        ).all()
-    ]
+    have_towers = db.query(Tower.tower_id).filter(
+        Tower.latitude.isnot(None), Tower.longitude.isnot(None)
+    ).first() is not None
 
     subjects: set = set()
 
     cdr_q = db.query(CDRRecord.a_party_number, CDRRecord.msisdn).filter(
-        _located_filter(CDRRecord.latitude, CDRRecord.tower_id, tower_ids)
+        _located_filter(CDRRecord.latitude, CDRRecord.tower_id, have_towers)
     )
     if case_id:
         cdr_q = cdr_q.filter(CDRRecord.case_id == case_id)
@@ -171,7 +174,7 @@ def get_subjects(case_id: str = "", db: Session = Depends(get_db)):
             subjects.add(m)
 
     ipdr_q = db.query(IPDRRecord.source_ip).filter(
-        _located_filter(IPDRRecord.latitude, IPDRRecord.tower_id, tower_ids)
+        _located_filter(IPDRRecord.latitude, IPDRRecord.tower_id, have_towers)
     )
     if case_id:
         ipdr_q = ipdr_q.filter(IPDRRecord.case_id == case_id)

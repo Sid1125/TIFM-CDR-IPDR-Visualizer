@@ -83,15 +83,38 @@ def invalidate_all(db: Session) -> None:
 
 def _upsert(db: Session, case_id: str, key: str, data: dict | list,
            record_count: int | None = None, build_ms: int | None = None) -> None:
+    """Write one cache row, atomically. The old SELECT-then-INSERT raced when several writers
+    materialised the same case at once (upload's inline invalidate + the async job + a concurrent
+    read-through): both saw no row, both inserted, one died on uq_analytics_case_key. A native
+    ON CONFLICT upsert (PostgreSQL and SQLite both support it) makes last-writer-wins and can't
+    violate the constraint; other dialects keep the ORM path."""
+    payload = _jdump(data)
+    now = datetime.utcnow()
+    dialect = db.get_bind().dialect.name
+    if dialect in ("postgresql", "sqlite"):
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as _insert
+        else:
+            from sqlalchemy.dialects.sqlite import insert as _insert
+        set_ = {"data": payload, "computed_at": now, "schema_version": SCHEMA_VERSION}
+        if record_count is not None:
+            set_["record_count"] = record_count
+        if build_ms is not None:
+            set_["build_ms"] = build_ms
+        stmt = _insert(AnalyticsCache).values(
+            case_id=case_id, key=key, data=payload, computed_at=now,
+            schema_version=SCHEMA_VERSION, record_count=record_count, build_ms=build_ms,
+        ).on_conflict_do_update(index_elements=["case_id", "key"], set_=set_)
+        db.execute(stmt)
+        return
     existing = (
         db.query(AnalyticsCache)
         .filter(AnalyticsCache.case_id == case_id, AnalyticsCache.key == key)
         .one_or_none()
     )
-    payload = _jdump(data)
     if existing:
         existing.data = payload
-        existing.computed_at = datetime.utcnow()
+        existing.computed_at = now
         existing.schema_version = SCHEMA_VERSION
         if record_count is not None:
             existing.record_count = record_count

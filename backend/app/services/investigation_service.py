@@ -9,6 +9,7 @@ from app.services.activity_event_service import synthesize_event
 from app.services.service_attribution_service import FAMILY_GAP_MAP
 from app.services.service_attribution_service import PORT_FAMILY_MAP
 from app.services.service_attribution_service import attribute_service
+from app.utils.tower_key import norm_tower_key
 
 # Port -> activity family and family -> session idle gap come from the shared
 # attribution_data.json (see service_attribution_service), keeping reconstruction
@@ -181,7 +182,9 @@ def find_meetings(db, case_id=None, subject=None, window_min: int = 60, limit: i
             tj, sj, twj, laj, loj = located[j]
             if (tj - ti).total_seconds() > window:
                 break
-            if si == sj or twi != twj:
+            # tower equality is normalization-aware so mixed source files whose CGIs differ
+            # only in punctuation ("404-10-..." vs "40410 ...") still register a co-location
+            if si == sj or norm_tower_key(twi) != norm_tower_key(twj):
                 continue
             if subject and subject not in (si, sj):
                 continue
