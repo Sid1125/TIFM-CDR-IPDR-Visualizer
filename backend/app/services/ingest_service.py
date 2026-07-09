@@ -169,22 +169,33 @@ def detect_operator(columns) -> Optional[str]:
     return None
 
 
-def resolve_columns(df_columns, kind: str, override: Optional[dict] = None) -> dict:
-    """Map this file's headers onto canonical fields. `override` (canonical -> actual header) wins
-    when the actual header exists in the file. Returns mapping + any unmapped required fields +
-    a detected-operator hint."""
+def resolve_columns(df_columns, kind: str, override: Optional[dict] = None,
+                    profile_mapping: Optional[dict] = None) -> dict:
+    """Map this file's headers onto canonical fields, layering three sources (weakest first):
+    the generic alias table, then `profile_mapping` (a stored format profile's confirmed mapping —
+    format-specific truth beats generic guesses), then `override` (the investigator's manual UI
+    choice always wins). Each layer only applies entries whose actual header exists in the file.
+    Returns mapping + per-field `sources` + any unmapped required fields + an operator hint."""
     kind = kind.lower()
     cols = list(df_columns)
     lut = _build_lookup(kind)
     mapping: dict[str, str] = {}
+    sources: dict[str, str] = {}
     for actual in cols:
         canon = lut.get(_norm(actual))
         if canon and canon not in mapping:
             mapping[canon] = actual
+            sources[canon] = "alias"
+    if profile_mapping:
+        for canon, actual in profile_mapping.items():
+            if canon in CANONICAL.get(kind, []) and actual in cols:
+                mapping[canon] = actual
+                sources[canon] = "profile"
     if override:
         for canon, actual in override.items():
             if canon in CANONICAL.get(kind, []) and actual in cols:
                 mapping[canon] = actual
+                sources[canon] = "override"
     # end_time is derivable (start_time + duration_seconds) — several real operator formats,
     # incl. the DoT-standard Indian IPDR export, report only a session start + a duration, no
     # separate end column. Don't hard-block those; coerce_frame() synthesizes end_time below.
@@ -193,6 +204,7 @@ def resolve_columns(df_columns, kind: str, override: Optional[dict] = None) -> d
                          and not (c == "end_time" and derivable_end_time)]
     return {
         "mapping": mapping,
+        "sources": sources,
         "unmapped_required": unmapped_required,
         "detected_operator": detect_operator(cols),
         "canonical": CANONICAL[kind],

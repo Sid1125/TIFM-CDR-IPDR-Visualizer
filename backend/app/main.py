@@ -34,6 +34,7 @@ from app.api.jobs import router as jobs_router
 from app.api.backup import router as backup_router
 from app.api.workspace import relationships_router, hypotheses_router, evidence_router
 from app.api.entities import router as entities_router
+from app.api.format_profiles import router as format_profiles_router
 from app.core.config import settings
 from app.core.database import Base
 from app.core.database import engine
@@ -54,6 +55,7 @@ from app.models import subscriber  # noqa: F401
 from app.models import analytics  # noqa: F401
 from app.models import relationship_label  # noqa: F401
 from app.models import hypothesis  # noqa: F401
+from app.models import format_profile  # noqa: F401
 
 from fastapi.middleware.gzip import GZipMiddleware
 
@@ -254,6 +256,8 @@ def on_startup():
         logging.getLogger(__name__).exception("search index init failed; falling back to ILIKE")
     with SessionLocal() as db:
         bootstrap_default_user(db)
+        from app.services.format_profile_service import seed_default_profiles
+        seed_default_profiles(db)  # ship-time known CSV formats; idempotent
 
 
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
@@ -285,4 +289,5 @@ app.include_router(relationships_router, prefix="/relationships", tags=["Workspa
 app.include_router(hypotheses_router, prefix="/hypotheses", tags=["Workspace"], dependencies=[Depends(get_current_user)])
 app.include_router(evidence_router, prefix="/evidence", tags=["Workspace"], dependencies=[Depends(get_current_user)])
 app.include_router(entities_router, prefix="/entities", tags=["Entities"], dependencies=[Depends(get_current_user)])
+app.include_router(format_profiles_router, prefix="/format-profiles", tags=["Format Profiles"], dependencies=[Depends(get_current_user)])
 app.mount("/static", StaticFiles(directory=static_dir), name="static")

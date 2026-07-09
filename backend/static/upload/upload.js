@@ -94,7 +94,10 @@ function showUploadPreview(kind,file){
 
 // Ask the backend how this file's headers map onto canonical fields, then render an editable
 // mapping (a <select> of headers per canonical field) so the investigator can correct a
-// mis-detected column before committing. Required fields are flagged when unmapped.
+// mis-detected column before committing. Required fields are flagged when unmapped. When the
+// header signature matches a stored format profile, that's announced and profile-sourced fields
+// are tagged; a corrected mapping can be saved back as a (new or updated) format profile so the
+// next file in the same format maps automatically.
 async function populateMapping(modal,kind,file){
   const box=modal.querySelector('#upMapBox');if(!box)return;
   try{
@@ -103,6 +106,13 @@ async function populateMapping(modal,kind,file){
     if(!r.ok)throw new Error(await r.text()||'preview failed');
     const res=await r.json();
     const headers=res.headers||[];const required=res.required||[];const mapping=res.mapping||{};
+    const sources=res.sources||{};const mp=res.matched_profile;
+    const srcTag=canon=>{
+      const s=sources[canon];
+      if(s==='profile')return '<span style="color:#3a7d5a;font-size:.68rem;white-space:nowrap" title="From saved format profile">format</span>';
+      if(s==='alias')return '<span style="color:var(--muted);font-size:.68rem;white-space:nowrap" title="Auto-detected from known header aliases">auto</span>';
+      return '';
+    };
     const opt=(canon,muted)=>{
       const cur=mapping[canon]||'';
       const opts=['<option value=""'+(cur?'':' selected')+'>— none —</option>']
@@ -111,19 +121,46 @@ async function populateMapping(modal,kind,file){
       return '<div style="display:flex;align-items:center;gap:8px;padding:2px 0">'
         +'<span style="width:140px;'+(muted?'color:var(--muted)':'font-weight:600')+(miss?';color:var(--danger)':'')+'">'+esc(canon)+(required.indexOf(canon)>=0?' *':'')+'</span>'
         +'<select data-canon="'+esc(canon)+'" class="input-sm upmap" style="flex:1">'+opts.join('')+'</select>'
+        +srcTag(canon)
         +(miss?'<span style="color:var(--danger);font-size:.72rem">required</span>':'')+'</div>';
     };
     const optionalMapped=(res.canonical||[]).filter(c=>required.indexOf(c)<0&&mapping[c]);
     let h='<div style="border:1px solid var(--line);border-radius:6px;padding:8px 10px">'
       +'<div style="font-weight:600;margin-bottom:4px;color:var(--fg)">Column mapping'
       +(res.detected_operator?' <span style="font-weight:400;color:var(--muted)">— detected: '+esc(res.detected_operator)+'</span>':'')+'</div>';
+    if(mp){
+      h+='<div style="margin-bottom:6px;padding:4px 8px;border-radius:5px;font-size:.76rem;'
+        +(mp.match==='exact'?'background:rgba(58,125,90,.12);color:#3a7d5a':'background:rgba(200,150,40,.12);color:#a07a20')+'">'
+        +(mp.match==='exact'?'✓ Format recognized: ':'≈ Closest known format: ')+'<b>'+esc(mp.name)+'</b>'
+        +(mp.match==='partial'?' ('+mp.overlap+'/'+mp.total+' headers match — review below)':'')+'</div>';
+    }
     h+=required.map(c=>opt(c,false)).join('');
     if(optionalMapped.length){
       h+='<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--muted)">'+optionalMapped.length+' optional column'+(optionalMapped.length===1?'':'s')+' mapped</summary>'
         +optionalMapped.map(c=>opt(c,true)).join('')+'</details>';
     }
+    // Save this (possibly corrected) mapping as a reusable format profile — the "learn a new ISP
+    // format once, auto-map it forever" path.
+    const defName=mp?mp.name:(res.detected_operator?res.detected_operator+' '+kind.toUpperCase():(file.name||'').replace(/\.[^.]+$/,''));
+    h+='<div style="display:flex;gap:6px;align-items:center;margin-top:8px">'
+      +'<input id="upProfName" class="input-sm" placeholder="Format name (e.g. Airtel IPDR)" style="flex:1" value="'+esc(defName)+'">'
+      +'<button id="upProfSave" class="btn-sm" title="Save this column mapping so files with these headers auto-map next time">Save as format</button></div>'
+      +'<div id="upProfMsg" style="font-size:.72rem;color:var(--muted);margin-top:2px"></div>';
     h+='</div>';
     box.innerHTML=h;box.style.color='';
+    const saveBtn=box.querySelector('#upProfSave');
+    if(saveBtn)saveBtn.addEventListener('click',async()=>{
+      const msgEl=box.querySelector('#upProfMsg');
+      const name=(box.querySelector('#upProfName').value||'').trim();
+      if(!name){msgEl.textContent='Give the format a name first.';return}
+      const m=collectMapping(modal)||{};
+      if(!Object.keys(m).length){msgEl.textContent='Nothing mapped yet — map at least one column.';return}
+      try{
+        await API.post('/format-profiles/',{kind,name,headers,mapping:m});
+        msgEl.innerHTML='<span style="color:#3a7d5a">✓ Saved — files with these headers will auto-map as “'+esc(name)+'”.</span>';
+        try{toast('✓ Format profile saved: '+name);}catch(_){}
+      }catch(e){msgEl.textContent='Save failed: '+(e.message||'error');}
+    });
   }catch(e){box.innerHTML='<span style="color:var(--muted)">Auto-mapping unavailable; default column names will be used.</span>';console.error(e)}
 }
 

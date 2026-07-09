@@ -43,6 +43,20 @@ def _parse_mapping(mapping_json: str):
         return None
 
 
+def _match_format_profile(db: Session, kind: str, columns):
+    """Headers-only format recognition against the stored profile DB (exact signature, then fuzzy
+    overlap). Returns (profile_mapping, match_info) or (None, None). Never allowed to break an
+    upload — a profile lookup failure just falls back to the alias table."""
+    try:
+        from app.services.format_profile_service import match_profile, profile_mapping_for
+        m = match_profile(db, kind, columns)
+        if not m:
+            return None, None
+        return profile_mapping_for(m["profile"], columns), m
+    except Exception:
+        return None, None
+
+
 def _read_table(path: str, filename: str, nrows=None, dtype=None):
     """Read an uploaded CDR/IPDR/tower file into a DataFrame, dispatching on the original filename's
     extension so operators can hand us the formats they actually export: .csv, .txt (delimiter
@@ -144,10 +158,12 @@ async def upload_cdr(
             temp_path = temp_file.name
 
         df = _read_table(temp_path, file.filename)
-        # Operator-aware mapping: resolve the file's headers onto canonical CDR fields (honouring a
-        # UI-supplied override), then bail clearly if a required field can't be found.
+        # Format-aware mapping: a stored format profile (recognised from the header signature)
+        # beats the generic alias table; a UI-supplied override beats both. Bail clearly if a
+        # required field still can't be found.
         override = _parse_mapping(mapping_json)
-        resolved = resolve_columns(df.columns, "cdr", override=override)
+        profile_map, prof_match = _match_format_profile(db, "cdr", df.columns)
+        resolved = resolve_columns(df.columns, "cdr", override=override, profile_mapping=profile_map)
         if resolved["unmapped_required"]:
             raise HTTPException(
                 status_code=422,
@@ -209,6 +225,9 @@ async def upload_cdr(
         # recompute fresh regardless of job timing.
         invalidate(db, case_id or None)
         db.commit()
+        if prof_match:
+            from app.services.format_profile_service import touch_profile
+            touch_profile(db, prof_match["profile"].id)
         return UploadResponse(success=True, records_imported=len(records), validation=report)
     except HTTPException:
         db.rollback()
@@ -239,10 +258,11 @@ async def upload_ipdr(
             temp_path = temp_file.name
 
         df = _read_table(temp_path, file.filename)
-        # Operator-aware mapping onto canonical IPDR fields (UI override honoured), then a clear
-        # failure if a required field is missing.
+        # Format-aware mapping onto canonical IPDR fields (stored profile > aliases, UI override
+        # wins over both), then a clear failure if a required field is missing.
         override = _parse_mapping(mapping_json)
-        resolved = resolve_columns(df.columns, "ipdr", override=override)
+        profile_map, prof_match = _match_format_profile(db, "ipdr", df.columns)
+        resolved = resolve_columns(df.columns, "ipdr", override=override, profile_mapping=profile_map)
         if resolved["unmapped_required"]:
             raise HTTPException(
                 status_code=422,
@@ -308,6 +328,9 @@ async def upload_ipdr(
         # recompute fresh regardless of job timing.
         invalidate(db, case_id or None)
         db.commit()
+        if prof_match:
+            from app.services.format_profile_service import touch_profile
+            touch_profile(db, prof_match["profile"].id)
         return UploadResponse(success=True, records_imported=len(records), validation=report)
     except HTTPException:
         db.rollback()
@@ -516,10 +539,12 @@ async def upload_preview(
     file: UploadFile = File(...),
     kind: str = Form(...),
     mapping_json: str = Form(""),
+    db: Session = Depends(get_db),
 ):
-    """Dry-run a CDR/IPDR upload: resolve the file's headers onto canonical fields (no DB writes),
-    so the UI can show the auto-detected mapping, any unmapped required columns, and the detected
-    operator before the investigator commits the upload."""
+    """Dry-run a CDR/IPDR upload: recognise the header format against the stored profile DB, then
+    resolve the file's headers onto canonical fields (no record writes), so the UI can show which
+    known format matched, the detected mapping with each field's source (profile/alias/override),
+    and any unmapped required columns before the investigator commits the upload."""
     kind = (kind or "").lower()
     if kind not in ("cdr", "ipdr"):
         raise HTTPException(status_code=400, detail="kind must be 'cdr' or 'ipdr'")
@@ -529,15 +554,28 @@ async def upload_preview(
             temp_file.write(await file.read())
             temp_path = temp_file.name
         df = _read_table(temp_path, file.filename, nrows=50)
-        resolved = resolve_columns(df.columns, kind, override=_parse_mapping(mapping_json))
+        profile_map, prof_match = _match_format_profile(db, kind, df.columns)
+        resolved = resolve_columns(df.columns, kind, override=_parse_mapping(mapping_json),
+                                   profile_mapping=profile_map)
+        matched_profile = None
+        if prof_match:
+            matched_profile = {
+                "id": prof_match["profile"].id,
+                "name": prof_match["profile"].name,
+                "match": prof_match["match"],           # 'exact' | 'partial'
+                "overlap": prof_match["overlap"],
+                "total": prof_match["total"],
+            }
         return {
             "kind": kind,
             "headers": list(df.columns),
             "mapping": resolved["mapping"],
+            "sources": resolved["sources"],
             "unmapped_required": resolved["unmapped_required"],
             "required": resolved["required"],
             "canonical": resolved["canonical"],
             "detected_operator": resolved["detected_operator"],
+            "matched_profile": matched_profile,
         }
     except HTTPException:
         raise
