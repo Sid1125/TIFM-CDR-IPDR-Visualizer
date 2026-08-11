@@ -26,7 +26,6 @@ from app.services.auth_service import get_current_user
 from app.services.analytics_materialize_service import invalidate
 from app.services.ingest_service import coerce_frame
 from app.services.ingest_service import resolve_columns
-from app.utils.tower_key import norm_tower_key
 from app.utils.validators import ensure_columns
 
 router = APIRouter()
@@ -113,11 +112,14 @@ def _harvest_towers(db: Session, df) -> int:
     if sub.empty:
         return 0
     has_lat, has_lng = "latitude" in sub.columns, "longitude" in sub.columns
-    # normalized tower_id -> (lat, lng); prefer a row that actually has coordinates.
-    # Keys are normalized so "404-10-1234-5678" and "40410 1234 5678" land on ONE repo row.
+    # tower_id -> (lat, lng); prefer a row that actually has coordinates. Keys are stored EXACTLY
+    # as the records spell them: cdr_records.tower_id / ipdr_records.tower_id are foreign keys onto
+    # towers.tower_id, so a normalized (re-punctuated / uppercased) key here would violate the
+    # constraint the moment the records are inserted. Punctuation variants are reconciled at
+    # lookup time instead (norm_tower_key in geo/entity/meeting resolution), never on write.
     seen: dict = {}
     for _, row in sub.iterrows():
-        tid = norm_tower_key(row.get("tower_id"))
+        tid = _to_str(row.get("tower_id"))
         if not tid:
             continue
         lat = _to_float(row.get("latitude")) if has_lat else None
@@ -363,7 +365,9 @@ async def upload_towers(
 
         records = []
         for _, row in df.iterrows():
-            tid = norm_tower_key(row.get("tower_id"))
+            # stored exactly as the master spells it — records' tower_id FKs point at this
+            # column, and lookups reconcile punctuation variants via norm_tower_key at read time
+            tid = _to_str(row.get("tower_id"))
             if not tid:
                 continue
             records.append(

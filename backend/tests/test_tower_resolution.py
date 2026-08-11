@@ -104,6 +104,117 @@ class GeoResolutionTests(unittest.TestCase):
             db.close()
 
 
+class TowerForeignKeyTests(unittest.TestCase):
+    """cdr_records.tower_id / ipdr_records.tower_id are foreign keys onto towers.tower_id, so the
+    repository must hold each tower id EXACTLY as the records spell it. Normalizing on write (as
+    an earlier revision did) uppercased '4058640ca8a4010' and broke the constraint on PostgreSQL.
+    SQLite skips FK enforcement unless asked, so this suite turns it on explicitly."""
+
+    def setUp(self):
+        from sqlalchemy import event
+
+        self.engine = create_engine(
+            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+        )
+
+        @event.listens_for(self.engine, "connect")
+        def _fk_on(dbapi_conn, _rec):  # noqa: ANN001
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA foreign_keys=ON")
+            cur.close()
+
+        Base.metadata.create_all(self.engine)
+        self.Session = sessionmaker(bind=self.engine)
+        # production seeds these at startup; the DoT IPDR profile is what maps First CELL ID
+        # onto tower_id (the key every location engine — and this FK — depends on)
+        from app.services.format_profile_service import seed_default_profiles
+        db = self.Session()
+        try:
+            seed_default_profiles(db)
+        finally:
+            db.close()
+
+        def _override_db():
+            db = self.Session()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = _override_db
+        app.dependency_overrides[get_current_user] = lambda: types.SimpleNamespace(
+            username="t", role="admin")
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+
+    # The real DoT IPDR export header plus the Latitude/Longitude columns an investigator can
+    # embed — i.e. exactly the file shape that hit the constraint in production.
+    _HEADERS = [
+        "Landline/MSISDN/MDN/Leased Circuit ID for Internet Access",
+        "User Id for internet Access based on authentication",
+        "Source IP Address", "Source Port", "Translated IP Address", "Translated Port",
+        "Destination IP Address", "Destination Port", "Static/Dynamic IP Address Allocation",
+        "IST Start Time of Public IP address allocation (hh:mm:ss)",
+        "IST End Time of Public IP address allocation (hh:mm:ss)",
+        "Start Date of Public IP Address allocation (dd/mm/yyyy)",
+        "End Date of Public IP address allocation (dd/mm/yyyy)",
+        "Source MAC-ID Address/Other device Identification number",
+        "IMSI", "PGW IP address", "Access Point Name", "First CELL ID", "Last CELL ID",
+        "TIME1 (dd/MM/yyyy HH:mm:ss)", "Session Duration (Seconds)",
+        "Data Volume Up Link", "Data Volume Down Link",
+        "Roaming Circle Indicator", "Roaming Circle", "SIM Type",
+        "Latitude", "Longitude",
+    ]
+
+    @classmethod
+    def _csv(cls) -> str:
+        def row(cell_id, lat, lon):
+            return ",".join([
+                "919834402127", "9.19834E+11", "10.0.0.1", "47648", "152.59.6.113", "47648",
+                "129.227.29.207", "443", "DYNAMIC", "8:53:26", "9:14:32", "4/6/2026", "4/6/2026",
+                "8.6397E+14", "4.05864E+14", "2405:200:5205:29::6", "", cell_id, cell_id,
+                "4/6/2026 8:57", "152", "227368", "353779", "HOME", "Maharashtra", "",
+                lat, lon,
+            ])
+        return "\n".join([
+            ",".join(cls._HEADERS),
+            # lowercase hex id — normalization would uppercase it and break the FK
+            row("4058640ca8a4010", "29.3675", "76.982852"),
+            # punctuated id — normalization would strip the dashes and break the FK
+            row("404-8640c-511c001", "28.776677", "76.104659"),
+        ]) + "\n"
+
+    def test_lowercase_and_punctuated_tower_ids_satisfy_fk(self):
+        r = self.client.post("/upload/ipdr",
+                             files={"file": ("ipdr.csv", self._csv(), "text/csv")},
+                             data={"case_id": "1", "mode": "replace"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["records_imported"], 2)
+        db = self.Session()
+        try:
+            # the repository holds the ids exactly as the records spell them
+            repo = {t.tower_id for t in db.query(Tower).all()}
+            self.assertEqual(repo, {"4058640ca8a4010", "404-8640c-511c001"})
+            from app.models.ipdr import IPDRRecord
+            recs = {r.tower_id for r in db.query(IPDRRecord).all()}
+            self.assertTrue(recs <= repo, f"records reference ids missing from towers: {recs - repo}")
+        finally:
+            db.close()
+
+    def test_tower_master_upload_keeps_raw_ids(self):
+        csv = "tower_id,latitude,longitude,city\n404-10-1234-5678,28.6,77.2,Delhi\n"
+        r = self.client.post("/upload/towers", files={"file": ("t.csv", csv, "text/csv")})
+        self.assertEqual(r.status_code, 200, r.text)
+        db = self.Session()
+        try:
+            t = db.query(Tower).one()
+            self.assertEqual(t.tower_id, "404-10-1234-5678")
+        finally:
+            db.close()
+
+
 class AnalyticsUpsertRaceTests(unittest.TestCase):
     def setUp(self):
         self.engine = create_engine(
